@@ -10,6 +10,7 @@ import UIKit
 import SwiftUI
 import AVKit
 import MediaPlayer
+import Intents
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
@@ -22,8 +23,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     @ObservedObject var currentSongName: CurrentSongName = CurrentSongName()
     @ObservedObject var isPlaying: IsPlaying = IsPlaying()
     
-    // AI integration service
+    // AI services
     var aiService: AIIntegrationService!
+    var siriIntegration: SiriIntegrationService!
 
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
@@ -36,6 +38,11 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         // Initialize AI services
         self.aiService = AIIntegrationService(context: context)
+        self.siriIntegration = SiriIntegrationService(
+            aiService: self.aiService,
+            moc: context,
+            player: self.player
+        )
         
         // Create the SwiftUI view and set the context as the value for the managedObjectContext environment keyPath.
         // Add `@Environment(\.managedObjectContext)` in the views that will need the context.
@@ -48,12 +55,13 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         do {
             // Set the audio session category, mode, and options.
             try audioSession.setCategory(.playback, options: [])
+            try audioSession.setActive(true)
         } catch {
             print("Failed to set audio session category.")
         }
 
-        // Initialize content view with AI service
-        let contentView = ContentView(
+        // Initialize main tab view with AI service
+        let mainView = MainTabView(
             queuePlayer: self.player,
             playerItemObserver: playerItemObserver,
             playerStatusObserver: playerStatusObserver,
@@ -66,13 +74,16 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // Use a UIHostingController as window root view controller.
         if let windowScene = scene as? UIWindowScene {
             let window = UIWindow(windowScene: windowScene)
-            window.rootViewController = UIHostingController(rootView: contentView)
+            window.rootViewController = UIHostingController(rootView: mainView)
             self.window = window
             window.makeKeyAndVisible()
         }
         
         // Set up audio analysis for mood detection
         setupAudioAnalysis()
+        
+        // Handle any Siri intents from the connection options
+        handleUserActivities(connectionOptions.userActivities)
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {
@@ -85,6 +96,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     func sceneDidBecomeActive(_ scene: UIScene) {
         // Called when the scene has moved from an inactive state to an active state.
         // Use this method to restart any tasks that were paused (or not yet started) when the scene was inactive.
+        
+        // Update mood based on time of day
+        aiService.moodEngine.updateMoodBasedOnTimeOfDay()
     }
 
     func sceneWillResignActive(_ scene: UIScene) {
@@ -188,6 +202,49 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                     // and update its play count, features, etc.
                     self.aiService.trackInteraction(type: "listen_song")
                 }
+            }
+        }
+    }
+    
+    // MARK: - Siri Integration
+    
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        // Handle user activity (e.g., from Siri)
+        handleUserActivity(userActivity)
+    }
+    
+    func scene(_ scene: UIScene, willContinueUserActivityWithType userActivityType: String) {
+        // Prepare to receive a user activity of the specified type
+    }
+    
+    func scene(_ scene: UIScene, didFailToContinueUserActivityWithType userActivityType: String, error: Error) {
+        // Handle failure to continue the user activity
+        print("Failed to continue user activity: \(error)")
+    }
+    
+    func scene(_ scene: UIScene, didUpdate userActivity: NSUserActivity) {
+        // Update the current user activity state
+        handleUserActivity(userActivity)
+    }
+    
+    /// Handle user activities from Siri
+    private func handleUserActivities(_ userActivities: Set<NSUserActivity>) {
+        for activity in userActivities {
+            handleUserActivity(activity)
+        }
+    }
+    
+    /// Handle a single user activity
+    private func handleUserActivity(_ userActivity: NSUserActivity) {
+        // Check if it's a media play intent
+        if userActivity.activityType == INPlayMediaIntent.intentIdentifier,
+           let interaction = userActivity.interaction,
+           let intent = interaction.intent as? INPlayMediaIntent {
+            
+            // Let the SiriIntegration service handle it
+            let response = INPlayMediaIntentResponse(code: .success, userActivity: nil)
+            siriIntegration.handle(intent: intent) { _ in
+                // Completion handler for after handling
             }
         }
     }
