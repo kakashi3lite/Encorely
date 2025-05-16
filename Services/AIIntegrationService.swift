@@ -10,6 +10,7 @@ import Foundation
 import SwiftUI
 import Combine
 import CoreData
+import AVKit
 
 /// Central service that coordinates all AI features of the Mixtapes app
 class AIIntegrationService: ObservableObject {
@@ -17,6 +18,7 @@ class AIIntegrationService: ObservableObject {
     let moodEngine: MoodEngine
     let personalityEngine: PersonalityEngine
     let recommendationEngine: RecommendationEngine
+    let audioAnalysisService: AudioAnalysisService
     
     // Analytics tracking
     private var interactionHistory: [InteractionEvent] = []
@@ -27,6 +29,7 @@ class AIIntegrationService: ObservableObject {
         self.moodEngine = MoodEngine()
         self.personalityEngine = PersonalityEngine()
         self.recommendationEngine = RecommendationEngine(context: context)
+        self.audioAnalysisService = AudioAnalysisService()
         
         // Connect services
         setupInterServiceCommunication()
@@ -121,17 +124,26 @@ class AIIntegrationService: ObservableObject {
     
     // Detect mood from audio being played
     func detectMoodFromCurrentAudio(player: AVQueuePlayer) {
-        // In a real implementation, this would analyze audio features
-        // For demonstration purposes, we'll simulate this with random values
-        
         if let currentItem = player.currentItem {
-            // Simulate extracting audio features
-            let tempo = Float.random(in: 80...160)  // BPM
-            let energy = Float.random(in: 0...1)    // 0-1 scale
-            let valence = Float.random(in: 0...1)   // Musical positiveness
+            // In a real implementation, we would extract features from the current audio
+            // For now, we'll use the AudioAnalysisService to analyze a tap on the player
             
-            // Update mood based on these features
-            moodEngine.detectMoodFromAudioFeatures(tempo: tempo, energy: energy, valence: valence)
+            audioAnalysisService.installAnalysisTap(on: player) { [weak self] features in
+                guard let self = self else { return }
+                
+                // Detect mood from features
+                let detectedMood = self.audioAnalysisService.detectMood(from: features)
+                
+                // Update mood engine
+                self.moodEngine.detectMoodFromAudioFeatures(
+                    tempo: features.tempo,
+                    energy: features.energy,
+                    valence: features.valence
+                )
+                
+                // Log mood detection
+                print("Detected mood: \(detectedMood.rawValue) from audio features: tempo=\(features.tempo), energy=\(features.energy), valence=\(features.valence)")
+            }
         }
     }
     
@@ -230,6 +242,92 @@ class AIIntegrationService: ObservableObject {
         }
         
         return "\(personalityInsight) \(moodInsight)"
+    }
+    
+    // Analyze a song to determine its mood
+    func analyzeSong(_ song: Song, completion: @escaping (Mood) -> Void) {
+        audioAnalysisService.classifySong(song) { mood in
+            completion(mood)
+        }
+    }
+    
+    // Generate AI mixtape based on mood
+    func generateMoodMixtape(mood: Mood, context: NSManagedObjectContext) -> MixTape {
+        // In a real implementation, this would use sophisticated algorithms
+        // to select and arrange songs based on mood analysis
+        
+        // For now, we'll create a simple MixTape object
+        let mixtape = MixTape(context: context)
+        mixtape.title = "\(mood.rawValue) Mix"
+        mixtape.moodTags = mood.rawValue
+        mixtape.aiGenerated = true
+        mixtape.numberOfSongs = 0 // No actual songs added yet
+        
+        return mixtape
+    }
+    
+    // Analyze a collection of songs to detect dominant mood
+    func analyzeMixtape(_ mixtape: MixTape, completion: @escaping (Mood) -> Void) {
+        // Get all songs in mixtape
+        let songs = mixtape.songsArray
+        
+        // Keep track of analyzed songs
+        var analyzedCount = 0
+        var moodCounts: [Mood: Int] = [:]
+        
+        // If no songs, return neutral
+        if songs.isEmpty {
+            completion(.neutral)
+            return
+        }
+        
+        // Analyze each song
+        for song in songs {
+            analyzeSong(song) { mood in
+                // Increment mood count
+                if let count = moodCounts[mood] {
+                    moodCounts[mood] = count + 1
+                } else {
+                    moodCounts[mood] = 1
+                }
+                
+                // Increment analyzed count
+                analyzedCount += 1
+                
+                // Check if all songs analyzed
+                if analyzedCount == songs.count {
+                    // Find most common mood
+                    if let dominantMood = moodCounts.max(by: { $0.value < $1.value })?.key {
+                        // Update mixtape mood tags
+                        mixtape.moodTags = dominantMood.rawValue
+                        
+                        // Call completion handler
+                        completion(dominantMood)
+                    } else {
+                        // Default to neutral if no dominant mood
+                        completion(.neutral)
+                    }
+                }
+            }
+        }
+    }
+    
+    // Generate visualization data for audio analysis
+    func generateVisualizationData(from audioFeatures: AudioFeatures) -> [Float] {
+        // In a real implementation, this would return meaningful data
+        // for visualization of audio features
+        
+        // For now, we'll return a simulated array of values
+        return [
+            audioFeatures.energy,
+            audioFeatures.valence,
+            audioFeatures.danceability,
+            audioFeatures.acousticness,
+            audioFeatures.instrumentalness,
+            audioFeatures.speechiness,
+            audioFeatures.liveness,
+            Float(audioFeatures.tempo) / 200.0 // Normalize tempo to 0-1 range
+        ]
     }
 }
 
