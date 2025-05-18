@@ -1,0 +1,23 @@
+# Environment files
+.env
+.env.local
+.env.*
+
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcworkspace/contents.xcworkspacedata
+**/xcshareddata/WorkspaceSettings.xcsettings
+
+# Build
+build/
+DerivedData/
+
+# Other
+.DS_Store
+*.swp
+*.lock
+profile
+*.moved-aside
+*~.nib
