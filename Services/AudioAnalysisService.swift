@@ -12,256 +12,156 @@ import Accelerate
 import CoreML
 
 /// Service for analyzing audio files to extract features and detect mood
+/// Integrates with real-time FFT processing for enhanced accuracy
 class AudioAnalysisService {
-    // Audio engine for live analysis
-    private let audioEngine = AVAudioEngine()
-    private let analysisQueue = DispatchQueue(label: "com.mixtapes.audioanalysis", qos: .userInitiated)
+    // Real-time audio processor
+    private let audioProcessor: AudioProcessor
     
-    // Audio feature processing buffers and state
+    // Legacy support for existing API
+    private let analysisQueue = DispatchQueue(label: "com.mixtapes.audioanalysis", qos: .userInitiated)
     private var features: AudioFeatures?
-    private var analysisNodes: [AVAudioNode] = []
     private var currentAnalysisTap: AVAudioNode?
     private var completionHandler: ((AudioFeatures) -> Void)?
     
-    // CoreML model for mood classification (would be loaded from an actual model file)
+    // CoreML model for mood classification
     private var moodClassifier: MLModel?
     
     init() {
-        setupAudioEngine()
+        self.audioProcessor = AudioProcessor()
         loadMoodClassifier()
-    }
-    
-    /// Setup the audio engine for analysis
-    private func setupAudioEngine() {
-        // Configure audio session
-        do {
-            let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playback, mode: .default)
-            try audioSession.setActive(true)
-        } catch {
-            print("AudioAnalysisService - Failed to setup audio session: \(error)")
-        }
     }
     
     /// Load the mood classification model
     private func loadMoodClassifier() {
         // In a real implementation, we would load an actual Core ML model
-        // MLModel.load(contentsOf: modelURL)
-        
-        // Simulated successful loading
         print("AudioAnalysisService - Mood classifier model loaded successfully")
     }
     
-    /// Analyze an audio file for features
+    // MARK: - File Analysis (Enhanced with FFT)
+    
+    /// Analyze an audio file for features using FFT processing
     func analyzeAudioFile(url: URL, completion: @escaping (Result<AudioFeatures, Error>) -> Void) {
-        analysisQueue.async {
-            // In a real implementation, we would:
-            // 1. Open the audio file
-            // 2. Read audio samples
-            // 3. Process with signal processing algorithms
-            // 4. Return extracted features
-            
-            do {
-                // Simulate reading file and processing
-                let audioFile = try AVAudioFile(forReading: url)
-                let features = self.extractFeaturesFromFile(audioFile)
-                
-                // Return on main queue
-                DispatchQueue.main.async {
-                    completion(.success(features))
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    completion(.failure(error))
-                }
+        // Use the new audio processor for file analysis
+        audioProcessor.analyzeAudioFile(at: url) { features, mood in
+            if let features = features {
+                completion(.success(features))
+            } else {
+                completion(.failure(AudioProcessingError.processingError))
             }
         }
     }
     
-    /// Extract features from audio file
-    private func extractFeaturesFromFile(_ audioFile: AVAudioFile) -> AudioFeatures {
-        // Simulate feature extraction (in a real implementation this would use DSP algorithms)
-        
-        // Get some basic file information
-        let format = audioFile.processingFormat
-        let sampleRate = format.sampleRate
-        let duration = Double(audioFile.length) / sampleRate
-        
-        // Simulated feature extraction
-        let randomizeFeature = { () -> Float in
-            return Float.random(in: 0...1)
-        }
-        
-        // Simulated audio features
-        let tempo = Float.random(in: 60...180) // BPM
-        let energy = randomizeFeature()
-        let valence = randomizeFeature()
-        let danceability = randomizeFeature()
-        let acousticness = randomizeFeature()
-        let instrumentalness = randomizeFeature()
-        let speechiness = randomizeFeature()
-        let liveness = randomizeFeature()
-        
-        return AudioFeatures(
-            tempo: tempo,
-            energy: energy, 
-            valence: valence,
-            danceability: danceability,
-            acousticness: acousticness,
-            instrumentalness: instrumentalness,
-            speechiness: speechiness,
-            liveness: liveness
-        )
-    }
+    // MARK: - Real-time Analysis (Enhanced with FFT)
     
-    /// Install a tap on an AVPlayer to analyze audio in real-time
+    /// Install a tap on an AVPlayer to analyze audio in real-time using FFT
     func installAnalysisTap(on player: AVQueuePlayer, updateInterval: TimeInterval = 10.0, completion: @escaping (AudioFeatures) -> Void) {
-        // Remove any existing tap
-        removeAnalysisTap()
-        
-        guard let playerNode = getOutputNodeFromPlayer(player) else {
-            print("AudioAnalysisService - Could not get player output node")
-            return
-        }
-        
         // Store completion handler
         self.completionHandler = completion
         
-        // Install tap on player node
-        let format = playerNode.outputFormat(forBus: 0)
-        let bufferSize: AVAudioFrameCount = 4096
-        
-        playerNode.installTap(onBus: 0, bufferSize: bufferSize, format: format) { [weak self] (buffer, time) in
-            guard let self = self else { return }
+        // Use the audio processor for real-time analysis
+        audioProcessor.startRealTimeAnalysis { [weak self] features in
+            // Call the completion handler with extracted features
+            completion(features)
             
-            // Process audio buffer
-            self.processAudioBuffer(buffer, format: format)
+            // Store for compatibility
+            self?.features = features
         }
         
-        // Start audio engine if needed
-        if !audioEngine.isRunning {
-            do {
-                try audioEngine.start()
-            } catch {
-                print("AudioAnalysisService - Could not start audio engine: \(error)")
-            }
-        }
-        
-        // Store node for later removal
-        currentAnalysisTap = playerNode
-        
-        // Setup timer for periodic updates
+        // Set up periodic updates to match the expected behavior
         Timer.scheduledTimer(withTimeInterval: updateInterval, repeats: true) { [weak self] timer in
-            guard let self = self, player.rate > 0, let features = self.features else { return }
+            // Check if player is still playing
+            guard player.rate > 0 else {
+                timer.invalidate()
+                return
+            }
             
-            // Call completion handler with current features
-            self.completionHandler?(features)
+            // Get current features from processor
+            if let currentFeatures = self?.audioProcessor.currentFeatures {
+                self?.completionHandler?(currentFeatures)
+            }
         }
     }
     
     /// Remove analysis tap
     func removeAnalysisTap() {
-        if let node = currentAnalysisTap {
-            node.removeTap(onBus: 0)
-            currentAnalysisTap = nil
-        }
-        
-        // Reset state
+        audioProcessor.stopRealTimeAnalysis()
         completionHandler = nil
+        currentAnalysisTap = nil
     }
     
-    /// Process audio buffer to extract features
-    private func processAudioBuffer(_ buffer: AVAudioPCMBuffer, format: AVAudioFormat) {
-        // In a real implementation, this would perform signal processing on the buffer data
-        // For demonstration, we'll simulate feature extraction
-        guard let channelData = buffer.floatChannelData else { return }
-        
-        // Calculate RMS (root mean square) for energy approximation
-        var sum: Float = 0.0
-        let frameLength = Int(buffer.frameLength)
-        
-        // Simply iterate through samples to calculate energy
-        for sample in 0..<frameLength {
-            let value = channelData[0][sample]
-            sum += value * value
-        }
-        
-        let rms = sqrt(sum / Float(frameLength))
-        
-        // Update features with processed values
-        // In a real implementation, we would store more analysis results 
-        // and use them for feature calculation
-        
-        // Approximate features from RMS value and randomization for demo
-        let energy = min(rms * 10, 1.0) // Energy from RMS
-        let valence = Float.random(in: 0...1) // Positivity (would be from spectral analysis)
-        let tempo = Float.random(in: 60...180) // BPM (would be from beat detection)
-        
-        // Create new audio features object
-        let newFeatures = AudioFeatures(
-            tempo: tempo,
-            energy: energy,
-            valence: valence,
-            danceability: Float.random(in: 0...1),
-            acousticness: Float.random(in: 0...1),
-            instrumentalness: Float.random(in: 0...1),
-            speechiness: Float.random(in: 0...1),
-            liveness: Float.random(in: 0...1)
-        )
-        
-        // Update stored features
-        self.features = newFeatures
-    }
+    // MARK: - Mood Detection (Enhanced)
     
-    /// Detect mood from audio features
+    /// Detect mood from audio features using improved algorithm
     func detectMood(from features: AudioFeatures) -> Mood {
-        // In a real implementation, this would use the CoreML model
-        // Here we'll use a simplified rule-based approach
+        // Enhanced mood detection using multiple feature combinations
         
-        // Simple mood determination logic based on energy and valence
-        if features.tempo > 120 {
-            if features.energy > 0.7 {
-                return features.valence > 0.6 ? .energetic : .angry
+        // Primary mood detection based on energy and valence
+        if features.tempo > 130 && features.energy > 0.75 {
+            // High energy, fast tempo
+            if features.valence > 0.6 && features.danceability > 0.7 {
+                return .energetic
+            } else if features.valence < 0.4 {
+                return .angry
             } else {
-                return features.valence > 0.6 ? .happy : .focused
+                return .focused
+            }
+        } else if features.tempo < 90 && features.energy < 0.4 {
+            // Low energy, slow tempo
+            if features.valence > 0.6 && features.acousticness > 0.5 {
+                return .relaxed
+            } else if features.valence < 0.4 {
+                return .melancholic
+            } else {
+                return .neutral
+            }
+        } else if features.valence > 0.75 {
+            // Very positive valence
+            return .happy
+        } else if features.energy > 0.4 && features.energy < 0.7 && 
+                  features.valence > 0.4 && features.valence < 0.7 {
+            // Moderate energy and valence
+            if features.instrumentalness > 0.5 {
+                return .focused
+            } else if features.acousticness > 0.6 {
+                return .romantic
+            } else {
+                return .neutral
             }
         } else {
-            if features.energy < 0.4 {
-                return features.valence > 0.5 ? .relaxed : .melancholic
-            } else {
-                return features.valence > 0.7 ? .romantic : .neutral
-            }
+            // Default case
+            return .neutral
         }
     }
     
-    /// Get output node from AVPlayer for analysis
-    private func getOutputNodeFromPlayer(_ player: AVQueuePlayer) -> AVAudioNode? {
-        // In a real implementation, we would need to get the node
-        // from the AVPlayer's audio session
-        // This is a simplified approach for demonstration
-        
-        // Simulated path to get the node
-        return audioEngine.outputNode
-    }
+    // MARK: - Song Classification (Enhanced)
     
-    /// Classify a song based on its audio features
+    /// Classify a song based on its audio features using FFT analysis
     func classifySong(_ song: Song, completion: @escaping (Mood) -> Void) {
-        // Get URL from song
         let url = song.wrappedUrl
         
-        // Analyze file
+        // Use enhanced file analysis
         analyzeAudioFile(url: url) { result in
             switch result {
             case .success(let features):
-                // Detect mood from features
+                // Detect mood using enhanced algorithm
                 let mood = self.detectMood(from: features)
                 
-                // Store features in song
-                song.setAudioFeatures(
-                    tempo: features.tempo,
-                    energy: features.energy,
-                    valence: features.valence
-                )
+                // Store all features in song (if song model supports it)
+                if let songFeatures = song.getAudioFeatures() {
+                    // If song already has features, update them
+                    song.setAudioFeatures(
+                        tempo: features.tempo,
+                        energy: features.energy,
+                        valence: features.valence
+                    )
+                } else {
+                    // Store new features
+                    song.setAudioFeatures(
+                        tempo: features.tempo,
+                        energy: features.energy,
+                        valence: features.valence
+                    )
+                }
                 
                 // Update song mood tag
                 song.moodTag = mood.rawValue
@@ -275,25 +175,149 @@ class AudioAnalysisService {
             }
         }
     }
+    
+    // MARK: - Advanced Analysis Methods
+    
+    /// Get real-time analysis statistics
+    func getAnalysisStatistics() -> AnalysisStatistics {
+        return audioProcessor.getAnalysisStatistics()
+    }
+    
+    /// Get averaged features over recent analysis history
+    func getAveragedFeatures() -> AudioFeatures? {
+        return audioProcessor.getAveragedFeatures()
+    }
+    
+    /// Start real-time mood monitoring
+    func startRealTimeMoodMonitoring(onMoodChange: @escaping (Mood) -> Void) {
+        audioProcessor.startRealTimeAnalysis { features in
+            let detectedMood = self.detectMood(from: features)
+            onMoodChange(detectedMood)
+        }
+    }
+    
+    /// Stop real-time mood monitoring
+    func stopRealTimeMoodMonitoring() {
+        audioProcessor.stopRealTimeAnalysis()
+    }
+    
+    // MARK: - Batch Analysis
+    
+    /// Analyze multiple songs in batch for mood classification
+    func batchAnalyzeSongs(_ songs: [Song], progressCallback: @escaping (Int, Int) -> Void, completion: @escaping ([Song: Mood]) -> Void) {
+        var results: [Song: Mood] = [:]
+        let totalCount = songs.count
+        var completedCount = 0
+        
+        // Process songs in batches to avoid overwhelming the system
+        let batchSize = 3
+        let batches = songs.chunked(into: batchSize)
+        
+        func processBatch(_ batchIndex: Int) {
+            guard batchIndex < batches.count else {
+                // All batches processed
+                completion(results)
+                return
+            }
+            
+            let batch = batches[batchIndex]
+            let group = DispatchGroup()
+            
+            for song in batch {
+                group.enter()
+                classifySong(song) { mood in
+                    results[song] = mood
+                    completedCount += 1
+                    progressCallback(completedCount, totalCount)
+                    group.leave()
+                }
+            }
+            
+            group.notify(queue: .main) {
+                // Process next batch
+                processBatch(batchIndex + 1)
+            }
+        }
+        
+        // Start processing
+        processBatch(0)
+    }
+    
+    // MARK: - Utility Methods
+    
+    /// Extract detailed audio features for visualization
+    func extractDetailedFeatures(from url: URL, completion: @escaping (DetailedAudioFeatures?) -> Void) {
+        audioProcessor.analyzeAudioFile(at: url) { features, mood in
+            guard let features = features else {
+                completion(nil)
+                return
+            }
+            
+            // Create detailed features with additional computed metrics
+            let detailedFeatures = DetailedAudioFeatures(
+                base: features,
+                mood: mood ?? .neutral,
+                energyLevel: self.categorizeEnergyLevel(features.energy),
+                danceabilityLevel: self.categorizeDanceability(features.danceability),
+                moodConfidence: self.calculateMoodConfidence(from: features)
+            )
+            
+            completion(detailedFeatures)
+        }
+    }
+    
+    private func categorizeEnergyLevel(_ energy: Float) -> String {
+        switch energy {
+        case 0.0..<0.3: return "Low"
+        case 0.3..<0.7: return "Medium"
+        default: return "High"
+        }
+    }
+    
+    private func categorizeDanceability(_ danceability: Float) -> String {
+        switch danceability {
+        case 0.0..<0.4: return "Not Danceable"
+        case 0.4..<0.7: return "Moderately Danceable"
+        default: return "Very Danceable"
+        }
+    }
+    
+    private func calculateMoodConfidence(from features: AudioFeatures) -> Float {
+        // Calculate confidence based on how strongly features point to a mood
+        let energyStrength = abs(features.energy - 0.5) * 2 // 0-1 scale
+        let valenceStrength = abs(features.valence - 0.5) * 2 // 0-1 scale
+        let tempoStrength = features.tempo > 120 || features.tempo < 80 ? 1.0 : 0.5
+        
+        return (energyStrength + valenceStrength + tempoStrength) / 3.0
+    }
 }
 
-/// Extended audio features structure
-struct AudioFeatures: Codable {
-    let tempo: Float      // Beats per minute
-    let energy: Float     // 0.0 to 1.0, high energy = fast, loud, noisy
-    let valence: Float    // 0.0 to 1.0, high valence = positive, happy, cheerful
-    
-    // Additional Spotify-like features
-    let danceability: Float       // How suitable for dancing
-    let acousticness: Float       // Confidence track is acoustic
-    let instrumentalness: Float   // Confidence track has no vocals
-    let speechiness: Float        // Presence of spoken words
-    let liveness: Float           // Presence of audience
-    
-    // Audio processing errors
-    enum AudioProcessingError: Error {
-        case fileReadError
-        case processingError
-        case invalidFormat
+// MARK: - Enhanced Data Structures
+
+/// Detailed audio features with additional computed metrics
+struct DetailedAudioFeatures {
+    let base: AudioFeatures
+    let mood: Mood
+    let energyLevel: String
+    let danceabilityLevel: String
+    let moodConfidence: Float
+}
+
+/// Audio processing errors
+enum AudioProcessingError: Error {
+    case fileReadError
+    case processingError
+    case invalidFormat
+    case deviceNotAvailable
+    case permissionDenied
+}
+
+// MARK: - Array Extension for Batch Processing
+
+extension Array {
+    func chunked(into size: Int) -> [[Element]] {
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
+        }
     }
 }
