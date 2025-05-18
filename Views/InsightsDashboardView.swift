@@ -8,674 +8,713 @@
 
 import SwiftUI
 import CoreData
+import Charts
 
-/// Dashboard view showing insights about user's music library and listening habits
 struct InsightsDashboardView: View {
     @Environment(\.managedObjectContext) var moc
-    @FetchRequest(entity: MixTape.entity(), sortDescriptors: [
-        NSSortDescriptor(keyPath: \MixTape.lastPlayedDate, ascending: false)
-    ]) var mixTapes: FetchedResults<MixTape>
+    @ObservedObject var aiService: AIIntegrationService
+    @ObservedObject var moodEngine: MoodEngine
+    @ObservedObject var personalityEngine: PersonalityEngine
+    @StateObject private var viewModel = InsightsViewModel()
+    @State private var showingSiriShortcuts = false
     
-    // AI service
-    var aiService: AIIntegrationService
+    // Fetch all mixtapes
+    @FetchRequest(
+        entity: MixTape.entity(),
+        sortDescriptors: [NSSortDescriptor(keyPath: \MixTape.title, ascending: true)]
+    ) var mixtapes: FetchedResults<MixTape>
     
     // State
     @State private var selectedTimeRange: TimeRange = .week
-    @State private var showMoodDetails: Bool = false
-    @State private var isLoadingInsights: Bool = true
-    @State private var insights: LibraryInsights = LibraryInsights()
+    @State private var isLoading = true
+    @State private var refreshing = false
+    @State private var currentError: AppError?
+    @State private var retryAction: (() -> Void)?
+    
+    // Computed metrics
+    private var totalListeningTime: TimeInterval {
+        mixtapes.reduce(0) { $0 + $1.totalPlayTime }
+    }
+    
+    private var averageDailyListening: TimeInterval {
+        totalListeningTime / Double(selectedTimeRange.days)
+    }
     
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 24) {
-                    // Time range selector
-                    Picker("Time Range", selection: $selectedTimeRange) {
-                        ForEach(TimeRange.allCases, id: \.self) { range in
-                            Text(range.displayName).tag(range)
+                VStack(spacing: 20) {
+                    // Error banner if needed
+                    if let error = currentError {
+                        ErrorBanner(error: error) {
+                            retryAction?()
                         }
                     }
-                    .pickerStyle(SegmentedPickerStyle())
-                    .padding(.horizontal)
-                    .onChange(of: selectedTimeRange) { _ in
-                        refreshInsights()
-                    }
                     
-                    if isLoadingInsights {
-                        // Loading state
-                        ProgressView("Analyzing your library...")
-                            .padding(.top, 40)
+                    // Main content
+                    if isLoading {
+                        ProgressView("Analyzing your music...")
+                            .progressViewStyle(CircularProgressViewStyle())
                     } else {
-                        // Insights content
-                        Group {
-                            // Top section: Mood Distribution
-                            InsightSectionView(title: "Your Music Mood Profile", systemImage: "waveform.path.ecg") {
-                                VStack(spacing: 16) {
-                                    // Mood distribution chart
-                                    HStack(spacing: 0) {
-                                        ForEach(insights.moodDistribution.sorted(by: { $0.value > $1.value }), id: \.key) { mood, percentage in
-                                            if let mood = Mood(rawValue: mood), percentage > 0 {
-                                                Rectangle()
-                                                    .fill(mood.color)
-                                                    .frame(width: CGFloat(percentage) * UIScreen.main.bounds.width * 0.8, height: 24)
-                                                    .overlay(
-                                                        Text(percentage > 0.1 ? "\(Int(percentage * 100))%" : "")
-                                                            .font(.caption)
-                                                            .foregroundColor(.white)
-                                                            .padding(.horizontal, 4)
-                                                    )
-                                            }
-                                        }
-                                    }
-                                    .cornerRadius(6)
+                        // Time range picker
+                        Picker("Time Range", selection: $selectedTimeRange) {
+                            ForEach(TimeRange.allCases) { range in
+                                Text(range.description).tag(range)
+                            }
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                        .padding(.horizontal)
+                        
+                        // Overview metrics
+                        overviewMetricsView
+                        
+                        // Mood distribution chart
+                        moodDistributionView
+                        
+                        // Listening habits
+                        listeningHabitsView
+                        
+                        // AI-generated insights
+                        personalizedInsightsView
+                        
+                        // AI analytics visualization
+                        aiAnalyticsView
+                        
+                        // Siri Shortcuts Section
+                        VStack(alignment: .leading) {
+                            HStack {
+                                Image(systemName: "waveform")
+                                    .foregroundColor(.blue)
+                                Text("Voice Commands")
+                                    .font(.headline)
+                                Spacer()
+                                Button(action: {
+                                    showingSiriShortcuts = true
+                                }) {
+                                    Text("Manage")
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                            .padding()
+                            
+                            if aiService.siriIntegrationEnabled {
+                                Text("Use Siri to control your music by mood and create AI mixtapes hands-free.")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
                                     .padding(.horizontal)
-                                    
-                                    // Mood breakdown
-                                    if showMoodDetails {
-                                        VStack(spacing: 12) {
-                                            ForEach(insights.moodDistribution.sorted(by: { $0.value > $1.value }), id: \.key) { mood, percentage in
-                                                if let mood = Mood(rawValue: mood), percentage > 0 {
-                                                    HStack {
-                                                        Image(systemName: mood.systemIcon)
-                                                            .foregroundColor(mood.color)
-                                                            .frame(width: 24)
-                                                        
-                                                        Text(mood.rawValue)
-                                                            .font(.subheadline)
-                                                        
-                                                        Spacer()
-                                                        
-                                                        Text("\(Int(percentage * 100))%")
-                                                            .font(.subheadline)
-                                                            .foregroundColor(.secondary)
-                                                    }
-                                                    .padding(.horizontal)
-                                                }
-                                            }
-                                        }
-                                    }
-                                    
-                                    // Show/Hide details button
-                                    Button(action: {
-                                        withAnimation {
-                                            showMoodDetails.toggle()
-                                        }
-                                    }) {
-                                        Label(
-                                            showMoodDetails ? "Hide Details" : "Show Details",
-                                            systemImage: showMoodDetails ? "chevron.up" : "chevron.down"
-                                        )
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    }
-                                    .padding(.top, 4)
-                                }
-                            }
-                            
-                            // Most played mixtapes
-                            InsightSectionView(title: "Most Played Mixtapes", systemImage: "chart.bar.fill") {
-                                VStack(spacing: 16) {
-                                    ForEach(insights.topMixtapes, id: \.title) { mixtape in
-                                        HStack {
-                                            Text(mixtape.title)
-                                                .font(.subheadline)
-                                            
-                                            Spacer()
-                                            
-                                            Text("\(mixtape.playCount) plays")
-                                                .font(.subheadline)
-                                                .foregroundColor(.secondary)
-                                        }
-                                        .padding(.horizontal)
-                                    }
-                                    
-                                    if insights.topMixtapes.isEmpty {
-                                        Text("No play data available yet")
-                                            .font(.subheadline)
-                                            .foregroundColor(.secondary)
-                                            .padding()
-                                    }
-                                }
-                            }
-                            
-                            // Listening patterns
-                            InsightSectionView(title: "Listening Patterns", systemImage: "clock") {
-                                VStack(spacing: 16) {
-                                    // Time of day chart
-                                    DayHourHeatmap(data: insights.listeningTimeDistribution)
-                                        .frame(height: 120)
-                                        .padding(.horizontal)
-                                    
-                                    // Legend
-                                    HStack {
-                                        Text("Less")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                        
-                                        Rectangle()
-                                            .fill(
-                                                LinearGradient(
-                                                    gradient: Gradient(colors: [.blue.opacity(0.1), .blue]),
-                                                    startPoint: .leading,
-                                                    endPoint: .trailing
-                                                )
-                                            )
-                                            .frame(height: 8)
-                                            .cornerRadius(4)
-                                        
-                                        Text("More")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    .padding(.horizontal)
-                                    
-                                    // Peak listening time
-                                    if let peakTime = insights.peakListeningTime {
-                                        HStack {
-                                            Image(systemName: "clock.fill")
-                                                .foregroundColor(.blue)
-                                            
-                                            Text("Peak listening time: \(peakTime)")
-                                                .font(.subheadline)
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            // AI-powered recommendations
-                            InsightSectionView(title: "AI Recommendations", systemImage: "wand.and.stars") {
-                                VStack(spacing: 16) {
-                                    ForEach(insights.recommendations, id: \.title) { recommendation in
-                                        HStack(alignment: .top) {
-                                            Image(systemName: recommendation.icon)
-                                                .foregroundColor(.purple)
-                                                .frame(width: 24)
-                                            
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                Text(recommendation.title)
-                                                    .font(.subheadline)
-                                                    .fontWeight(.medium)
-                                                
-                                                Text(recommendation.description)
-                                                    .font(.caption)
-                                                    .foregroundColor(.secondary)
-                                            }
-                                            
-                                            Spacer()
-                                        }
-                                        .padding(.horizontal)
-                                    }
-                                }
-                            }
-                            
-                            // Personality insights
-                            InsightSectionView(title: "Your Music Personality", systemImage: "person.crop.circle") {
-                                VStack(spacing: 16) {
-                                    // Current personality
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text("Primary Type")
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                            
-                                            Text(aiService.personalityEngine.currentPersonality.rawValue)
-                                                .font(.headline)
-                                                .foregroundColor(aiService.personalityEngine.currentPersonality.themeColor)
-                                        }
-                                        
-                                        Spacer()
-                                        
-                                        // Icon
-                                        Image(systemName: getPersonalityIcon(aiService.personalityEngine.currentPersonality))
-                                            .font(.system(size: 40))
-                                            .foregroundColor(aiService.personalityEngine.currentPersonality.themeColor.opacity(0.8))
-                                    }
-                                    .padding(.horizontal)
-                                    
-                                    // Description
-                                    Text(getPersonalityDescription(aiService.personalityEngine.currentPersonality))
+                            } else {
+                                HStack {
+                                    Image(systemName: "exclamationmark.triangle")
+                                        .foregroundColor(.orange)
+                                    Text("Enable Siri in Settings to use voice commands")
                                         .font(.subheadline)
                                         .foregroundColor(.secondary)
-                                        .multilineTextAlignment(.leading)
-                                        .padding(.horizontal)
-                                    
-                                    // Personality traits
-                                    VStack(spacing: 8) {
-                                        ForEach(aiService.personalityEngine.getPersonalityTraits(), id: \.type) { trait in
-                                            HStack {
-                                                Text(trait.type.rawValue)
-                                                    .font(.caption)
-                                                    .frame(width: 80, alignment: .leading)
-                                                
-                                                GeometryReader { geometry in
-                                                    ZStack(alignment: .leading) {
-                                                        Rectangle()
-                                                            .fill(Color.gray.opacity(0.2))
-                                                            .frame(height: 8)
-                                                            .cornerRadius(4)
-                                                        
-                                                        Rectangle()
-                                                            .fill(trait.type.themeColor)
-                                                            .frame(width: CGFloat(trait.value) * geometry.size.width, height: 8)
-                                                            .cornerRadius(4)
-                                                    }
-                                                }
-                                                .frame(height: 8)
-                                                
-                                                Text("\(Int(trait.value * 100))%")
-                                                    .font(.caption)
-                                                    .foregroundColor(.secondary)
-                                                    .frame(width: 40)
-                                            }
-                                        }
-                                    }
-                                    .padding(.horizontal)
-                                    .padding(.top, 8)
                                 }
+                                .padding()
                             }
                         }
+                        .background(Color(.systemBackground))
+                        .cornerRadius(12)
+                        .shadow(radius: 2)
                     }
-                    
-                    // Refresh button
-                    Button(action: {
-                        refreshInsights()
-                    }) {
-                        Label("Refresh Insights", systemImage: "arrow.clockwise")
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                            .padding(.horizontal)
-                    }
-                    .padding(.top, 8)
-                    .padding(.bottom, 32)
                 }
-                .padding(.top)
+                .padding(.vertical)
             }
-            .navigationBarTitle("Music Insights", displayMode: .large)
-            .onAppear {
-                // Load insights when view appears
-                refreshInsights()
-                
-                // Track interaction
-                aiService.trackInteraction(type: "view_insights_dashboard")
-            }
+            .navigationTitle("Your Music Insights")
+            .navigationBarItems(trailing: refreshButton)
+            .onAppear(perform: loadData)
+            .withErrorHandling()
+        }
+        .sheet(isPresented: $showingSiriShortcuts) {
+            SiriShortcutsView(aiService: aiService)
         }
     }
     
-    // Refresh insights data
-    private func refreshInsights() {
-        isLoadingInsights = true
-        
-        // Simulate delay for analysis
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            // Generate insights
-            insights = generateInsights()
-            isLoadingInsights = false
-            
-            // Track interaction
-            aiService.trackInteraction(type: "refresh_insights_\(selectedTimeRange.rawValue)")
+    // MARK: - Subviews
+    
+    private var refreshButton: some View {
+        Button(action: refreshData) {
+            Image(systemName: refreshing ? "hourglass" : "arrow.clockwise")
+                .imageScale(.large)
+                .rotationEffect(.degrees(refreshing ? 0 : 360))
+                .animation(refreshing ? Animation.linear(duration: 1).repeatForever(autoreverses: false) : .default, value: refreshing)
         }
+        .disabled(refreshing)
     }
     
-    // Generate insights from the music library
-    private func generateInsights() -> LibraryInsights {
-        // In a real app, this would analyze actual user data
-        // This is a simulation for demonstration purposes
-        
-        var insights = LibraryInsights()
-        
-        // Generate mood distribution
-        let moodDistribution = generateMoodDistribution()
-        insights.moodDistribution = moodDistribution
-        
-        // Generate top mixtapes
-        insights.topMixtapes = generateTopMixtapes()
-        
-        // Generate listening time distribution
-        insights.listeningTimeDistribution = generateListeningTimeDistribution()
-        insights.peakListeningTime = "7:00 PM - 9:00 PM"
-        
-        // Generate AI recommendations
-        insights.recommendations = generateRecommendations()
-        
-        return insights
-    }
-    
-    // Generate simulated mood distribution
-    private func generateMoodDistribution() -> [String: Float] {
-        var distribution: [String: Float] = [:]
-        
-        // Get a list of all moods
-        let allMoods = Mood.allCases
-        
-        // Set dominant mood based on AI service
-        let dominantMood = aiService.moodEngine.currentMood
-        distribution[dominantMood.rawValue] = Float.random(in: 0.25...0.40)
-        
-        // Distribute remaining percentages
-        var remaining = 1.0 - (distribution[dominantMood.rawValue] ?? 0)
-        let otherMoods = allMoods.filter { $0 != dominantMood }
-        
-        for mood in otherMoods {
-            // Randomly decide if this mood gets a percentage
-            if Bool.random() && remaining > 0 {
-                let value = Float.random(in: 0.02...min(0.20, remaining))
-                distribution[mood.rawValue] = value
-                remaining -= value
-            }
-        }
-        
-        // Add remaining to dominant
-        distribution[dominantMood.rawValue] = (distribution[dominantMood.rawValue] ?? 0) + remaining
-        
-        return distribution
-    }
-    
-    // Generate top mixtapes
-    private func generateTopMixtapes() -> [MixtapePlayCount] {
-        var playCountData: [MixtapePlayCount] = []
-        
-        // Use actual mixtape data if available
-        if mixTapes.count > 0 {
-            for (index, mixtape) in mixTapes.prefix(5).enumerated() {
-                let playCount = 20 - (index * 3) + Int.random(in: 0...5)
-                playCountData.append(
-                    MixtapePlayCount(
-                        title: mixtape.wrappedTitle,
-                        playCount: playCount
-                    )
-                )
-            }
-        } else {
-            // Fallback to simulated data
-            playCountData = [
-                MixtapePlayCount(title: "Workout Mix", playCount: 23),
-                MixtapePlayCount(title: "Study Session", playCount: 17),
-                MixtapePlayCount(title: "Evening Relaxation", playCount: 12),
-                MixtapePlayCount(title: "Morning Commute", playCount: 8),
-                MixtapePlayCount(title: "Weekend Vibes", playCount: 5)
-            ]
-        }
-        
-        return playCountData.sorted { $0.playCount > $1.playCount }
-    }
-    
-    // Generate listening time distribution (heatmap data)
-    private func generateListeningTimeDistribution() -> [[Float]] {
-        // 7 days (rows) x 24 hours (columns)
-        var data: [[Float]] = Array(repeating: Array(repeating: 0.0, count: 24), count: 7)
-        
-        // Generate patterns based on common listening habits
-        for day in 0..<7 {
-            for hour in 0..<24 {
-                // Morning commute (weekdays)
-                if day < 5 && (hour >= 7 && hour <= 9) {
-                    data[day][hour] = Float.random(in: 0.3...0.7)
-                }
-                
-                // Evening commute/workout (weekdays)
-                if day < 5 && (hour >= 17 && hour <= 19) {
-                    data[day][hour] = Float.random(in: 0.5...1.0)
-                }
-                
-                // Late night (weekends)
-                if (day == 5 || day == 6) && (hour >= 20 || hour <= 2) {
-                    data[day][hour] = Float.random(in: 0.4...0.9)
-                }
-                
-                // Afternoon (weekends)
-                if (day == 5 || day == 6) && (hour >= 14 && hour <= 18) {
-                    data[day][hour] = Float.random(in: 0.3...0.8)
-                }
-                
-                // Low activity hours
-                if hour >= 2 && hour <= 5 {
-                    data[day][hour] = Float.random(in: 0.0...0.2)
-                }
-                
-                // Add some randomness
-                data[day][hour] += Float.random(in: 0.0...0.3)
-                data[day][hour] = min(data[day][hour], 1.0)
-            }
-        }
-        
-        return data
-    }
-    
-    // Generate AI recommendations
-    private func generateRecommendations() -> [AIRecommendation] {
-        // Personalize recommendations based on mood and personality
-        let currentMood = aiService.moodEngine.currentMood
-        let personality = aiService.personalityEngine.currentPersonality
-        
-        var recommendations: [AIRecommendation] = []
-        
-        // Recommendation based on current mood
-        recommendations.append(
-            AIRecommendation(
-                title: "Create a \(currentMood.rawValue) Mixtape",
-                description: "Based on your current mood, we recommend creating a mixtape that enhances your \(currentMood.rawValue.lowercased()) feelings.",
-                icon: currentMood.systemIcon
-            )
-        )
-        
-        // Recommendation based on personality
-        switch personality {
-        case .explorer:
-            recommendations.append(
-                AIRecommendation(
-                    title: "Discover New Genres",
-                    description: "Your explorer personality would enjoy branching out into new musical territories this week.",
-                    icon: "safari"
-                )
-            )
-        case .curator:
-            recommendations.append(
-                AIRecommendation(
-                    title: "Organize Your Collection",
-                    description: "Consider adding mood tags to your existing mixtapes for better organization.",
-                    icon: "folder.badge.plus"
-                )
-            )
-        case .enthusiast:
-            recommendations.append(
-                AIRecommendation(
-                    title: "Deep Dive Playlist",
-                    description: "Create a focused collection highlighting a single artist or genre you love.",
-                    icon: "arrow.down.circle"
-                )
-            )
-        case .social:
-            recommendations.append(
-                AIRecommendation(
-                    title: "Share Your Top Mixtape",
-                    description: "Your 'Evening Relaxation' mixtape would be perfect to share with friends.",
-                    icon: "square.and.arrow.up"
-                )
-            )
-        case .ambient:
-            recommendations.append(
-                AIRecommendation(
-                    title: "Background Sound Enhancement",
-                    description: "Try the new mood-based crossfade feature for smoother transitions between songs.",
-                    icon: "waveform"
-                )
-            )
-        case .analyzer:
-            recommendations.append(
-                AIRecommendation(
-                    title: "Analyze Audio Features",
-                    description: "Explore the detailed audio analysis view to understand the technical aspects of your music.",
-                    icon: "waveform.path.ecg.rectangle"
-                )
-            )
-        }
-        
-        // Time-based recommendation
-        let hour = Calendar.current.component(.hour, from: Date())
-        if hour >= 17 && hour <= 22 {
-            recommendations.append(
-                AIRecommendation(
-                    title: "Evening Wind Down",
-                    description: "It's evening time - a perfect moment for a relaxing playlist to transition from work to rest.",
-                    icon: "moon.stars"
-                )
-            )
-        } else if hour >= 6 && hour <= 10 {
-            recommendations.append(
-                AIRecommendation(
-                    title: "Morning Energy Boost",
-                    description: "Start your day right with an energizing playlist to get you moving.",
-                    icon: "sunrise"
-                )
-            )
-        }
-        
-        return recommendations
-    }
-    
-    // Get icon for personality type
-    private func getPersonalityIcon(_ type: PersonalityType) -> String {
-        switch type {
-        case .explorer: return "safari"
-        case .curator: return "folder"
-        case .enthusiast: return "star"
-        case .social: return "person.2"
-        case .ambient: return "waveform"
-        case .analyzer: return "chart.bar"
-        }
-    }
-    
-    // Get detailed description for personality type
-    private func getPersonalityDescription(_ type: PersonalityType) -> String {
-        switch type {
-        case .explorer:
-            return "As an Explorer, you enjoy discovering new music and seeking fresh experiences. You're more likely to try different genres and are excited by novelty in your listening habits."
-        case .curator:
-            return "Your Curator personality loves organizing and perfecting your music collections. You value quality and structure in your library and take pride in creating well-crafted mixtapes."
-        case .enthusiast:
-            return "As an Enthusiast, you tend to deep-dive into artists and genres you love. You appreciate the details and history behind your music and enjoy immersive listening experiences."
-        case .social:
-            return "Your Social personality values music as a way to connect with others. You enjoy sharing discoveries and creating mixtapes that bring people together through shared musical experiences."
-        case .ambient:
-            return "As an Ambient listener, you primarily enjoy music as a backdrop to your daily activities. You value seamless playback experiences and mood-appropriate selections."
-        case .analyzer:
-            return "Your Analyzer personality appreciates the technical aspects of music. You enjoy exploring audio features, production details, and the structural elements of your collection."
-        }
-    }
-}
-
-/// Section view for insights dashboard
-struct InsightSectionView<Content: View>: View {
-    let title: String
-    let systemImage: String
-    let content: Content
-    
-    init(title: String, systemImage: String, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.systemImage = systemImage
-        self.content = content()
-    }
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Header
+    private var overviewMetricsView: some View {
+        VStack(spacing: 16) {
             HStack {
-                Label(title, systemImage: systemImage)
-                    .font(.headline)
+                MetricCard(
+                    title: "Total Listening",
+                    value: formatDuration(totalListeningTime),
+                    icon: "headphones",
+                    color: .blue
+                )
                 
-                Spacer()
+                MetricCard(
+                    title: "Daily Average",
+                    value: formatDuration(averageDailyListening),
+                    icon: "clock",
+                    color: .green
+                )
             }
-            .padding(.horizontal)
-            .padding(.top, 16)
             
-            // Content
-            content
-                .padding(.bottom, 16)
+            HStack {
+                MetricCard(
+                    title: "Mixtapes",
+                    value: "\(mixtapes.count)",
+                    icon: "music.note.list",
+                    color: .purple
+                )
+                
+                MetricCard(
+                    title: "Total Songs",
+                    value: "\(totalSongs)",
+                    icon: "music.note",
+                    color: .orange
+                )
+            }
         }
-        .background(Color.white)
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
         .padding(.horizontal)
     }
-}
-
-/// Heatmap view for time-based data visualization
-struct DayHourHeatmap: View {
-    let data: [[Float]] // 7 days x 24 hours
-    let daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // Hours labels (show only a few for clarity)
-            HStack(spacing: 0) {
-                Text("")
-                    .frame(width: 40)
-                
-                ForEach([0, 6, 12, 18, 23], id: \.self) { hour in
-                    Text("\(hour)")
-                        .font(.system(size: 8))
-                        .frame(maxWidth: .infinity)
+    private var moodDistributionView: some View {
+        VStack(alignment: .leading) {
+            Text("Mood Distribution")
+                .font(.headline)
+                .padding(.horizontal)
+            
+            if moodDistribution.isEmpty {
+                Text("Not enough mood data")
+                    .foregroundColor(.secondary)
+                    .padding()
+            } else {
+                Chart {
+                    ForEach(moodDistribution, id: \.mood) { item in
+                        BarMark(
+                            x: .value("Mood", item.mood.rawValue),
+                            y: .value("Count", item.count)
+                        )
+                        .foregroundStyle(item.mood.color)
+                    }
+                }
+                .frame(height: 200)
+                .padding()
+            }
+        }
+        .background(Color(.systemBackground))
+        .cornerRadius(10)
+        .shadow(radius: 2)
+        .padding(.horizontal)
+    }
+    
+    private var listeningHabitsView: some View {
+        VStack(alignment: .leading) {
+            Text("Listening Habits")
+                .font(.headline)
+                .padding(.horizontal)
+            
+            if listeningHabits.isEmpty {
+                Text("Not enough listening data")
+                    .foregroundColor(.secondary)
+                    .padding()
+            } else {
+                Chart {
+                    ForEach(listeningHabits, id: \.hour) { item in
+                        LineMark(
+                            x: .value("Hour", item.hour),
+                            y: .value("Listens", item.listens)
+                        )
+                        .foregroundStyle(.blue)
+                    }
+                }
+                .frame(height: 200)
+                .padding()
+            }
+        }
+        .background(Color(.systemBackground))
+        .cornerRadius(10)
+        .shadow(radius: 2)
+        .padding(.horizontal)
+    }
+    
+    private var personalizedInsightsView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("AI Insights")
+                .font(.headline)
+                .padding(.horizontal)
+            
+            Text(aiService.getUserInsights())
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color(.systemBackground))
+                .cornerRadius(10)
+        }
+        .padding(.horizontal)
+    }
+    
+    private var aiAnalyticsView: some View {
+        VStack(spacing: 24) {
+            // Current Personality Card
+            PersonalityCard(personality: personalityEngine.currentPersonality)
+            
+            // Mood History Chart
+            ChartSection(
+                title: "Mood Patterns",
+                subtitle: "Your emotional journey through music"
+            ) {
+                Chart(viewModel.moodHistory) { entry in
+                    LineMark(
+                        x: .value("Time", entry.date),
+                        y: .value("Value", entry.value)
+                    )
+                    .foregroundStyle(by: .value("Mood", entry.mood.rawValue))
+                }
+                .chartLegend(position: .bottom)
+                .frame(height: 200)
+            }
+            
+            // Genre Distribution
+            ChartSection(
+                title: "Genre Preferences",
+                subtitle: "Based on your listening patterns"
+            ) {
+                Chart(viewModel.genreStats) { entry in
+                    SectorMark(
+                        angle: .value("Count", entry.count),
+                        innerRadius: .ratio(0.6),
+                        angularInset: 1
+                    )
+                    .foregroundStyle(by: .value("Genre", entry.genre))
+                }
+                .frame(height: 200)
+            }
+            
+            // AI Insights Grid
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 16) {
+                ForEach(viewModel.aiInsights) { insight in
+                    InsightCard(insight: insight)
                 }
             }
-            .foregroundColor(.secondary)
             
-            // Day rows
-            ForEach(0..<7, id: \.self) { day in
-                HStack(spacing: 0) {
-                    // Day label
-                    Text(daysOfWeek[day])
-                        .font(.caption)
-                        .frame(width: 40)
-                        .foregroundColor(.secondary)
-                    
-                    // Hour cells
-                    ForEach(0..<24, id: \.self) { hour in
-                        Rectangle()
-                            .fill(Color.blue.opacity(Double(data[day][hour])))
-                            .frame(height: 12)
+            // Mood Impact Analysis
+            ChartSection(
+                title: "Mood Impact",
+                subtitle: "How music affects your emotional state"
+            ) {
+                HStack {
+                    ForEach(viewModel.moodImpacts) { impact in
+                        VStack {
+                            Text(impact.mood.rawValue)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            ZStack(alignment: .bottom) {
+                                Rectangle()
+                                    .fill(impact.mood.color.opacity(0.2))
+                                    .frame(width: 30, height: 100)
+                                
+                                Rectangle()
+                                    .fill(impact.mood.color)
+                                    .frame(width: 30, height: CGFloat(impact.value * 100))
+                            }
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            
+                            Text("\(Int(impact.value * 100))%")
+                                .font(.caption2)
+                        }
                     }
                 }
             }
         }
+        .padding()
+        .onAppear {
+            viewModel.loadInsights()
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func loadData() {
+        isLoading = true
+        
+        do {
+            try calculateMoodDistribution()
+            try calculateListeningHabits()
+            isLoading = false
+        } catch {
+            currentError = AppError.loadFailure(error)
+            retryAction = loadData
+            isLoading = false
+        }
+    }
+    
+    private func refreshData() {
+        refreshing = true
+        
+        Task {
+            do {
+                // Simulate network delay
+                try await Task.sleep(nanoseconds: 1_500_000_000)
+                
+                try calculateMoodDistribution()
+                try calculateListeningHabits()
+                
+                refreshing = false
+            } catch {
+                currentError = AppError.loadFailure(error)
+                retryAction = refreshData
+                refreshing = false
+            }
+        }
+    }
+    
+    private func calculateMoodDistribution() throws {
+        var distribution: [Mood: Int] = [:]
+        
+        for mixtape in mixtapes {
+            guard let moodString = mixtape.moodTags,
+                  let mood = Mood(rawValue: moodString) else {
+                continue
+            }
+            distribution[mood, default: 0] += 1
+        }
+        
+        if distribution.isEmpty {
+            throw AppError.insufficientData
+        }
+        
+        moodDistribution = distribution.map { MoodData(mood: $0.key, count: $0.value) }
+            .sorted { $0.count > $1.count }
+    }
+    
+    private func calculateListeningHabits() throws {
+        var habits: [Int: Int] = [:]
+        
+        // Get play events from the last selectedTimeRange.days
+        let calendar = Calendar.current
+        let now = Date()
+        let startDate = calendar.date(byAdding: .day, value: -selectedTimeRange.days, to: now) ?? now
+        
+        // Fetch play events (simulated)
+        let events = mixtapes.flatMap { mixtape -> [Date] in
+            let playCount = Int(mixtape.playCount)
+            return (0..<playCount).map { _ in
+                calendar.date(byAdding: .hour,
+                            value: -.random(in: 0...selectedTimeRange.days * 24),
+                            to: now) ?? now
+            }
+        }
+        .filter { $0 >= startDate }
+        
+        // Group by hour
+        for date in events {
+            let hour = calendar.component(.hour, from: date)
+            habits[hour, default: 0] += 1
+        }
+        
+        if habits.isEmpty {
+            throw AppError.insufficientData
+        }
+        
+        listeningHabits = (0...23).map { hour in
+            HourlyListening(hour: hour, listens: habits[hour] ?? 0)
+        }
+    }
+    
+    private var totalSongs: Int {
+        mixtapes.reduce(0) { $0 + Int($1.numberOfSongs) }
+    }
+    
+    private func formatDuration(_ interval: TimeInterval) -> String {
+        let hours = Int(interval / 3600)
+        if hours > 0 {
+            return "\(hours)h"
+        } else {
+            let minutes = Int(interval / 60)
+            return "\(minutes)m"
+        }
     }
 }
 
-/// Time range selection for insights
-enum TimeRange: String, CaseIterable {
-    case week = "week"
-    case month = "month"
-    case year = "year"
+// MARK: - Supporting Types
+
+struct MetricCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
     
-    var displayName: String {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .foregroundColor(color)
+                Text(title)
+                    .foregroundColor(.secondary)
+            }
+            .font(.subheadline)
+            
+            Text(value)
+                .font(.title2)
+                .fontWeight(.bold)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(10)
+        .shadow(radius: 2)
+    }
+}
+
+enum TimeRange: Int, CaseIterable, Identifiable {
+    case week = 7
+    case month = 30
+    case quarter = 90
+    
+    var id: Int { rawValue }
+    var days: Int { rawValue }
+    
+    var description: String {
         switch self {
         case .week: return "Week"
         case .month: return "Month"
-        case .year: return "Year"
+        case .quarter: return "3 Months"
         }
     }
 }
 
-/// Model for library insights
-struct LibraryInsights {
-    var moodDistribution: [String: Float] = [:]
-    var topMixtapes: [MixtapePlayCount] = []
-    var listeningTimeDistribution: [[Float]] = []
-    var peakListeningTime: String?
-    var recommendations: [AIRecommendation] = []
+struct MoodData {
+    let mood: Mood
+    let count: Int
 }
 
-/// Model for mixtape play count
-struct MixtapePlayCount {
+struct HourlyListening {
+    let hour: Int
+    let listens: Int
+}
+
+// MARK: - Preview
+struct InsightsDashboardView_Previews: PreviewProvider {
+    static var previews: some View {
+        let context = PersistenceController.preview.container.viewContext
+        let aiService = AIIntegrationService(context: context)
+        
+        InsightsDashboardView(aiService: aiService, moodEngine: MoodEngine(), personalityEngine: PersonalityEngine())
+            .environment(\.managedObjectContext, context)
+    }
+}
+
+// MARK: - Supporting Views
+
+struct ChartSection<Content: View>: View {
     let title: String
-    let playCount: Int
+    let subtitle: String
+    let content: () -> Content
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+            
+            Text(subtitle)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            content()
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(radius: 2)
+    }
 }
 
-/// Model for AI recommendation
-struct AIRecommendation {
+struct PersonalityCard: View {
+    let personality: PersonalityType
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: personality.icon)
+                .font(.system(size: 40))
+                .foregroundColor(personality.themeColor)
+            
+            Text(personality.rawValue)
+                .font(.title2)
+                .fontWeight(.medium)
+            
+            Text(personality.description)
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            HStack {
+                ForEach(personality.traits) { trait in
+                    Text(trait.name)
+                        .font(.caption)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(personality.themeColor.opacity(0.1))
+                        .cornerRadius(8)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(radius: 2)
+    }
+}
+
+struct InsightCard: View {
+    let insight: AIInsight
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: insight.icon)
+                    .foregroundColor(insight.color)
+                Text(insight.title)
+                    .font(.headline)
+            }
+            
+            Text(insight.description)
+                .font(.body)
+                .foregroundColor(.secondary)
+            
+            if let recommendation = insight.recommendation {
+                Text(recommendation)
+                    .font(.caption)
+                    .padding(8)
+                    .background(insight.color.opacity(0.1))
+                    .cornerRadius(8)
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(radius: 2)
+    }
+}
+
+// MARK: - View Model
+
+class InsightsViewModel: ObservableObject {
+    @Published var moodHistory: [MoodEntry] = []
+    @Published var genreStats: [GenreStat] = []
+    @Published var aiInsights: [AIInsight] = []
+    @Published var moodImpacts: [MoodImpact] = []
+    
+    func loadInsights() {
+        // Load mood history
+        moodHistory = generateMoodHistory()
+        
+        // Load genre statistics
+        genreStats = generateGenreStats()
+        
+        // Generate AI insights
+        aiInsights = generateAIInsights()
+        
+        // Calculate mood impacts
+        moodImpacts = generateMoodImpacts()
+    }
+    
+    // MARK: - Data Generation
+    
+    private func generateMoodHistory() -> [MoodEntry] {
+        let moods: [Mood] = [.happy, .energetic, .relaxed, .melancholic]
+        return (0..<20).map { index in
+            let date = Calendar.current.date(byAdding: .day, value: -index, to: Date())!
+            return MoodEntry(
+                date: date,
+                mood: moods.randomElement()!,
+                value: Double.random(in: 0.3...0.9)
+            )
+        }.reversed()
+    }
+    
+    private func generateGenreStats() -> [GenreStat] {
+        [
+            GenreStat(genre: "Rock", count: 35),
+            GenreStat(genre: "Pop", count: 25),
+            GenreStat(genre: "Jazz", count: 20),
+            GenreStat(genre: "Classical", count: 15),
+            GenreStat(genre: "Electronic", count: 5)
+        ]
+    }
+    
+    private func generateAIInsights() -> [AIInsight] {
+        [
+            AIInsight(
+                title: "Peak Focus Time",
+                description: "You're most productive when listening to classical music in the morning",
+                icon: "brain.head.profile",
+                color: .purple,
+                recommendation: "Try starting your day with Bach or Mozart"
+            ),
+            AIInsight(
+                title: "Mood Booster",
+                description: "Upbeat pop music significantly improves your mood",
+                icon: "sparkles",
+                color: .yellow,
+                recommendation: "Create an energizing morning playlist"
+            )
+        ]
+    }
+    
+    private func generateMoodImpacts() -> [MoodImpact] {
+        [
+            MoodImpact(mood: .happy, value: 0.8),
+            MoodImpact(mood: .energetic, value: 0.6),
+            MoodImpact(mood: .relaxed, value: 0.7),
+            MoodImpact(mood: .melancholic, value: 0.4)
+        ]
+    }
+}
+
+// MARK: - Data Models
+
+struct MoodEntry: Identifiable {
+    let id = UUID()
+    let date: Date
+    let mood: Mood
+    let value: Double
+}
+
+struct GenreStat: Identifiable {
+    let id = UUID()
+    let genre: String
+    let count: Double
+}
+
+struct AIInsight: Identifiable {
+    let id = UUID()
     let title: String
     let description: String
     let icon: String
+    let color: Color
+    let recommendation: String?
+}
+
+struct MoodImpact: Identifiable {
+    let id = UUID()
+    let mood: Mood
+    let value: Double
+}
+
+// MARK: - Previews
+
+struct InsightsDashboardView_Previews: PreviewProvider {
+    static var previews: some View {
+        NavigationView {
+            InsightsDashboardView(
+                moodEngine: MoodEngine(),
+                personalityEngine: PersonalityEngine()
+            )
+        }
+    }
 }

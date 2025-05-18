@@ -9,6 +9,8 @@
 import Foundation
 import AVFoundation
 import UIKit
+import CoreML
+import Accelerate
 
 // MARK: - Error Handling
 
@@ -214,4 +216,187 @@ func checkUrlReachability(url: URL) async throws -> Bool {
 struct EnvironmentConfig {
     static let spotifyClientId = ProcessInfo.processInfo.environment["SPOTIFY_CLIENT_ID"] ?? ""
     static let spotifyClientSecret = ProcessInfo.processInfo.environment["SPOTIFY_CLIENT_SECRET"] ?? ""
+}
+
+// MARK: - AI Utilities
+
+/// Utilities for optimizing AI operations and managing resources
+enum AIUtilities {
+    // MARK: - Background Processing
+    
+    /// Process ML operations in background with proper QoS
+    static func processInBackground<T>(_ operation: @escaping () throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let result = try operation()
+                    continuation.resume(returning: result)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Memory Management
+    
+    /// Cache for ML model outputs
+    private static var modelCache = NSCache<NSString, AnyObject>()
+    
+    /// Configure cache limits based on device capabilities
+    static func configureCacheLimit() {
+        modelCache.countLimit = 100
+        modelCache.totalCostLimit = 50 * 1024 * 1024 // 50MB
+    }
+    
+    /// Cache ML model output with expiration
+    static func cacheModelOutput<T: AnyObject>(_ output: T, forKey key: String, expirationInterval: TimeInterval = 300) {
+        let expirationDate = Date().addingTimeInterval(expirationInterval)
+        let cacheItem = CacheItem(value: output, expirationDate: expirationDate)
+        modelCache.setObject(cacheItem, forKey: key as NSString)
+    }
+    
+    /// Retrieve cached ML model output if valid
+    static func getCachedModelOutput<T: AnyObject>(forKey key: String) -> T? {
+        guard let cacheItem = modelCache.object(forKey: key as NSString) as? CacheItem,
+              cacheItem.expirationDate > Date(),
+              let value = cacheItem.value as? T else {
+            return nil
+        }
+        return value
+    }
+    
+    // MARK: - Performance Optimization
+    
+    /// Batch process multiple inputs for better performance
+    static func batchProcess<T, U>(_ inputs: [T], batchSize: Int = 10, operation: @escaping ([T]) throws -> [U]) async throws -> [U] {
+        let batches = stride(from: 0, to: inputs.count, by: batchSize).map {
+            Array(inputs[$0..<min($0 + batchSize, inputs.count)])
+        }
+        
+        var results: [U] = []
+        for batch in batches {
+            let batchResults = try await processInBackground {
+                try operation(batch)
+            }
+            results.append(contentsOf: batchResults)
+        }
+        return results
+    }
+    
+    /// Optimize audio buffer for ML processing
+    static func optimizeAudioBuffer(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard let optimizedBuffer = AVAudioPCMBuffer(pcmFormat: buffer.format,
+                                                   frameCapacity: buffer.frameLength) else {
+            return nil
+        }
+        
+        // Normalize and optimize audio data
+        let channels = UnsafeBufferPointer(start: buffer.floatChannelData,
+                                         count: Int(buffer.format.channelCount))
+        let optimizedChannels = UnsafeBufferPointer(start: optimizedBuffer.floatChannelData,
+                                                  count: Int(optimizedBuffer.format.channelCount))
+        
+        for (source, destination) in zip(channels, optimizedChannels) {
+            // Apply normalization
+            var normalizedData = [Float](repeating: 0,
+                                       count: Int(buffer.frameLength))
+            vDSP_vabs(source, 1,
+                     &normalizedData, 1,
+                     vDSP_Length(buffer.frameLength))
+            
+            var maximumValue: Float = 0
+            vDSP_maxv(normalizedData, 1,
+                     &maximumValue,
+                     vDSP_Length(buffer.frameLength))
+            
+            if maximumValue > 0 {
+                var scalar = 1.0 / maximumValue
+                vDSP_vsmul(normalizedData, 1,
+                          &scalar,
+                          destination, 1,
+                          vDSP_Length(buffer.frameLength))
+            }
+        }
+        
+        optimizedBuffer.frameLength = buffer.frameLength
+        return optimizedBuffer
+    }
+    
+    // MARK: - Resource Management
+    
+    /// Monitor and manage ML resource usage
+    static func monitorResourceUsage() -> ResourceMetrics {
+        var metrics = ResourceMetrics()
+        
+        // Memory usage
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
+        let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                task_info(mach_task_self_,
+                         task_flavor_t(MACH_TASK_BASIC_INFO),
+                         $0,
+                         &count)
+            }
+        }
+        
+        if kerr == KERN_SUCCESS {
+            metrics.memoryUsage = Double(info.resident_size) / 1024.0 / 1024.0
+        }
+        
+        // CPU usage
+        var thread_list: thread_act_array_t?
+        var thread_count: mach_msg_type_number_t = 0
+        let thread_info_count = mach_msg_type_number_t(THREAD_INFO_MAX)
+        var thread_data = thread_basic_info()
+        var thread_info_out = mach_msg_type_number_t(thread_info_count)
+        
+        if task_threads(mach_task_self_, &thread_list, &thread_count) == KERN_SUCCESS {
+            for i in 0..<thread_count {
+                if thread_info(thread_list![Int(i)],
+                             thread_flavor_t(THREAD_BASIC_INFO),
+                             UnsafeMutablePointer<integer_t>.init(mutating: &thread_data),
+                             &thread_info_out) == KERN_SUCCESS {
+                    let usage = (Double(thread_data.cpu_usage) / Double(TH_USAGE_SCALE)) * 100.0
+                    metrics.cpuUsage += usage
+                }
+            }
+        }
+        
+        if let thread_list = thread_list {
+            vm_deallocate(mach_task_self_,
+                         vm_address_t(UnsafePointer(thread_list).pointee),
+                         vm_size_t(thread_count) * vm_size_t(MemoryLayout<thread_t>.size))
+        }
+        
+        return metrics
+    }
+}
+
+// MARK: - Supporting Types
+
+/// Cache item with expiration
+private class CacheItem {
+    let value: AnyObject
+    let expirationDate: Date
+    
+    init(value: AnyObject, expirationDate: Date) {
+        self.value = value
+        self.expirationDate = expirationDate
+    }
+}
+
+/// Resource usage metrics
+struct ResourceMetrics {
+    var memoryUsage: Double = 0  // In MB
+    var cpuUsage: Double = 0     // In percentage
+    
+    var description: String {
+        """
+        Resource Usage:
+        - Memory: \(String(format: "%.1f", memoryUsage))MB
+        - CPU: \(String(format: "%.1f", cpuUsage))%
+        """
+    }
 }

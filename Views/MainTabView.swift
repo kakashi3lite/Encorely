@@ -10,9 +10,8 @@ import SwiftUI
 import AVKit
 import CoreData
 
-/// Main tab view controller for the app
+/// Main tab view controller with enhanced navigation
 struct MainTabView: View {
-    // Environment
     @Environment(\.managedObjectContext) var moc
     
     // Player state
@@ -22,120 +21,107 @@ struct MainTabView: View {
     @ObservedObject var currentPlayerItems: CurrentPlayerItems
     @ObservedObject var currentSongName: CurrentSongName
     @ObservedObject var isPlaying: IsPlaying
-    
-    // AI service
     var aiService: AIIntegrationService
     
-    // State
+    // Navigation state
     @State private var selectedTab = 0
-    @State private var showingAIBanner = true
-    @State private var showingOnboarding = false
+    @State private var navigationPath = NavigationPath()
+    @State private var newlyCreatedMixtape: MixTape?
+    @State private var shouldNavigateToMixtape = false
     
     var body: some View {
         TabView(selection: $selectedTab) {
-            // Home/Library Tab
-            ContentView(
-                queuePlayer: queuePlayer,
-                playerItemObserver: playerItemObserver,
-                playerStatusObserver: playerStatusObserver,
-                currentPlayerItems: currentPlayerItems,
-                currentSongName: currentSongName,
-                isPlaying: isPlaying,
-                aiService: aiService
-            )
-            .environment(\.managedObjectContext, moc)
-            .tabItem {
-                Label("Library", systemImage: "music.note.list")
+            // Library Tab with NavigationStack
+            NavigationStack(path: $navigationPath) {
+                ContentView(
+                    queuePlayer: queuePlayer,
+                    playerItemObserver: playerItemObserver,
+                    playerStatusObserver: playerStatusObserver,
+                    currentPlayerItems: currentPlayerItems,
+                    currentSongName: currentSongName,
+                    isPlaying: isPlaying,
+                    aiService: aiService
+                )
+                .navigationDestination(for: MixTape.self) { mixtape in
+                    MixTapeView(
+                        songs: mixtape.songsArray,
+                        mixTape: mixtape,
+                        currentMixTapeName: .constant(""),
+                        currentMixTapeImage: .constant(URL(fileURLWithPath: "")),
+                        queuePlayer: queuePlayer,
+                        currentStatusObserver: playerStatusObserver,
+                        currentItemObserver: playerItemObserver,
+                        currentPlayerItems: currentPlayerItems,
+                        currentSongName: currentSongName,
+                        isPlaying: isPlaying,
+                        aiService: aiService
+                    )
+                }
             }
+            .environment(\.managedObjectContext, moc)
+            .tabItem { Label("Library", systemImage: "music.note.list") }
             .tag(0)
             
-            // AI Generate Tab
-            AIGeneratedMixtapeView(aiService: aiService)
-                .environment(\.managedObjectContext, moc)
-                .tabItem {
-                    Label("Generate", systemImage: "wand.and.stars")
-                }
-                .tag(1)
-            
-            // Audio Analysis Tab
-            AudioVisualizationView(
-                queuePlayer: queuePlayer,
+            // AI Generate Tab with completion callback
+            AIGeneratedMixtapeViewWrapper(
                 aiService: aiService,
-                currentSongName: currentSongName
+                onMixtapeCreated: handleMixtapeCreated
             )
-            .tabItem {
-                Label("Analyze", systemImage: "waveform")
-            }
-            .tag(2)
+            .environment(\.managedObjectContext, moc)
+            .tabItem { Label("Generate", systemImage: "wand.and.stars") }
+            .tag(1)
             
-            // Insights Tab
+            AudioVisualizationView(queuePlayer: queuePlayer, aiService: aiService, currentSongName: currentSongName)
+                .tabItem { Label("Analyze", systemImage: "waveform") }
+                .tag(2)
+            
             InsightsDashboardView(aiService: aiService)
                 .environment(\.managedObjectContext, moc)
-                .tabItem {
-                    Label("Insights", systemImage: "chart.bar")
-                }
+                .tabItem { Label("Insights", systemImage: "chart.bar") }
                 .tag(3)
             
-            // Settings Tab
             SettingsView(aiService: aiService)
-                .tabItem {
-                    Label("Settings", systemImage: "gear")
-                }
+                .tabItem { Label("Settings", systemImage: "gear") }
                 .tag(4)
         }
-        .accentColor(accentColorForTab)
-        .overlay(
-            // AI suggestion banner
-            AISuggestionBanner(
-                isVisible: $showingAIBanner,
-                aiService: aiService,
-                tabSelection: $selectedTab
-            )
-            .padding(.bottom, 49) // Adjust to avoid tab bar
-            .animation(.spring(), value: showingAIBanner)
-            .opacity(showingAIBanner ? 1 : 0)
-            ,
-            alignment: .bottom
-        )
-        .onAppear {
-            // Check if first launch
-            if !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
-                showingOnboarding = true
-            }
-            
-            // Track session start
-            aiService.trackInteraction(type: "app_opened")
-        }
-        .onDisappear {
-            // Track session end
-            aiService.trackInteraction(type: "app_closed")
-        }
-        .sheet(isPresented: $showingOnboarding) {
-            OnboardingView(
-                personalityEngine: aiService.personalityEngine,
-                isShowingOnboarding: $showingOnboarding
-            )
-            .onDisappear {
-                UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+        .onChange(of: shouldNavigateToMixtape) { navigate in
+            if navigate, let mixtape = newlyCreatedMixtape {
+                selectedTab = 0
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    navigationPath.append(mixtape)
+                    shouldNavigateToMixtape = false
+                    newlyCreatedMixtape = nil
+                }
             }
         }
     }
     
-    /// Get accent color based on selected tab and mood
-    var accentColorForTab: Color {
-        // Base colors for tabs
-        let tabColors: [Color] = [
-            .blue,      // Library
-            .purple,    // Generate
-            .orange,    // Analyze
-            .green,     // Insights
-            .gray       // Settings
-        ]
-        
-        // Blend with current mood color
-        return tabColors[selectedTab].opacity(0.7)
-                .blended(with: aiService.moodEngine.currentMood.color.opacity(0.3))
+    /// Handle mixtape creation and navigation
+    private func handleMixtapeCreated(_ mixtape: MixTape) {
+        newlyCreatedMixtape = mixtape
+        shouldNavigateToMixtape = true
     }
+}
+
+/// Wrapper for AIGeneratedMixtapeView with completion handling
+struct AIGeneratedMixtapeViewWrapper: View {
+    let aiService: AIIntegrationService
+    let onMixtapeCreated: (MixTape) -> Void
+    @Environment(\.managedObjectContext) var moc
+    
+    var body: some View {
+        AIGeneratedMixtapeView(aiService: aiService)
+            .onReceive(NotificationCenter.default.publisher(for: .mixtapeCreated)) { notification in
+                if let mixtape = notification.object as? MixTape {
+                    onMixtapeCreated(mixtape)
+                }
+            }
+    }
+}
+
+/// Notification extension for mixtape creation
+extension Notification.Name {
+    static let mixtapeCreated = Notification.Name("mixtapeCreated")
 }
 
 /// Color blending extension

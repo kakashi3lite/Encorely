@@ -10,69 +10,75 @@ import CoreData
 
 @objc(MixTape)
 public class MixTape: NSManagedObject {
+    // MARK: - Properties
     
-    // MARK: - Core Data Properties
-    @NSManaged public var title: String?
+    @NSManaged public var title: String
+    @NSManaged public var numberOfSongs: Int16
+    @NSManaged public var urlData: Data?
+    @NSManaged public var aiGenerated: Bool
+    @NSManaged public var moodTags: String?
+    @NSManaged public var lastPlayedDate: Date?
+    @NSManaged public var playCount: Int32
     @NSManaged public var createdDate: Date
-    @NSManaged public var mood: String?
-    @NSManaged public var songs: NSSet?
+    @NSManaged public var songs: NSOrderedSet?
     
     // MARK: - Computed Properties
-    public var wrappedTitle: String {
-        title ?? "Untitled Mixtape"
+    
+    var songsArray: [Song] {
+        let set = songs ?? NSOrderedSet()
+        return set.array as? [Song] ?? []
     }
     
-    public var wrappedMood: String {
-        mood ?? "neutral"
+    var moodTagsArray: [String] {
+        return moodTags?.components(separatedBy: ", ") ?? []
     }
     
-    public var songsArray: [Song] {
-        let set = songs as? Set<Song> ?? []
-        return set.sorted {
-            $0.wrappedTitle < $1.wrappedTitle
+    var wrappedTitle: String {
+        title
+    }
+    
+    var wrappedUrl: URL {
+        if let data = urlData {
+            do {
+                var isStale = false
+                return try URL(resolvingBookmarkData: data, bookmarkDataIsStale: &isStale)
+            } catch {
+                print("Error resolving URL: \(error)")
+                return URL(fileURLWithPath: "")
+            }
         }
+        return URL(fileURLWithPath: "")
     }
     
-    public var songCount: Int {
-        return songs?.count ?? 0
+    // MARK: - Lifecycle
+    
+    public override func awakeFromInsert() {
+        super.awakeFromInsert()
+        createdDate = Date()
+        aiGenerated = false
+        playCount = 0
     }
     
     // MARK: - Methods
-    public func addSong(_ song: Song) {
-        let songs = self.mutableSetValue(forKey: "songs")
-        songs.add(song)
-        song.mixTape = self
+    
+    func trackPlay() {
+        playCount += 1
+        lastPlayedDate = Date()
     }
     
-    public func removeSong(_ song: Song) {
-        let songs = self.mutableSetValue(forKey: "songs")
-        songs.remove(song)
-        song.mixTape = nil
+    func addSong(_ song: Song) {
+        var currentSongs = songsArray
+        currentSongs.append(song)
+        songs = NSOrderedSet(array: currentSongs)
+        numberOfSongs = Int16(currentSongs.count)
     }
     
-    public func addSongs(_ songs: NSSet) {
-        let mutableSongs = self.mutableSetValue(forKey: "songs")
-        mutableSongs.union(songs as! Set<AnyHashable>)
+    func removeSong(_ song: Song) {
+        var currentSongs = songsArray
+        if let index = currentSongs.firstIndex(of: song) {
+            currentSongs.remove(at: index)
+            songs = NSOrderedSet(array: currentSongs)
+            numberOfSongs = Int16(currentSongs.count)
+        }
     }
-    
-    public func removeSongs(_ songs: NSSet) {
-        let mutableSongs = self.mutableSetValue(forKey: "songs")
-        mutableSongs.minus(songs as! Set<AnyHashable>)
-    }
-}
-
-// MARK: - Generated accessors for songs
-extension MixTape {
-    
-    @objc(addSongsObject:)
-    @NSManaged public func addToSongs(_ value: Song)
-    
-    @objc(removeSongsObject:)
-    @NSManaged public func removeFromSongs(_ value: Song)
-    
-    @objc(addSongs:)
-    @NSManaged public func addToSongs(_ values: NSSet)
-    
-    @objc(removeSongs:)
-    @NSManaged public func removeFromSongs(_ values: NSSet)
 }

@@ -280,12 +280,104 @@ class Song: NSManagedObject {
     }
 }
 
-// Model for audio features
+/// Model for audio features with all Spotify-like characteristics
 struct AudioFeatures: Codable {
-    let tempo: Float      // Beats per minute
-    let energy: Float     // 0.0 to 1.0, high energy = fast, loud, noisy
-    let valence: Float    // 0.0 to 1.0, high valence = positive, happy, cheerful
+    let tempo: Float              // Beats per minute
+    let energy: Float            // 0.0 to 1.0, intensity and activity level
+    let valence: Float           // 0.0 to 1.0, musical positiveness
+    let danceability: Float      // 0.0 to 1.0, suitability for dancing
+    let acousticness: Float      // 0.0 to 1.0, acoustic vs electronic
+    let instrumentalness: Float  // 0.0 to 1.0, vocal content prediction
+    let speechiness: Float       // 0.0 to 1.0, spoken word presence
+    let liveness: Float          // 0.0 to 1.0, audience presence
     
-    // In a real implementation, we would include more features:
-    // - Danceability, acousticness, speechiness, liveness, etc.
+    // Computed property for overall energy score
+    var overallEnergy: Float {
+        return (energy + danceability + (tempo / 180.0)) / 3.0
+    }
+    
+    // Computed property for mood score
+    var moodScore: Float {
+        return (valence + energy) / 2.0
+    }
+    
+    // Computed property for focus score
+    var focusScore: Float {
+        return instrumentalness * (1.0 - speechiness)
+    }
+}
+
+struct PersonalityProfile: Codable {
+    let openness: Double
+    let conscientiousness: Double 
+    let extraversion: Double
+    let agreeableness: Double
+    let neuroticism: Double
+}
+
+enum PersonalityType: String, Codable {
+    case explorer
+    case curator
+    case enthusiast
+    case social
+    case ambient
+    case analyzer
+}
+
+enum Mood: String, Codable, CaseIterable {
+    case energetic
+    case relaxed
+    case happy
+    case melancholic
+    case focused
+    case romantic
+    case angry
+    case neutral
+    
+    var keywords: [String] {
+        switch self {
+        case .energetic:
+            return ["upbeat", "exciting", "energetic", "dance", "party", "workout"]
+        case .relaxed:
+            return ["calm", "chill", "peaceful", "ambient", "meditation"]
+        case .happy:
+            return ["happy", "joyful", "uplifting", "positive", "fun"]
+        case .melancholic:
+            return ["sad", "melancholy", "emotional", "reflective"]
+        case .focused:
+            return ["focus", "concentration", "study", "work"]
+        case .romantic:
+            return ["love", "romantic", "passion", "intimate"]
+        case .angry:
+            return ["angry", "intense", "rage", "aggressive"]
+        case .neutral:
+            return ["neutral", "balanced", "moderate"]
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .energetic: return .orange
+        case .relaxed: return .mint
+        case .happy: return .yellow
+        case .melancholic: return .indigo
+        case .focused: return .blue
+        case .romantic: return .pink
+        case .angry: return .red
+        case .neutral: return .gray
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .energetic: return "High-energy, upbeat music"
+        case .relaxed: return "Calm, peaceful melodies"
+        case .happy: return "Positive, joyful tunes"
+        case .melancholic: return "Emotional, reflective songs"
+        case .focused: return "Music for concentration"
+        case .romantic: return "Love songs and intimate melodies"
+        case .angry: return "Intense, powerful tracks"
+        case .neutral: return "Balanced, versatile music"
+        }
+    }
 }

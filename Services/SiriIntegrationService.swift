@@ -11,218 +11,152 @@ import Intents
 import IntentsUI
 import AVKit
 import CoreData
+import CoreML
+import Combine
 
-/// Service for integrating with SiriKit to enable voice commands for AI Mixtapes
-class SiriIntegrationService: NSObject, INPlayMediaIntentHandling {
-    // Core services
+// MARK: - Custom Intent Handlers
+final class SiriIntegrationService: NSObject, PlayMoodIntentHandling, CreateMixtapeIntentHandling, AnalyzeCurrentSongIntentHandling {
+    static let shared = SiriIntegrationService()
+    
+    // Services
+    private let moodEngine: MoodEngine
     private let aiService: AIIntegrationService
-    private let moc: NSManagedObjectContext
-    private let player: AVQueuePlayer
+    private let aiLogger: AILogger
+    private var player: AVQueuePlayer
+    private var moc: NSManagedObjectContext
+    private var subscriptions = Set<AnyCancellable>()
     
-    // Intent handlers
-    private var handlers: [String: () -> Void] = [:]
-    
-    init(aiService: AIIntegrationService, moc: NSManagedObjectContext, player: AVQueuePlayer) {
+    init(aiService: AIIntegrationService, player: AVQueuePlayer, context: NSManagedObjectContext) {
         self.aiService = aiService
-        self.moc = moc
+        self.moodEngine = aiService.moodEngine
         self.player = player
-        
+        self.moc = context
+        self.aiLogger = AILogger.shared
         super.init()
-        
-        setupIntentHandlers()
-        setupSiriShortcuts()
-    }
-    
-    /// Setup handlers for common voice commands
-    private func setupIntentHandlers() {
-        // Command: Play music for [mood]
-        handlers["play_mood_energetic"] = { self.playMoodBasedMixtape(.energetic) }
-        handlers["play_mood_relaxed"] = { self.playMoodBasedMixtape(.relaxed) }
-        handlers["play_mood_happy"] = { self.playMoodBasedMixtape(.happy) }
-        handlers["play_mood_melancholic"] = { self.playMoodBasedMixtape(.melancholic) }
-        handlers["play_mood_focused"] = { self.playMoodBasedMixtape(.focused) }
-        handlers["play_mood_romantic"] = { self.playMoodBasedMixtape(.romantic) }
-        handlers["play_mood_angry"] = { self.playMoodBasedMixtape(.angry) }
-        
-        // Command: Create a [mood] mixtape
-        handlers["create_mood_energetic"] = { self.createMoodBasedMixtape(.energetic) }
-        handlers["create_mood_relaxed"] = { self.createMoodBasedMixtape(.relaxed) }
-        handlers["create_mood_happy"] = { self.createMoodBasedMixtape(.happy) }
-        handlers["create_mood_melancholic"] = { self.createMoodBasedMixtape(.melancholic) }
-        handlers["create_mood_focused"] = { self.createMoodBasedMixtape(.focused) }
-        handlers["create_mood_romantic"] = { self.createMoodBasedMixtape(.romantic) }
-        handlers["create_mood_angry"] = { self.createMoodBasedMixtape(.angry) }
-        
-        // Command: Analyze current song
-        handlers["analyze_current_song"] = { self.analyzeCurrentSong() }
-        
-        // Command: Show insights
-        handlers["show_insights"] = { self.showInsights() }
-    }
-    
-    /// Setup predefined Siri shortcuts
-    private func setupSiriShortcuts() {
-        // Common shortcuts for users to add
-        donateShortcut(for: "Play energizing music", with: "play_mood_energetic", suggestedPhrase: "Play something energizing")
-        donateShortcut(for: "Play relaxing music", with: "play_mood_relaxed", suggestedPhrase: "Play something relaxing")
-        donateShortcut(for: "Play happy music", with: "play_mood_happy", suggestedPhrase: "Play happy music")
-        donateShortcut(for: "Create focused mixtape", with: "create_mood_focused", suggestedPhrase: "Create a focus mixtape")
-        donateShortcut(for: "Analyze this song", with: "analyze_current_song", suggestedPhrase: "Analyze this song")
-        donateShortcut(for: "Show my music insights", with: "show_insights", suggestedPhrase: "Show my music insights")
-    }
-    
-    /// Donate a shortcut to Siri
-    private func donateShortcut(for activity: String, with identifier: String, suggestedPhrase: String) {
-        let intent = INPlayMediaIntent()
-        intent.mediaItems = [INMediaItem(identifier: identifier, title: activity, type: .music, artwork: nil)]
-        intent.suggestedInvocationPhrase = suggestedPhrase
-        
-        let interaction = INInteraction(intent: intent, response: nil)
-        interaction.donate { error in
-            if let error = error {
-                print("SiriIntegration - Failed to donate shortcut: \(error)")
-            }
-        }
+        setupShortcuts()
     }
     
     // MARK: - Intent Handling
     
-    /// Handle "play media" intents from Siri
-    func handle(intent: INPlayMediaIntent, completion: @escaping (INPlayMediaIntentResponse) -> Void) {
-        // Extract the command from the media identifier
-        if let mediaItems = intent.mediaItems, let firstItem = mediaItems.first, let identifier = firstItem.identifier {
-            // Check if we have a handler for this command
-            if let handler = handlers[identifier] {
-                // Execute the command
-                handler()
-                
-                // Return success response
-                let response = INPlayMediaIntentResponse(code: .success, userActivity: nil)
-                completion(response)
-                
-                // Track interaction
-                aiService.trackInteraction(type: "siri_command_\(identifier)")
-                
-                return
-            }
+    func handle(intent: PlayMoodIntent, completion: @escaping (PlayMoodIntentResponse) -> Void) {
+        guard let moodString = intent.mood?.identifier,
+              let mood = Mood(rawValue: moodString) else {
+            completion(PlayMoodIntentResponse(code: .failure, userActivity: nil))
+            return
         }
         
-        // Handle generic play command (play whatever is appropriate)
-        playRecommendedMixtape()
-        
-        // Return success response
-        let response = INPlayMediaIntentResponse(code: .success, userActivity: nil)
+        playMoodBasedMixtape(mood)
+        let response = PlayMoodIntentResponse(code: .success, userActivity: nil)
+        response.spokenResponse = "Playing \(mood.rawValue.lowercased()) music"
         completion(response)
     }
     
-    // MARK: - Command Implementations
-    
-    /// Play a mixtape based on specified mood
-    private func playMoodBasedMixtape(_ mood: Mood) {
-        // Find mixtapes that match this mood
-        let fetchRequest: NSFetchRequest<MixTape> = MixTape.fetchRequest()
-        
-        // Filter by mood tags if available
-        fetchRequest.predicate = NSPredicate(format: "moodTags CONTAINS[cd] %@", mood.rawValue)
-        
-        do {
-            let matchingTapes = try moc.fetch(fetchRequest)
-            
-            if let mixtape = matchingTapes.first {
-                // Play the mixtape
-                playMixtape(mixtape)
-            } else {
-                // No matching mixtape, create one
-                let newMixtape = aiService.generateMoodMixtape(mood: mood, context: moc)
-                
-                // In a real app, we would populate this with songs
-                // For now, just save it
-                try? moc.save()
-                
-                // Play a fallback
-                playRecommendedMixtape()
-            }
-        } catch {
-            print("SiriIntegration - Error fetching mixtapes: \(error)")
-            playRecommendedMixtape()
+    func handle(intent: CreateMixtapeIntent, completion: @escaping (CreateMixtapeIntentResponse) -> Void) {
+        guard let moodString = intent.mood?.identifier,
+              let mood = Mood(rawValue: moodString) else {
+            completion(CreateMixtapeIntentResponse(code: .failure, userActivity: nil))
+            return
         }
-    }
-    
-    /// Create a new mixtape for a specific mood
-    private func createMoodBasedMixtape(_ mood: Mood) {
-        // Generate a new mixtape
+        
         let newMixtape = aiService.generateMoodMixtape(mood: mood, context: moc)
         
-        // Save to CoreData
         do {
             try moc.save()
-            
-            // Track interaction
-            aiService.trackInteraction(type: "siri_create_mixtape_\(mood.rawValue)")
+            let response = CreateMixtapeIntentResponse(code: .success, userActivity: nil)
+            response.spokenResponse = "Created a \(mood.rawValue.lowercased()) mixtape"
+            completion(response)
         } catch {
-            print("SiriIntegration - Error saving mixtape: \(error)")
+            completion(CreateMixtapeIntentResponse(code: .failure, userActivity: nil))
         }
     }
     
-    /// Analyze the currently playing song
-    private func analyzeCurrentSong() {
-        // In a real app, this would trigger the audio analysis
-        // For now, just track the interaction
-        aiService.trackInteraction(type: "siri_analyze_current_song")
-    }
-    
-    /// Show the insights dashboard
-    private func showInsights() {
-        // In a real app, this would navigate to the insights view
-        // For now, just track the interaction
-        aiService.trackInteraction(type: "siri_show_insights")
-    }
-    
-    /// Play a recommended mixtape
-    private func playRecommendedMixtape() {
-        // Get recommendations from the AI service
-        let recommendations = aiService.getPersonalizedRecommendations()
+    func handle(intent: AnalyzeCurrentSongIntent, completion: @escaping (AnalyzeCurrentSongIntentResponse) -> Void) {
+        guard player.currentItem != nil else {
+            let response = AnalyzeCurrentSongIntentResponse(code: .failure, userActivity: nil)
+            response.spokenResponse = "No song is currently playing"
+            completion(response)
+            return
+        }
         
-        if let mixtape = recommendations.first {
-            // Play the mixtape
-            playMixtape(mixtape)
-        } else {
-            // No recommendations, play the first available mixtape
-            let fetchRequest: NSFetchRequest<MixTape> = MixTape.fetchRequest()
+        aiService.detectMoodFromCurrentAudio(player: player)
+        let response = AnalyzeCurrentSongIntentResponse(code: .success, userActivity: nil)
+        response.spokenResponse = "Analyzing your current song for mood and features"
+        completion(response)
+    }
+    
+    // MARK: - Parameter Resolution
+    
+    func resolveMood(for intent: PlayMoodIntent, with completion: @escaping (MoodParameterResolutionResult) -> Void) {
+        guard let mood = intent.mood else {
+            completion(.needsValue())
+            return
+        }
+        completion(.success(with: mood))
+    }
+    
+    // MARK: - Shortcut Donation
+    
+    func donateShortcuts() {
+        // Donate Play Mood shortcuts
+        for mood in Mood.allCases {
+            let intent = PlayMoodIntent()
+            intent.mood = MoodParameter(identifier: mood.rawValue, display: mood.rawValue)
+            intent.suggestedInvocationPhrase = "Play \(mood.rawValue.lowercased()) music"
             
-            do {
-                let mixtapes = try moc.fetch(fetchRequest)
-                if let mixtape = mixtapes.first {
-                    playMixtape(mixtape)
+            let interaction = INInteraction(intent: intent, response: nil)
+            interaction.donate { error in
+                if let error = error {
+                    print("Failed to donate shortcut: \(error)")
                 }
-            } catch {
-                print("SiriIntegration - Error fetching mixtapes: \(error)")
             }
         }
+        
+        // Donate Create Mixtape shortcut
+        let createIntent = CreateMixtapeIntent()
+        createIntent.suggestedInvocationPhrase = "Create a mixtape"
+        
+        let createInteraction = INInteraction(intent: createIntent, response: nil)
+        createInteraction.donate(completion: nil)
+        
+        // Donate Analyze shortcut
+        let analyzeIntent = AnalyzeCurrentSongIntent()
+        analyzeIntent.suggestedInvocationPhrase = "Analyze this song"
+        
+        let analyzeInteraction = INInteraction(intent: analyzeIntent, response: nil)
+        analyzeInteraction.donate(completion: nil)
     }
     
-    /// Play a specific mixtape
-    private func playMixtape(_ mixtape: MixTape) {
-        // Create player items for all songs
-        let playerItems = createArrayOfPlayerItems(songs: mixtape.songsArray)
-        
-        // Load and play
-        player.removeAllItems()
-        for item in playerItems {
-            player.insert(item, after: nil)
+    // MARK: - Private Methods
+    
+    private func playMoodBasedMixtape(_ mood: Mood) {
+        // Implementation to play mood-based music
+        aiService.moodEngine.setMood(mood, confidence: 0.9)
+        // Additional implementation...
+    }
+    
+    private func setupShortcuts() {
+        // Register dynamic shortcuts
+        let shortcuts = Mood.allCases.map { mood in
+            let intent = PlayMoodIntent()
+            intent.mood = MoodParameter(identifier: mood.rawValue, display: mood.rawValue)
+            return INShortcut(intent: intent)
         }
-        player.play()
         
-        // Track play in mixtape model
-        mixtape.trackPlay()
-        try? moc.save()
-        
-        // Track interaction
-        aiService.trackInteraction(type: "siri_play_mixtape", mixtape: mixtape)
+        INVoiceShortcutCenter.shared.setShortcutSuggestions(shortcuts)
     }
 }
 
-// MARK: - SiriKit Intent Extensions
+// MARK: - Siri Audio Authorization
+
+extension SiriIntegrationService {
+    static func requestSiriAuthorization(completion: @escaping (Bool) -> Void) {
+        INPreferences.requestSiriAuthorization { status in
+            DispatchQueue.main.async {
+                completion(status == .authorized)
+            }
+        }
+    }
+}
 
 /// Extension for the MoodEngine to support Siri parameters
 extension MoodEngine {

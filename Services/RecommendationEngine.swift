@@ -7,328 +7,348 @@
 //
 
 import Foundation
-import CoreData
+import CoreML
 import Combine
 
-/// Engine responsible for generating personalized recommendations based on user mood and personality
-class RecommendationEngine: ObservableObject {
-    // CoreData context for accessing MixTape data
-    private let context: NSManagedObjectContext
+final class RecommendationEngine: ObservableObject {
+    // MARK: - Properties
     
-    // Current state from other services
-    private var currentMood: Mood = .neutral
-    private var currentPersonality: PersonalityType = .curator
+    @Published private(set) var currentRecommendations: [Song] = []
+    @Published private(set) var generationProgress: Double = 0
     
-    // Recommendation patterns
-    private var userPreferences: [String: Float] = [:]
-    private var recommendationHistory: [String: Date] = [:]
+    private let moodEngine: MoodEngine
+    private let personalityEngine: PersonalityEngine
+    private let aiLogger: AILogger
     
-    // Cancellables for Combine subscriptions
-    private var cancellables = Set<AnyCancellable>()
+    private var subscriptions = Set<AnyCancellable>()
+    private let processingQueue = DispatchQueue(label: "com.aimixtapes.recommendations", qos: .userInitiated)
     
-    init(context: NSManagedObjectContext) {
-        self.context = context
+    // MARK: - Initialization
+    
+    init(moodEngine: MoodEngine, personalityEngine: PersonalityEngine) {
+        self.moodEngine = moodEngine
+        self.personalityEngine = personalityEngine
+        self.aiLogger = .shared
         
-        // Load saved preferences
-        loadUserPreferences()
-        
-        // Set up timer to refresh recommendations periodically
-        Timer.publish(every: 3600, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                self?.generateRecommendations()
-            }
-            .store(in: &cancellables)
+        setupObservers()
     }
     
-    /// Update the current mood from MoodEngine
-    func updateMood(_ mood: Mood) {
-        self.currentMood = mood
-    }
+    // MARK: - Public Interface
     
-    /// Update the current personality from PersonalityEngine
-    func updatePersonality(_ personality: PersonalityType) {
-        self.currentPersonality = personality
-    }
-    
-    /// Process user interaction to improve recommendations
-    func processInteraction(_ event: InteractionEvent) {
-        // Extract information from the event to update preferences
-        if let mixtapeId = event.mixtapeId {
-            if event.type.contains("play") || event.type.contains("select") {
-                // Increase preference score for this mixtape
-                incrementPreference(for: mixtapeId, by: 0.1)
-            } else if event.type.contains("skip") {
-                // Decrease preference score for this mixtape
-                incrementPreference(for: mixtapeId, by: -0.05)
-            } else if event.type.contains("repeat") {
-                // Strongly increase preference score for this mixtape
-                incrementPreference(for: mixtapeId, by: 0.2)
-            } else if event.type.contains("share") {
-                // Moderately increase preference score for this mixtape
-                incrementPreference(for: mixtapeId, by: 0.15)
-            } else if event.type.contains("delete") {
-                // Strongly decrease preference score for this mixtape
-                incrementPreference(for: mixtapeId, by: -0.3)
-            }
-            
-            // Update recommendation history
-            recommendationHistory[mixtapeId] = Date()
-        }
+    /// Generate an AI mixtape based on current mood and personality
+    func generateMixtape(length: Int = 12) async throws -> MixTape {
+        let startTime = Date()
+        generationProgress = 0
         
-        // Analyze event keywords to adjust genre/style preferences
-        updatePreferencesFromKeywords(in: event.type)
-    }
-    
-    /// Update user preferences based on keywords in an interaction
-    private func updatePreferencesFromKeywords(in interactionType: String) {
-        // Examples of how keywords might map to preferences
-        let keywordMapping: [String: String] = [
-            "rock": "genre_rock",
-            "jazz": "genre_jazz",
-            "pop": "genre_pop",
-            "classical": "genre_classical",
-            "electronic": "genre_electronic",
-            "ambient": "genre_ambient",
-            "instrumental": "style_instrumental",
-            "vocal": "style_vocal",
-            "chill": "style_relaxed",
-            "upbeat": "style_energetic",
-            "workout": "context_workout",
-            "study": "context_focus",
-            "party": "context_social",
-            "sleep": "context_sleep"
-        ]
-        
-        // Check for keywords in the interaction type
-        for (keyword, preference) in keywordMapping {
-            if interactionType.lowercased().contains(keyword) {
-                incrementPreference(for: preference, by: 0.1)
-            }
-        }
-    }
-    
-    /// Increment the preference score for a specific ID
-    private func incrementPreference(for id: String, by amount: Float) {
-        let currentValue = userPreferences[id] ?? 0.0
-        userPreferences[id] = min(1.0, max(-1.0, currentValue + amount))
-        
-        // Save updated preferences
-        saveUserPreferences()
-    }
-    
-    /// Generate a list of recommended mixtapes
-    func getRecommendations() -> [MixTape] {
-        // In a real app, this would use a more sophisticated algorithm
-        // For now, we'll implement a simple scoring mechanism
-        
-        // Try to fetch all mixtapes
-        let fetchRequest: NSFetchRequest<MixTape> = MixTape.fetchRequest()
+        // Get current context
+        let mood = moodEngine.currentMood
+        let personality = personalityEngine.currentPersonality
         
         do {
-            let allMixTapes = try context.fetch(fetchRequest)
+            // Generate song sequence
+            let songs = try await generateSongSequence(
+                targetLength: length,
+                mood: mood,
+                personality: personality
+            )
             
-            // Score each mixtape based on various factors
-            let scoredMixTapes = allMixTapes.map { mixtape -> (mixtape: MixTape, score: Float) in
-                let mixtapeId = mixtape.objectID.uriRepresentation().absoluteString
-                
-                // Base score from explicit user preferences
-                let preferenceScore = userPreferences[mixtapeId] ?? 0.0
-                
-                // Mood-based score component
-                let moodScore = calculateMoodCompatibility(for: mixtape)
-                
-                // Personality-based score component
-                let personalityScore = calculatePersonalityCompatibility(for: mixtape)
-                
-                // Recency factor (avoid recommending the same mixtapes too often)
-                let recencyScore = calculateRecencyScore(for: mixtapeId)
-                
-                // Combine all factors (weights could be adjusted)
-                let totalScore = (preferenceScore * 0.4) + (moodScore * 0.3) + (personalityScore * 0.2) + (recencyScore * 0.1)
-                
-                return (mixtape: mixtape, score: totalScore)
-            }
+            // Create mixtape
+            let mixtape = try await createMixtape(
+                with: songs,
+                mood: mood,
+                personality: personality
+            )
             
-            // Sort by score and return mixtapes
-            return scoredMixTapes
-                .sorted { $0.score > $1.score }
-                .map { $0.mixtape }
+            // Log success
+            let duration = Date().timeIntervalSince(startTime)
+            aiLogger.logInference(
+                model: "MixtapeGeneration",
+                duration: duration,
+                success: true
+            )
+            
+            generationProgress = 1.0
+            return mixtape
             
         } catch {
-            print("Error fetching mixtapes for recommendations: \(error)")
-            return []
+            aiLogger.logError(model: "MixtapeGeneration", error: .aiServiceUnavailable)
+            throw error
         }
     }
     
-    /// Calculate how well a mixtape matches the current mood
-    private func calculateMoodCompatibility(for mixtape: MixTape) -> Float {
-        // In a real implementation, this would analyze the mixtape's content
-        // For now, we'll use a simplified approach
+    /// Get personalized song recommendations
+    func getRecommendations(limit: Int = 10) async throws -> [Song] {
+        let personality = personalityEngine.currentPersonality
+        let preferences = extractUserPreferences()
         
-        let mixtapeId = mixtape.objectID.uriRepresentation().absoluteString
-        var moodScore: Float = 0.0
-        
-        // Check if mixtape name contains mood keywords
-        let mixtapeName = mixtape.wrappedTitle.lowercased()
-        
-        // Look for current mood keywords in the mixtape name
-        for keyword in currentMood.keywords {
-            if mixtapeName.contains(keyword.lowercased()) {
-                moodScore += 0.2
-                break
-            }
-        }
-        
-        // Check recent interactions with this mixtape during current mood
-        if let lastInteraction = recommendationHistory[mixtapeId],
-           Calendar.current.isDateInToday(lastInteraction) {
-            moodScore += 0.1
-        }
-        
-        return min(1.0, moodScore)
-    }
-    
-    /// Calculate how well a mixtape matches the current personality type
-    private func calculatePersonalityCompatibility(for mixtape: MixTape) -> Float {
-        // Simple check based on mixtape characteristics that might match personality
-        var personalityScore: Float = 0.0
-        
-        switch currentPersonality {
-        case .explorer:
-            // Explorers might prefer varied content they haven't played much
-            if mixtape.numberOfSongs > 10 {
-                personalityScore += 0.2
-            }
+        do {
+            let recommendations = try await generateRecommendations(
+                count: limit,
+                preferences: preferences,
+                personality: personality
+            )
             
-            // Prefer mixtapes they haven't interacted with recently
-            let mixtapeId = mixtape.objectID.uriRepresentation().absoluteString
-            if recommendationHistory[mixtapeId] == nil {
-                personalityScore += 0.3
+            currentRecommendations = recommendations
+            return recommendations
+            
+        } catch {
+            aiLogger.logError(model: "RecommendationGeneration", error: .aiServiceUnavailable)
+            throw error
+        }
+    }
+    
+    // MARK: - Private Methods
+    
+    private func setupObservers() {
+        // Update recommendations when mood changes
+        NotificationCenter.default.publisher(for: .moodDidChange)
+            .debounce(for: .seconds(1), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                Task {
+                    try? await self?.refreshRecommendations()
+                }
             }
+            .store(in: &subscriptions)
+        
+        // Update recommendations when personality changes
+        NotificationCenter.default.publisher(for: .personalityDidChange)
+            .debounce(for: .seconds(1), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                Task {
+                    try? await self?.refreshRecommendations()
+                }
+            }
+            .store(in: &subscriptions)
+    }
+    
+    private func generateSongSequence(
+        targetLength: Int,
+        mood: Mood,
+        personality: PersonalityType
+    ) async throws -> [Song] {
+        var sequence: [Song] = []
+        var progress: Double = 0
+        
+        // Get initial song pool
+        let songPool = try await fetchSongPool(mood: mood)
+        guard !songPool.isEmpty else {
+            throw AppError.insufficientData
+        }
+        
+        // Generate sequence
+        while sequence.count < targetLength {
+            let nextSong = try await predictNextSong(
+                in: songPool,
+                currentSequence: sequence,
+                mood: mood,
+                personality: personality
+            )
+            
+            sequence.append(nextSong)
+            
+            // Update progress
+            progress = Double(sequence.count) / Double(targetLength)
+            await MainActor.run {
+                generationProgress = progress
+            }
+        }
+        
+        return sequence
+    }
+    
+    private func predictNextSong(
+        in pool: [Song],
+        currentSequence: [Song],
+        mood: Mood,
+        personality: PersonalityType
+    ) async throws -> Song {
+        // Calculate transition scores for each candidate song
+        let candidates = try await pool.concurrentMap { song in
+            let score = calculateTransitionScore(
+                from: currentSequence.last,
+                to: song,
+                mood: mood,
+                personality: personality
+            )
+            return (song, score)
+        }
+        
+        // Sort by score and pick top candidate
+        let sortedCandidates = candidates.sorted { $0.1 > $1.1 }
+        guard let nextSong = sortedCandidates.first?.0 else {
+            throw AppError.inferenceError
+        }
+        
+        return nextSong
+    }
+    
+    private func calculateTransitionScore(
+        from currentSong: Song?,
+        to nextSong: Song,
+        mood: Mood,
+        personality: PersonalityType
+    ) -> Double {
+        var score = 0.0
+        
+        // Mood congruence (0-1)
+        if let currentMood = nextSong.mood {
+            score += mood == currentMood ? 1.0 : 0.0
+        }
+        
+        // Energy transition (0-1)
+        if let currentSong = currentSong {
+            let energyDiff = abs(currentSong.energy - nextSong.energy)
+            score += 1.0 - (energyDiff / 1.0)
+        }
+        
+        // Genre compatibility (0-1)
+        if let currentSong = currentSong {
+            score += currentSong.genre == nextSong.genre ? 1.0 : 0.0
+        }
+        
+        // Personality alignment (0-1)
+        switch personality {
+        case .explorer:
+            // Prefer varied genres and new artists
+            score += nextSong.isNewArtist ? 1.0 : 0.0
             
         case .curator:
-            // Curators might prefer carefully organized, complete collections
-            if mixtape.numberOfSongs > 5 && mixtape.numberOfSongs < 20 {
-                personalityScore += 0.3
-            }
+            // Prefer consistent quality and organization
+            score += nextSong.rating >= 4 ? 1.0 : 0.0
             
         case .enthusiast:
-            // Enthusiasts might prefer deep, focused collections
-            if mixtape.numberOfSongs > 15 {
-                personalityScore += 0.3
-            }
+            // Prefer deep cuts and related artists
+            score += nextSong.popularity < 0.5 ? 1.0 : 0.0
             
         case .social:
-            // Social users might prefer content with sharing potential
-            if mixtape.wrappedTitle.lowercased().contains("party") ||
-               mixtape.wrappedTitle.lowercased().contains("hits") {
-                personalityScore += 0.3
-            }
+            // Prefer popular and shareable songs
+            score += nextSong.popularity > 0.7 ? 1.0 : 0.0
             
         case .ambient:
-            // Ambient users might prefer background, atmospheric content
-            if mixtape.wrappedTitle.lowercased().contains("chill") ||
-               mixtape.wrappedTitle.lowercased().contains("ambient") ||
-               mixtape.wrappedTitle.lowercased().contains("relax") {
-                personalityScore += 0.4
+            // Prefer consistent energy levels
+            if let currentSong = currentSong {
+                let energyDiff = abs(currentSong.energy - nextSong.energy)
+                score += energyDiff < 0.2 ? 1.0 : 0.0
             }
             
         case .analyzer:
-            // Analyzers might prefer technical, detailed content
-            if mixtape.numberOfSongs > 0 {
-                personalityScore += Float(mixtape.numberOfSongs) / 50.0 // Score based on complexity
-            }
+            // Prefer high audio quality and interesting features
+            score += nextSong.audioQuality > 0.8 ? 1.0 : 0.0
+            
+        default:
+            break
         }
         
-        return min(1.0, personalityScore)
+        return score / 4.0 // Normalize to 0-1
     }
     
-    /// Calculate a score based on how recently the mixtape was recommended
-    private func calculateRecencyScore(for mixtapeId: String) -> Float {
-        // If never recommended before, give it a high score
-        guard let lastRecommended = recommendationHistory[mixtapeId] else {
-            return 1.0
+    private func createMixtape(
+        with songs: [Song],
+        mood: Mood,
+        personality: PersonalityType
+    ) async throws -> MixTape {
+        // Generate title
+        let title = generateMixtapeTitle(mood: mood, personality: personality)
+        
+        // Create mixtape
+        let mixtape = MixTape(context: PersistenceController.shared.container.viewContext)
+        mixtape.title = title
+        mixtape.createdDate = Date()
+        mixtape.mood = mood.rawValue
+        mixtape.isAIGenerated = true
+        
+        // Add songs
+        for (index, song) in songs.enumerated() {
+            let songItem = SongItem(context: PersistenceController.shared.container.viewContext)
+            songItem.song = song
+            songItem.order = Int16(index)
+            mixtape.addToSongs(songItem)
         }
         
-        // Calculate how many days since last recommended
-        let daysSinceLastRecommended = Calendar.current.dateComponents([.day], from: lastRecommended, to: Date()).day ?? 0
+        // Save context
+        try PersistenceController.shared.container.viewContext.save()
         
-        // Score increases as more time passes
-        return min(1.0, Float(daysSinceLastRecommended) / 7.0)
+        return mixtape
     }
     
-    /// Generate a list of mood-appropriate new mixtape name suggestions
-    func getSuggestedMixtapeTitles() -> [String] {
-        var suggestions: [String] = []
-        
-        // Add some based on current mood
-        switch currentMood {
-        case .energetic:
-            suggestions.append(contentsOf: ["Power Hour", "Workout Beats", "Energy Boost"])
-        case .relaxed:
-            suggestions.append(contentsOf: ["Chill Session", "Relaxation Mix", "Evening Wind Down"])
-        case .happy:
-            suggestions.append(contentsOf: ["Happy Days", "Feel Good Mix", "Sunshine Vibes"])
-        case .melancholic:
-            suggestions.append(contentsOf: ["Reflection", "Rainy Day", "Melancholy Moments"])
-        case .focused:
-            suggestions.append(contentsOf: ["Deep Focus", "Concentration Zone", "Productivity Mix"])
-        case .romantic:
-            suggestions.append(contentsOf: ["Love Songs", "Date Night", "Romantic Evening"])
-        case .angry:
-            suggestions.append(contentsOf: ["Release", "Intensity", "Catharsis"])
-        case .neutral:
-            suggestions.append(contentsOf: ["Everyday Mix", "Daily Soundtrack", "My Playlist"])
-        }
-        
-        // Add some based on personality type
-        switch currentPersonality {
-        case .explorer:
-            suggestions.append(contentsOf: ["Discovery Playlist", "New Horizons", "Uncharted Territory"])
-        case .curator:
-            suggestions.append(contentsOf: ["Carefully Curated", "The Collection", "Essential Selection"])
-        case .enthusiast:
-            suggestions.append(contentsOf: ["Deep Dive", "The Complete Experience", "Expert Selection"])
-        case .social:
-            suggestions.append(contentsOf: ["Party Starter", "Friend Group Mix", "Share-worthy Tracks"])
-        case .ambient:
-            suggestions.append(contentsOf: ["Background Soundtrack", "Atmospheric Sounds", "Passive Listening"])
-        case .analyzer:
-            suggestions.append(contentsOf: ["Technical Excellence", "Audio Showcase", "Sonic Details"])
-        }
-        
-        // Some generic suggestions
-        let genericSuggestions = [
-            "My Mixtape",
-            "New Collection",
-            "Favorite Tracks",
-            "Personal Mix",
-            "Playlist 1"
+    private func generateMixtapeTitle(mood: Mood, personality: PersonalityType) -> String {
+        // Simple title generation (could be enhanced with ML)
+        let moodAdjectives: [Mood: [String]] = [
+            .happy: ["Uplifting", "Joyful", "Sunny"],
+            .energetic: ["Energizing", "Powerful", "Dynamic"],
+            .relaxed: ["Peaceful", "Calming", "Serene"],
+            .melancholic: ["Reflective", "Moody", "Deep"],
+            .focused: ["Focused", "Clear", "Sharp"],
+            .romantic: ["Romantic", "Intimate", "Tender"]
         ]
         
-        suggestions.append(contentsOf: genericSuggestions)
+        let personalityNouns: [PersonalityType: [String]] = [
+            .explorer: ["Journey", "Discovery", "Adventure"],
+            .curator: ["Collection", "Selection", "Curation"],
+            .enthusiast: ["Experience", "Passion", "Essence"],
+            .social: ["Connection", "Sharing", "Gathering"],
+            .ambient: ["Flow", "Atmosphere", "Space"],
+            .analyzer: ["Analysis", "Elements", "Composition"]
+        ]
         
-        // Shuffle and limit the results
-        return Array(Set(suggestions)).shuffled().prefix(10).map { $0 }
+        let adjective = moodAdjectives[mood]?.randomElement() ?? "Musical"
+        let noun = personalityNouns[personality]?.randomElement() ?? "Mixtape"
+        
+        return "\(adjective) \(noun)"
     }
     
-    /// Generate new recommendations
-    private func generateRecommendations() {
-        // This would typically use ML or similar techniques to generate personalized recommendations
-        // For now, we'll rely on the scoring in getRecommendations()
+    private func extractUserPreferences() -> [String: Any] {
+        // Analyze listening history and extract preferences
+        [
+            "genres": ["rock": 0.4, "jazz": 0.3, "classical": 0.3],
+            "tempo": ["slow": 0.3, "medium": 0.4, "fast": 0.3],
+            "energy": 0.6,
+            "valence": 0.7
+        ]
     }
     
-    /// Load user preferences from persistent storage
-    private func loadUserPreferences() {
-        if let savedPreferences = UserDefaults.standard.dictionary(forKey: "userMusicPreferences") as? [String: Float] {
-            self.userPreferences = savedPreferences
+    private func generateRecommendations(
+        count: Int,
+        preferences: [String: Any],
+        personality: PersonalityType
+    ) async throws -> [Song] {
+        // Implementation would use ML model to generate recommendations
+        // This is a placeholder
+        []
+    }
+    
+    private func fetchSongPool(mood: Mood) async throws -> [Song] {
+        // Implementation would fetch songs from database
+        // This is a placeholder
+        []
+    }
+    
+    private func refreshRecommendations() async throws {
+        try await getRecommendations()
+    }
+}
+
+// MARK: - Notification Names
+
+extension Notification.Name {
+    static let recommendationsDidUpdate = Notification.Name("recommendationsDidUpdate")
+}
+
+// MARK: - Async Extensions
+
+extension Sequence {
+    func concurrentMap<T>(
+        _ transform: @escaping (Element) async throws -> T
+    ) async throws -> [T] {
+        let tasks = map { element in
+            Task {
+                try await transform(element)
+            }
         }
-    }
-    
-    /// Save user preferences to persistent storage
-    private func saveUserPreferences() {
-        UserDefaults.standard.set(userPreferences, forKey: "userMusicPreferences")
+        
+        return try await tasks.map { task in
+            try await task.value
+        }
     }
 }
 

@@ -10,6 +10,10 @@ import Foundation
 import SwiftUI
 import CoreML
 import Vision
+import CoreData
+import Combine
+import AVFoundation
+import Intents
 
 /// Enum representing different mood states the app can detect and use
 enum Mood: String, CaseIterable {
@@ -75,286 +79,526 @@ struct MoodAction {
 
 /// Engine responsible for detecting, analyzing and providing recommendations based on mood
 class MoodEngine: ObservableObject {
-    @Published var currentMood: Mood = .neutral
-    @Published var moodConfidence: Float = 0.5
+    // Dependencies
+    private let moc: NSManagedObjectContext
+    private let audioProcessor: AudioProcessor
     
-    // Mood analysis parameters
-    private var moodIntensities: [Mood: Float] = [:]
-    private var moodDetectionHistory: [(mood: Mood, timestamp: Date, confidence: Float)] = []
-    
-    // ML model for mood detection
-    // In a real app, this would be implemented with actual CoreML model
-    private var moodDetectionModel: VNCoreMLModel?
-    
-    init() {
-        // Initialize mood intensities
-        for mood in Mood.allCases {
-            moodIntensities[mood] = 0.0
-        }
-        
-        // Default mood is neutral with medium confidence
-        moodIntensities[.neutral] = 0.5
-        
-        // Try to load ML model for mood detection (simplified here)
-        setupMoodDetectionModel()
+    // Error handling
+    private let errorSubject = PassthroughSubject<AppError, Never>()
+    var errorPublisher: AnyPublisher<AppError, Never> {
+        errorSubject.eraseToAnyPublisher()
     }
     
-    private func setupMoodDetectionModel() {
-        // In a real app, this would load an actual CoreML model
-        // For demonstration purposes, we're just simulating this capability
-        
-        // Simulated model loading success
-        let success = true
-        
-        if success {
-            print("Mood detection model loaded successfully")
-        } else {
-            print("Failed to load mood detection model")
-        }
+    // Mood state
+    @Published private(set) var currentMood: Mood = .neutral
+    @Published private(set) var moodConfidence: Float = 0.0
+    @Published private(set) var moodHistory: [MoodSnapshot] = []
+    
+    // Analysis settings
+    private let analysisInterval: TimeInterval = 300 // 5 minutes
+    private let minSamplesForAnalysis = 3
+    private var analysisTimer: Timer?
+    private var audioFeatureBuffer: [AudioFeatures] = []
+    
+    init(context: NSManagedObjectContext, audioProcessor: AudioProcessor) {
+        self.moc = context
+        self.audioProcessor = audioProcessor
+        setupAnalysis()
     }
     
-    /// Process user interaction to learn and adapt mood detection
-    func processInteraction(_ event: InteractionEvent) {
-        // Analyze the interaction to update mood estimations
-        if event.type.contains("play") {
-            // User started playing music - this can indicate mood confirmation
-            increaseConfidenceInCurrentMood()
-        } else if event.type.contains("skip") {
-            // User skipped a song - might indicate mood mismatch
-            decreaseConfidenceInCurrentMood()
-        } else if event.type.contains("mood_selected_") {
-            // Direct mood selection by user
-            if let moodString = event.type.split(separator: "_").last,
-               let mood = Mood(rawValue: String(moodString)) {
-                setMood(mood, confidence: 0.9)
+    // MARK: - Public Interface
+    
+    /// Start continuous mood analysis
+    func startAnalysis() throws {
+        do {
+            try audioProcessor.startRealTimeAnalysis { [weak self] features in
+                self?.processAudioFeatures(features)
             }
+        } catch {
+            errorSubject.send(error as? AppError ?? .audioProcessingFailed(error))
+            throw error
         }
     }
     
-    /// Detect mood from facial expressions using Vision framework
-    func detectMoodFromFacialExpression(image: UIImage) {
-        // This would use Vision and CoreML in a real implementation
-        // Here we're just simulating the functionality
-        
-        // Simulate mood detection with random result (for demonstration)
-        let detectedMoods: [(mood: Mood, confidence: Float)] = [
-            (.happy, 0.7),
-            (.neutral, 0.2),
-            (.relaxed, 0.1)
-        ]
-        
-        // Update mood based on strongest detection
-        if let strongestMood = detectedMoods.max(by: { $0.confidence < $1.confidence }) {
-            updateMoodWithDetection(mood: strongestMood.mood, confidence: strongestMood.confidence)
-        }
+    /// Stop mood analysis
+    func stopAnalysis() {
+        audioProcessor.stopRealTimeAnalysis()
+        analysisTimer?.invalidate()
+        analysisTimer = nil
     }
     
-    /// Detect mood from audio features
-    func detectMoodFromAudioFeatures(tempo: Float, energy: Float, valence: Float) {
-        // Map audio features to mood
-        // - Tempo: speed of the track (BPM)
-        // - Energy: intensity and activity of the track
-        // - Valence: musical positiveness of the track
-        
-        var detectedMood: Mood = .neutral
-        var confidence: Float = 0.5
-        
-        // Simple mapping algorithm (would be more sophisticated in a real app)
-        if tempo > 120 && energy > 0.8 {
-            if valence > 0.7 {
-                detectedMood = .energetic
-                confidence = min(1.0, (tempo - 100) / 100)
-            } else if valence < 0.3 {
-                detectedMood = .angry
-                confidence = min(1.0, energy * 0.9)
-            }
-        } else if tempo < 100 && energy < 0.4 {
-            if valence > 0.6 {
-                detectedMood = .relaxed
-                confidence = min(1.0, (1.0 - energy) * 0.8)
-            } else if valence < 0.4 {
-                detectedMood = .melancholic
-                confidence = min(1.0, (1.0 - valence) * 0.8)
-            }
-        } else if valence > 0.7 {
-            detectedMood = .happy
-            confidence = min(1.0, valence * 0.9)
-        } else if energy > 0.5 && valence > 0.4 && valence < 0.6 {
-            detectedMood = .focused
-            confidence = min(1.0, energy * 0.7)
-        }
-        
-        updateMoodWithDetection(mood: detectedMood, confidence: confidence)
-    }
-    
-    /// Update mood based on time of day
-    func updateMoodBasedOnTimeOfDay() {
-        let hour = Calendar.current.component(.hour, from: Date())
-        var timeBasedMood: Mood = .neutral
-        var confidence: Float = 0.3 // Time is a weaker signal than direct user input
-        
-        switch hour {
-        case 5..<9: // Early morning
-            timeBasedMood = .energetic
-            confidence = 0.4
-        case 9..<12: // Morning
-            timeBasedMood = .focused
-            confidence = 0.5
-        case 12..<14: // Lunch
-            timeBasedMood = .happy
-            confidence = 0.3
-        case 14..<17: // Afternoon
-            timeBasedMood = .focused
-            confidence = 0.5
-        case 17..<20: // Evening
-            timeBasedMood = .relaxed
-            confidence = 0.4
-        case 20..<23: // Night
-            timeBasedMood = .romantic
-            confidence = 0.4
-        default: // Late night
-            timeBasedMood = .melancholic
-            confidence = 0.3
-        }
-        
-        // Only update if confidence is higher than current or if current is low
-        if confidence > moodConfidence || moodConfidence < 0.2 {
-            updateMoodWithDetection(mood: timeBasedMood, confidence: confidence)
-        }
-    }
-    
-    /// Sets a specific mood with given confidence
-    func setMood(_ mood: Mood, confidence: Float) {
-        currentMood = mood
-        moodConfidence = confidence
-        moodIntensities[mood] = confidence
-        
-        // Record in history
-        moodDetectionHistory.append((mood: mood, timestamp: Date(), confidence: confidence))
-        
-        // Limit history size
-        if moodDetectionHistory.count > 100 {
-            moodDetectionHistory.removeFirst()
-        }
-    }
-    
-    /// Updates the mood based on a new detection
-    private func updateMoodWithDetection(mood: Mood, confidence: Float) {
-        // Add to history
-        moodDetectionHistory.append((mood: mood, timestamp: Date(), confidence: confidence))
-        
-        // Update mood intensities with decay function for older detections
-        updateMoodIntensities()
-        
-        // Set the strongest mood as current
-        if let strongestMood = moodIntensities.max(by: { $0.value < $1.value }) {
-            currentMood = strongestMood.key
-            moodConfidence = strongestMood.value
-        }
-    }
-    
-    /// Updates mood intensities based on detection history
-    private func updateMoodIntensities() {
-        // Reset intensities
-        for mood in Mood.allCases {
-            moodIntensities[mood] = 0.0
-        }
-        
-        // Apply decay function - more recent detections have more weight
-        let now = Date()
-        for detection in moodDetectionHistory {
-            let timeInterval = now.timeIntervalSince(detection.timestamp)
-            let decayFactor = max(0.0, 1.0 - Float(timeInterval / 3600)) // 1-hour decay
-            
-            if let currentIntensity = moodIntensities[detection.mood] {
-                moodIntensities[detection.mood] = max(currentIntensity, detection.confidence * decayFactor)
-            }
-        }
-    }
-    
-    /// Increase confidence in the current mood
-    private func increaseConfidenceInCurrentMood() {
-        moodConfidence = min(1.0, moodConfidence + 0.1)
-        moodIntensities[currentMood] = moodConfidence
-    }
-    
-    /// Decrease confidence in the current mood
-    private func decreaseConfidenceInCurrentMood() {
-        moodConfidence = max(0.1, moodConfidence - 0.15)
-        moodIntensities[currentMood] = moodConfidence
-        
-        // If confidence gets too low, fallback to neutral
-        if moodConfidence < 0.2 {
-            currentMood = .neutral
-            moodConfidence = 0.5
-            moodIntensities[.neutral] = 0.5
-        }
-    }
-    
-    /// Gets mood-based recommendations from a list of mixtapes
-    func getMoodBasedRecommendations() -> [MixTape] {
-        // In a real implementation, this would search through available mixtapes
-        // and score them based on their compatibility with the current mood
-        
-        // For now, we'll return an empty array as a placeholder
-        return []
-    }
-    
-    /// Gets suggested actions based on the current mood
-    func getMoodBasedActions() -> [MoodAction] {
-        var actions: [MoodAction] = []
-        
+    /// Get the current mood intensity (0-1)
+    func getMoodIntensity() -> Float {
         switch currentMood {
         case .energetic:
-            actions = [
-                MoodAction(title: "Workout Mix", action: "create_mixtape_workout", mood: .energetic, confidence: moodConfidence),
-                MoodAction(title: "Dance Party", action: "start_dance_playlist", mood: .energetic, confidence: moodConfidence),
-                MoodAction(title: "Morning Energizer", action: "play_morning_boost", mood: .energetic, confidence: moodConfidence)
-            ]
+            return calculateEnergyIntensity()
         case .relaxed:
-            actions = [
-                MoodAction(title: "Peaceful Evening", action: "create_mixtape_relax", mood: .relaxed, confidence: moodConfidence),
-                MoodAction(title: "Sleep Sounds", action: "play_sleep_playlist", mood: .relaxed, confidence: moodConfidence),
-                MoodAction(title: "Ambient Focus", action: "create_mixtape_ambient", mood: .relaxed, confidence: moodConfidence)
-            ]
+            return calculateRelaxationIntensity()
         case .happy:
-            actions = [
-                MoodAction(title: "Uplifting Mix", action: "create_mixtape_happy", mood: .happy, confidence: moodConfidence),
-                MoodAction(title: "Party Starter", action: "play_party_playlist", mood: .happy, confidence: moodConfidence),
-                MoodAction(title: "Sunny Day", action: "create_mixtape_sunshine", mood: .happy, confidence: moodConfidence)
-            ]
+            return calculateHappinessIntensity()
         case .melancholic:
-            actions = [
-                MoodAction(title: "Reflective Journey", action: "create_mixtape_reflection", mood: .melancholic, confidence: moodConfidence),
-                MoodAction(title: "Rainy Day", action: "play_rainy_playlist", mood: .melancholic, confidence: moodConfidence),
-                MoodAction(title: "Late Night Thoughts", action: "create_mixtape_night", mood: .melancholic, confidence: moodConfidence)
-            ]
+            return calculateMelancholyIntensity()
         case .focused:
-            actions = [
-                MoodAction(title: "Deep Work", action: "create_mixtape_focus", mood: .focused, confidence: moodConfidence),
-                MoodAction(title: "Study Session", action: "play_study_playlist", mood: .focused, confidence: moodConfidence),
-                MoodAction(title: "Productivity Boost", action: "create_mixtape_productivity", mood: .focused, confidence: moodConfidence)
-            ]
+            return calculateFocusIntensity()
         case .romantic:
-            actions = [
-                MoodAction(title: "Date Night", action: "create_mixtape_date", mood: .romantic, confidence: moodConfidence),
-                MoodAction(title: "Love Songs", action: "play_love_playlist", mood: .romantic, confidence: moodConfidence),
-                MoodAction(title: "Dreamy Evening", action: "create_mixtape_dreamy", mood: .romantic, confidence: moodConfidence)
-            ]
+            return calculateRomanceIntensity()
         case .angry:
-            actions = [
-                MoodAction(title: "Release Tension", action: "create_mixtape_release", mood: .angry, confidence: moodConfidence),
-                MoodAction(title: "Intense Workout", action: "play_intense_playlist", mood: .angry, confidence: moodConfidence),
-                MoodAction(title: "Power Mix", action: "create_mixtape_power", mood: .angry, confidence: moodConfidence)
-            ]
+            return calculateAngerIntensity()
         case .neutral:
-            actions = [
-                MoodAction(title: "Discover Something New", action: "create_mixtape_discover", mood: .neutral, confidence: moodConfidence),
-                MoodAction(title: "Balanced Mix", action: "play_balanced_playlist", mood: .neutral, confidence: moodConfidence),
-                MoodAction(title: "Daily Soundtrack", action: "create_mixtape_daily", mood: .neutral, confidence: moodConfidence)
-            ]
+            return 0.5
+        }
+    }
+    
+    /// Get mood suggestions for the current context
+    func getMoodSuggestions() -> [Mood] {
+        do {
+            // Get recent listening history
+            let history = try getRecentHistory()
+            
+            // Analyze mood patterns
+            let patterns = try analyzeMoodPatterns(in: history)
+            
+            // Get time-based suggestions
+            let timeSuggestions = getTimeBasedSuggestions()
+            
+            // Combine and return top suggestions
+            return rankMoodSuggestions(patterns: patterns, timeSuggestions: timeSuggestions)
+            
+        } catch {
+            errorSubject.send(error as? AppError ?? .moodAnalysisFailed)
+            return [.neutral]
+        }
+    }
+    
+    /// Get a description of how the current mood affects music selection
+    func getMoodInfluenceDescription() -> String {
+        switch currentMood {
+        case .energetic:
+            return "Prioritizing upbeat tempos and high-energy tracks to maintain momentum"
+        case .relaxed:
+            return "Focusing on calm, soothing melodies and gentle rhythms"
+        case .happy:
+            return "Selecting positive, uplifting songs with bright tonality"
+        case .melancholic:
+            return "Choosing emotionally resonant songs with deeper themes"
+        case .focused:
+            return "Curating minimal, non-distracting tracks ideal for concentration"
+        case .romantic:
+            return "Highlighting intimate, atmospheric songs with emotional depth"
+        case .angry:
+            return "Featuring intense, cathartic tracks with strong rhythms"
+        case .neutral:
+            return "Balancing various musical elements for a versatile listening experience"
+        }
+    }
+    
+    // MARK: - Private Implementation
+    
+    private func setupAnalysis() {
+        analysisTimer = Timer.scheduledTimer(withTimeInterval: analysisInterval, repeats: true) { [weak self] _ in
+            self?.analyzeMood()
+        }
+    }
+    
+    private func processAudioFeatures(_ features: AudioFeatures) {
+        audioFeatureBuffer.append(features)
+        
+        // Keep buffer size manageable
+        if audioFeatureBuffer.count > minSamplesForAnalysis * 2 {
+            audioFeatureBuffer.removeFirst()
+        }
+    }
+    
+    private func analyzeMood() {
+        guard audioFeatureBuffer.count >= minSamplesForAnalysis else {
+            errorSubject.send(.insufficientData)
+            return
         }
         
-        return actions
+        do {
+            let features = try averageFeatures()
+            let mood = try determineOverallMood(from: features)
+            updateCurrentMood(mood)
+            saveSnapshot()
+            
+        } catch {
+            errorSubject.send(error as? AppError ?? .moodAnalysisFailed)
+        }
+    }
+    
+    private func averageFeatures() throws -> AudioFeatures {
+        guard !audioFeatureBuffer.isEmpty else {
+            throw AppError.insufficientData
+        }
+        
+        let count = Float(audioFeatureBuffer.count)
+        
+        let energy = audioFeatureBuffer.reduce(0) { $0 + $1.energy } / count
+        let valence = audioFeatureBuffer.reduce(0) { $0 + $1.valence } / count
+        let danceability = audioFeatureBuffer.reduce(0) { $0 + $1.danceability } / count
+        let acousticness = audioFeatureBuffer.reduce(0) { $0 + $1.acousticness } / count
+        let instrumentalness = audioFeatureBuffer.reduce(0) { $0 + $1.instrumentalness } / count
+        let speechiness = audioFeatureBuffer.reduce(0) { $0 + $1.speechiness } / count
+        let liveness = audioFeatureBuffer.reduce(0) { $0 + $1.liveness } / count
+        let tempo = audioFeatureBuffer.reduce(0) { $0 + $1.tempo } / count
+        
+        return AudioFeatures(
+            energy: energy,
+            valence: valence,
+            danceability: danceability,
+            acousticness: acousticness,
+            instrumentalness: instrumentalness,
+            speechiness: speechiness,
+            liveness: liveness,
+            tempo: tempo
+        )
+    }
+    
+    private func determineOverallMood(from features: AudioFeatures) throws -> Mood {
+        // Calculate mood scores using all available features
+        var moodScores: [Mood: Float] = [:]
+        
+        moodScores[.energetic] = (
+            features.energy * 0.4 +
+            features.danceability * 0.3 +
+            (features.tempo / 180.0) * 0.2 +
+            features.liveness * 0.1
+        )
+        
+        moodScores[.relaxed] = (
+            (1 - features.energy) * 0.3 +
+            features.acousticness * 0.3 +
+            (1 - features.tempo / 180.0) * 0.2 +
+            (1 - features.danceability) * 0.2
+        )
+        
+        moodScores[.happy] = (
+            features.valence * 0.4 +
+            features.energy * 0.3 +
+            features.danceability * 0.2 +
+            (1 - features.speechiness) * 0.1
+        )
+        
+        moodScores[.melancholic] = (
+            (1 - features.valence) * 0.4 +
+            features.acousticness * 0.3 +
+            (1 - features.danceability) * 0.2 +
+            (1 - features.energy) * 0.1
+        )
+        
+        moodScores[.focused] = (
+            features.instrumentalness * 0.4 +
+            (1 - features.speechiness) * 0.3 +
+            calculateEnergyBalance(features.energy) * 0.2 +
+            (1 - features.liveness) * 0.1
+        )
+        
+        moodScores[.romantic] = (
+            features.valence * 0.3 +
+            features.acousticness * 0.3 +
+            (1 - features.energy) * 0.2 +
+            (1 - features.instrumentalness) * 0.2
+        )
+        
+        moodScores[.angry] = (
+            features.energy * 0.4 +
+            (1 - features.valence) * 0.3 +
+            (features.tempo / 180.0) * 0.2 +
+            (1 - features.acousticness) * 0.1
+        )
+        
+        moodScores[.neutral] = (
+            (1 - abs(features.energy - 0.5)) * 0.3 +
+            (1 - abs(features.valence - 0.5)) * 0.3 +
+            (1 - abs(features.danceability - 0.5)) * 0.2 +
+            (1 - abs(features.acousticness - 0.5)) * 0.2
+        )
+        
+        // Find mood with highest score
+        guard let (dominantMood, score) = moodScores.max(by: { $0.value < $1.value }),
+              score > 0.4 else { // Require minimum confidence
+            return .neutral
+        }
+        
+        return dominantMood
+    }
+    
+    private func updateCurrentMood(_ newMood: Mood) {
+        // Only update if confidence is high enough
+        if moodConfidence >= 0.6 {
+            currentMood = newMood
+        }
+    }
+    
+    private func saveSnapshot() {
+        let snapshot = MoodSnapshot(
+            mood: currentMood,
+            confidence: moodConfidence,
+            timestamp: Date()
+        )
+        
+        moodHistory.append(snapshot)
+        
+        // Keep history manageable
+        if moodHistory.count > 100 {
+            moodHistory.removeFirst()
+        }
+    }
+    
+    private func getRecentHistory() throws -> [MoodSnapshot] {
+        // Get snapshots from last 24 hours
+        let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
+        return moodHistory.filter { $0.timestamp >= cutoff }
+    }
+    
+    private func analyzeMoodPatterns(in history: [MoodSnapshot]) throws -> [Mood: Int] {
+        guard !history.isEmpty else {
+            throw AppError.insufficientData
+        }
+        
+        var patterns: [Mood: Int] = [:]
+        for snapshot in history {
+            patterns[snapshot.mood, default: 0] += 1
+        }
+        
+        return patterns
+    }
+    
+    private func getTimeBasedSuggestions() -> [Mood] {
+        let hour = Calendar.current.component(.hour, from: Date())
+        
+        switch hour {
+        case 5..<9: // Morning
+            return [.energetic, .focused, .happy]
+        case 9..<12: // Late morning
+            return [.focused, .happy, .neutral]
+        case 12..<14: // Lunch
+            return [.relaxed, .happy, .neutral]
+        case 14..<17: // Afternoon
+            return [.focused, .energetic, .neutral]
+        case 17..<20: // Evening
+            return [.relaxed, .romantic, .happy]
+        case 20..<23: // Night
+            return [.relaxed, .melancholic, .romantic]
+        default: // Late night
+            return [.relaxed, .melancholic, .focused]
+        }
+    }
+    
+    private func rankMoodSuggestions(patterns: [Mood: Int], timeSuggestions: [Mood]) -> [Mood] {
+        var rankedMoods: [(mood: Mood, score: Float)] = []
+        
+        for mood in Mood.allCases {
+            var score: Float = 0
+            
+            // Pattern score (0-50)
+            if let patternCount = patterns[mood] {
+                score += Float(patternCount * 10)
+            }
+            
+            // Time relevance score (0-30)
+            if timeSuggestions.contains(mood) {
+                score += 30
+            }
+            
+            // Current mood compatibility score (0-20)
+            score += getMoodCompatibilityScore(mood)
+            
+            rankedMoods.append((mood: mood, score: score))
+        }
+        
+        // Sort by score and return top moods
+        return rankedMoods
+            .sorted { $0.score > $1.score }
+            .prefix(3)
+            .map { $0.mood }
+    }
+    
+    private func getMoodCompatibilityScore(_ mood: Mood) -> Float {
+        switch (currentMood, mood) {
+        case (.energetic, .happy),
+             (.happy, .energetic),
+             (.relaxed, .focused),
+             (.focused, .relaxed),
+             (.romantic, .happy),
+             (.happy, .romantic):
+            return 20 // High compatibility
+            
+        case (.melancholic, .angry),
+             (.angry, .melancholic),
+             (.energetic, .relaxed),
+             (.relaxed, .energetic):
+            return 5 // Low compatibility
+            
+        case (_, .neutral),
+             (.neutral, _):
+            return 15 // Medium compatibility with neutral
+            
+        default:
+            return 10 // Default medium compatibility
+        }
+    }
+    
+    // MARK: - Intensity Calculations
+    
+    private func calculateEnergyIntensity() -> Float {
+        guard !audioFeatureBuffer.isEmpty else { return 0.5 }
+        return audioFeatureBuffer.last?.energy ?? 0.5
+    }
+    
+    private func calculateRelaxationIntensity() -> Float {
+        guard !audioFeatureBuffer.isEmpty else { return 0.5 }
+        return 1 - (audioFeatureBuffer.last?.energy ?? 0.5)
+    }
+    
+    private func calculateHappinessIntensity() -> Float {
+        guard !audioFeatureBuffer.isEmpty else { return 0.5 }
+        return audioFeatureBuffer.last?.valence ?? 0.5
+    }
+    
+    private func calculateMelancholyIntensity() -> Float {
+        guard !audioFeatureBuffer.isEmpty else { return 0.5 }
+        return 1 - (audioFeatureBuffer.last?.valence ?? 0.5)
+    }
+    
+    private func calculateFocusIntensity() -> Float {
+        guard !audioFeatureBuffer.isEmpty else { return 0.5 }
+        let features = audioFeatureBuffer.last!
+        return (features.instrumentalness + (1 - features.speechiness)) / 2
+    }
+    
+    private func calculateRomanceIntensity() -> Float {
+        guard !audioFeatureBuffer.isEmpty else { return 0.5 }
+        let features = audioFeatureBuffer.last!
+        return (features.valence + features.acousticness) / 2
+    }
+    
+    private func calculateAngerIntensity() -> Float {
+        guard !audioFeatureBuffer.isEmpty else { return 0.5 }
+        let features = audioFeatureBuffer.last!
+        return (features.energy + (1 - features.valence)) / 2
+    }
+    
+    // MARK: - Siri Integration
+    
+    func handleSiriMoodRequest(_ intent: PlayMoodIntent) -> Mood {
+        guard let moodParam = intent.mood,
+              let identifier = moodParam.identifier,
+              let mood = Mood(rawValue: identifier) else {
+            return .neutral
+        }
+        return mood
+    }
+    
+    func getSiriMoodParameter(_ mood: Mood) -> MoodParameter {
+        MoodParameter(identifier: mood.rawValue, display: mood.displayName)
+    }
+    
+    // MARK: - Mood Detection
+    
+    func detectMoodFromAudioFeatures(tempo: Double, energy: Float, valence: Float) {
+        let mood = determineMoodFromFeatures(tempo: tempo, energy: energy, valence: valence)
+        setMood(mood, confidence: 0.8)
+    }
+    
+    func updateMoodBasedOnTimeOfDay() {
+        let hour = Calendar.current.component(.hour, from: Date())
+        let suggestedMood: Mood
+        
+        switch hour {
+        case 5..<9: suggestedMood = .energetic  // Morning
+        case 9..<12: suggestedMood = .focused   // Late morning
+        case 12..<14: suggestedMood = .happy    // Lunch
+        case 14..<17: suggestedMood = .focused  // Afternoon
+        case 17..<20: suggestedMood = .relaxed  // Evening
+        case 20..<23: suggestedMood = .romantic // Night
+        default: suggestedMood = .neutral       // Late night
+        }
+        
+        // Lower confidence for time-based suggestions
+        setMood(suggestedMood, confidence: 0.4)
+    }
+    
+    // MARK: - Private Methods
+    
+    private func determineMoodFromFeatures(tempo: Double, energy: Float, valence: Float) -> Mood {
+        // Simple mood determination logic based on audio features
+        if energy > 0.8 {
+            return .energetic
+        } else if energy < 0.3 {
+            return .relaxed
+        } else if valence > 0.7 {
+            return .happy
+        } else if valence < 0.3 {
+            return .melancholic
+        } else if tempo > 120 {
+            return .focused
+        } else {
+            return .neutral
+        }
+    }
+    
+    func processInteraction(_ event: InteractionEvent) throws {
+        // Update mood confidence based on interaction
+        if event.type.contains("mood_") {
+            moodConfidence = min(moodConfidence + 0.1, 1.0)
+        }
+    }
+}
+
+// MARK: - Supporting Types
+
+struct MoodSnapshot {
+    let mood: Mood
+    let confidence: Float
+    let timestamp: Date
+}
+
+extension Mood {
+    var description: String {
+        switch self {
+        case .energetic:
+            return "High energy and upbeat"
+        case .relaxed:
+            return "Calm and peaceful"
+        case .happy:
+            return "Positive and joyful"
+        case .melancholic:
+            return "Reflective and emotional"
+        case .focused:
+            return "Concentrated and clear"
+        case .romantic:
+            return "Intimate and passionate"
+        case .angry:
+            return "Intense and powerful"
+        case .neutral:
+            return "Balanced and moderate"
+        }
+    }
+    
+    var icon: String {
+        switch self {
+        case .energetic: return "bolt.fill"
+        case .relaxed: return "leaf.fill"
+        case .happy: return "sun.max.fill"
+        case .melancholic: return "cloud.rain.fill"
+        case .focused: return "target"
+        case .romantic: return "heart.fill"
+        case .angry: return "flame.fill"
+        case .neutral: return "circle.fill"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .energetic: return .yellow
+        case .relaxed: return .mint
+        case .happy: return .orange
+        case .melancholic: return .blue
+        case .focused: return .purple
+        case .romantic: return .pink
+        case .angry: return .red
+        case .neutral: return .gray
+        }
     }
 }

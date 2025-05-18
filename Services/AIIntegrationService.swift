@@ -11,6 +11,8 @@ import SwiftUI
 import Combine
 import CoreData
 import AVKit
+import CoreML
+import NaturalLanguage
 
 /// Central service that coordinates all AI features of the Mixtapes app
 class AIIntegrationService: ObservableObject {
@@ -24,6 +26,24 @@ class AIIntegrationService: ObservableObject {
     private var interactionHistory: [InteractionEvent] = []
     private var cancellables = Set<AnyCancellable>()
     
+    // Error handling
+    private let errorSubject = PassthroughSubject<AppError, Never>()
+    var errorPublisher: AnyPublisher<AppError, Never> {
+        errorSubject.eraseToAnyPublisher()
+    }
+    
+    // Model state
+    private var moodModel: MLModel?
+    private var personalityModel: MLModel?
+    private var recommendationModel: MLModel?
+    
+    // Service configuration
+    private let modelUpdateInterval: TimeInterval = 86400 // 24 hours
+    private let maxRetries = 3
+    private let retryDelay: TimeInterval = 5
+    
+    @Published var siriIntegrationEnabled: Bool = false
+    
     init(context: NSManagedObjectContext) {
         // Initialize child services
         self.moodEngine = MoodEngine()
@@ -35,11 +55,17 @@ class AIIntegrationService: ObservableObject {
         setupInterServiceCommunication()
         
         // Load initial user data
-        loadUserPreferences()
+        do {
+            try loadUserPreferences()
+        } catch {
+            errorSubject.send(.loadFailure(error))
+        }
         
-        // Start periodic mood updates based on time of day
-        startPeriodicUpdates()
+        // Setup models
+        setupModels()
     }
+    
+    // MARK: - Service Communication
     
     private func setupInterServiceCommunication() {
         // Wire up the services to communicate with each other
@@ -54,6 +80,31 @@ class AIIntegrationService: ObservableObject {
                 self?.recommendationEngine.updatePersonality(personality)
             }
             .store(in: &cancellables)
+        
+        // Subscribe to child service errors
+        audioAnalysisService.errorPublisher
+            .sink { [weak self] error in
+                NotificationCenter.default.post(name: .audioServiceError, object: error)
+            }
+            .store(in: &cancellables)
+            
+        moodEngine.errorPublisher
+            .sink { [weak self] error in
+                NotificationCenter.default.post(name: .aiServiceError, object: error)
+            }
+            .store(in: &cancellables)
+            
+        personalityEngine.errorPublisher
+            .sink { [weak self] error in
+                NotificationCenter.default.post(name: .aiServiceError, object: error)
+            }
+            .store(in: &cancellables)
+            
+        recommendationEngine.errorPublisher
+            .sink { [weak self] error in
+                NotificationCenter.default.post(name: .aiServiceError, object: error)
+            }
+            .store(in: &cancellables)
     }
     
     private func startPeriodicUpdates() {
@@ -66,17 +117,20 @@ class AIIntegrationService: ObservableObject {
             .store(in: &cancellables)
     }
     
-    private func loadUserPreferences() {
-        // Load from UserDefaults
-        if let moodString = UserDefaults.standard.string(forKey: "userMood"),
-           let mood = Mood(rawValue: moodString) {
-            moodEngine.currentMood = mood
+    // MARK: - User Preferences
+    
+    private func loadUserPreferences() throws {
+        guard let moodString = UserDefaults.standard.string(forKey: "userMood"),
+              let mood = Mood(rawValue: moodString) else {
+            throw AppError.loadFailure(NSError(domain: "AIService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to load mood preference"]))
         }
+        moodEngine.currentMood = mood
         
-        if let personalityString = UserDefaults.standard.string(forKey: "userPersonality"),
-           let personality = PersonalityType(rawValue: personalityString) {
-            personalityEngine.currentPersonality = personality
+        guard let personalityString = UserDefaults.standard.string(forKey: "userPersonality"),
+              let personality = PersonalityType(rawValue: personalityString) else {
+            throw AppError.loadFailure(NSError(domain: "AIService", code: -2, userInfo: [NSLocalizedDescriptionKey: "Failed to load personality preference"]))
         }
+        personalityEngine.currentPersonality = personality
     }
     
     func saveUserPreferences() {
@@ -96,25 +150,41 @@ class AIIntegrationService: ObservableObject {
         )
         
         interactionHistory.append(event)
-        processInteraction(event)
+        
+        do {
+            try processInteraction(event)
+        } catch {
+            errorSubject.send(.aiServiceUnavailable)
+        }
         
         // Periodically save interaction data
         if interactionHistory.count % 10 == 0 {
-            saveInteractionHistory()
+            do {
+                try saveInteractionHistory()
+            } catch {
+                errorSubject.send(.saveFailure(error))
+            }
         }
     }
     
-    private func processInteraction(_ event: InteractionEvent) {
+    private func processInteraction(_ event: InteractionEvent) throws {
         // Send the event to each engine for learning/adaptation
-        personalityEngine.processInteraction(event)
-        moodEngine.processInteraction(event)
-        recommendationEngine.processInteraction(event)
+        do {
+            try personalityEngine.processInteraction(event)
+            try moodEngine.processInteraction(event)
+            try recommendationEngine.processInteraction(event)
+        } catch {
+            throw AppError.aiServiceUnavailable
+        }
     }
     
-    private func saveInteractionHistory() {
+    private func saveInteractionHistory() throws {
         // Save interaction history to persistent storage
         // This would typically be done with CoreData or a similar mechanism
         // For now, we'll just keep it in memory
+        guard !interactionHistory.isEmpty else {
+            throw AppError.insufficientData
+        }
     }
     
     // Get personalized mixtape recommendations
@@ -124,79 +194,66 @@ class AIIntegrationService: ObservableObject {
     
     // Detect mood from audio being played
     func detectMoodFromCurrentAudio(player: AVQueuePlayer) {
-        if let currentItem = player.currentItem {
-            // In a real implementation, we would extract features from the current audio
-            // For now, we'll use the AudioAnalysisService to analyze a tap on the player
-            
-            audioAnalysisService.installAnalysisTap(on: player) { [weak self] features in
-                guard let self = self else { return }
-                
-                // Detect mood from features
-                let detectedMood = self.audioAnalysisService.detectMood(from: features)
-                
-                // Update mood engine
-                self.moodEngine.detectMoodFromAudioFeatures(
-                    tempo: features.tempo,
-                    energy: features.energy,
-                    valence: features.valence
-                )
-                
-                // Log mood detection
-                print("Detected mood: \(detectedMood.rawValue) from audio features: tempo=\(features.tempo), energy=\(features.energy), valence=\(features.valence)")
-            }
+        guard let currentItem = player.currentItem else {
+            errorSubject.send(.audioUnavailable)
+            return
         }
+        
+        audioAnalysisService.installAnalysisTap(on: player)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    if case .failure(let error) = completion {
+                        self?.errorSubject.send(.audioProcessingFailed(error))
+                    }
+                },
+                receiveValue: { [weak self] features in
+                    guard let self = self else { return }
+                    self.moodEngine.detectMoodFromAudioFeatures(
+                        tempo: features.tempo,
+                        energy: features.energy,
+                        valence: features.valence
+                    )
+                }
+            )
+            .store(in: &cancellables)
     }
     
     // Get a greeting message based on current mood and personality
     func getPersonalizedGreeting() -> String {
-        let timeGreeting: String
+        let timeGreeting = getTimeBasedGreeting()
+        let moodComponent = getMoodBasedComponent()
+        return "\(timeGreeting)! \(moodComponent)"
+    }
+    
+    private func getTimeBasedGreeting() -> String {
         let hour = Calendar.current.component(.hour, from: Date())
         
-        if hour >= 5 && hour < 12 {
-            timeGreeting = "Good morning"
-        } else if hour >= 12 && hour < 17 {
-            timeGreeting = "Good afternoon"
-        } else if hour >= 17 && hour < 22 {
-            timeGreeting = "Good evening"
-        } else {
-            timeGreeting = "Hello"
+        switch hour {
+        case 5..<12: return "Good morning"
+        case 12..<17: return "Good afternoon"
+        case 17..<22: return "Good evening"
+        default: return "Hello"
         }
-        
-        // Add mood-specific component
-        let moodComponent: String
+    }
+    
+    private func getMoodBasedComponent() -> String {
         switch moodEngine.currentMood {
         case .energetic:
-            moodComponent = "Ready to energize your day with some music?"
+            return "Ready to energize your day with some music?"
         case .relaxed:
-            moodComponent = "Time to unwind with some relaxing tunes?"
+            return "Time to unwind with some relaxing tunes?"
         case .happy:
-            moodComponent = "Let's keep that positive vibe going!"
+            return "Let's keep that positive vibe going!"
         case .melancholic:
-            moodComponent = "How about some music to match your reflective mood?"
+            return "How about some music to match your reflective mood?"
         case .focused:
-            moodComponent = "Looking for something to help you concentrate?"
+            return "Looking for something to help you concentrate?"
         case .romantic:
-            moodComponent = "In the mood for something with feeling?"
+            return "In the mood for something with feeling?"
         case .angry:
-            moodComponent = "Need to channel some intensity today?"
+            return "Need to channel some intensity today?"
         case .neutral:
-            moodComponent = "What would you like to listen to today?"
-        }
-        
-        // Personality affects greeting style
-        switch personalityEngine.currentPersonality {
-        case .explorer:
-            return "\(timeGreeting)! \(moodComponent) Try something new today!"
-        case .curator:
-            return "\(timeGreeting). \(moodComponent) Your collections are looking great."
-        case .enthusiast:
-            return "\(timeGreeting)! \(moodComponent) Dive deep into your favorite tunes."
-        case .social:
-            return "\(timeGreeting)! \(moodComponent) Share some great music with friends today."
-        case .ambient:
-            return "\(timeGreeting). \(moodComponent) Perfect soundtrack for your day."
-        case .analyzer:
-            return "\(timeGreeting). \(moodComponent) Analyze your collection with new insights."
+            return "What would you like to listen to today?"
         }
     }
     
@@ -252,16 +309,18 @@ class AIIntegrationService: ObservableObject {
     }
     
     // Generate AI mixtape based on mood
-    func generateMoodMixtape(mood: Mood, context: NSManagedObjectContext) -> MixTape {
+    func generateMoodMixtape(mood: Mood, context: NSManagedObjectContext) throws -> MixTape {
         // In a real implementation, this would use sophisticated algorithms
         // to select and arrange songs based on mood analysis
         
         // For now, we'll create a simple MixTape object
-        let mixtape = MixTape(context: context)
+        guard let mixtape = try? recommendationEngine.generateMixtape(forMood: mood) else {
+            throw AppError.aiServiceUnavailable
+        }
+        
         mixtape.title = "\(mood.rawValue) Mix"
         mixtape.moodTags = mood.rawValue
         mixtape.aiGenerated = true
-        mixtape.numberOfSongs = 0 // No actual songs added yet
         
         return mixtape
     }
@@ -328,6 +387,291 @@ class AIIntegrationService: ObservableObject {
             audioFeatures.liveness,
             Float(audioFeatures.tempo) / 200.0 // Normalize tempo to 0-1 range
         ]
+    }
+    
+    // MARK: - Public Interface
+    
+    /// Generate mood-based song recommendations
+    func generateRecommendations(from mood: Mood, count: Int) async throws -> [Song] {
+        guard let model = moodModel else {
+            errorSubject.send(.modelNotReady)
+            throw AppError.modelNotReady
+        }
+        
+        do {
+            let predictions = try await withThrowingTaskGroup(of: Song.self) { group in
+                for _ in 0..<count {
+                    group.addTask {
+                        try await self.generateSingleRecommendation(using: model, mood: mood)
+                    }
+                }
+                
+                var songs: [Song] = []
+                for try await song in group {
+                    songs.append(song)
+                }
+                return songs
+            }
+            
+            return predictions
+            
+        } catch {
+            errorSubject.send(.aiPredictionFailed(error))
+            throw error
+        }
+    }
+    
+    /// Analyze personality traits from listening history
+    func analyzePersonality(from history: [Song]) async throws -> PersonalityProfile {
+        guard let model = personalityModel else {
+            errorSubject.send(.modelNotReady)
+            throw AppError.modelNotReady
+        }
+        
+        do {
+            return try await performPersonalityAnalysis(using: model, history: history)
+        } catch {
+            errorSubject.send(.aiAnalysisFailed(error))
+            throw error
+        }
+    }
+    
+    /// Generate playlist description
+    func generateDescription(for songs: [Song], mood: Mood) async throws -> String {
+        let nlModel = NLModel()
+        
+        do {
+            return try await withRetries {
+                try await nlModel.generateDescription(songs: songs, mood: mood)
+            }
+        } catch {
+            errorSubject.send(.aiGenerationFailed(error))
+            throw error
+        }
+    }
+    
+    // MARK: - Private Implementation
+    
+    private func setupModels() {
+        Task {
+            do {
+                try await withThrowingTaskGroup(of: Void.self) { group in
+                    // Load mood model
+                    group.addTask {
+                        self.moodModel = try await self.loadModel(named: "MoodPrediction")
+                    }
+                    
+                    // Load personality model
+                    group.addTask {
+                        self.personalityModel = try await self.loadModel(named: "PersonalityAnalysis")
+                    }
+                    
+                    // Load recommendation model
+                    group.addTask {
+                        self.recommendationModel = try await self.loadModel(named: "SongRecommendation")
+                    }
+                    
+                    try await group.waitForAll()
+                }
+                
+                // Schedule model updates
+                scheduleModelUpdates()
+                
+            } catch {
+                errorSubject.send(.modelLoadingFailed(error))
+            }
+        }
+    }
+    
+    private func loadModel(named name: String) async throws -> MLModel {
+        do {
+            let config = MLModelConfiguration()
+            config.computeUnits = .all
+            
+            let modelURL = try await downloadLatestModel(named: name)
+            return try MLModel(contentsOf: modelURL, configuration: config)
+            
+        } catch {
+            errorSubject.send(.modelLoadingFailed(error))
+            throw error
+        }
+    }
+    
+    private func downloadLatestModel(named name: String) async throws -> URL {
+        let fileManager = FileManager.default
+        let cacheDir = try fileManager.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let modelURL = cacheDir.appendingPathComponent("\(name).mlmodel")
+        
+        // Check if we need to update
+        if let attributes = try? fileManager.attributesOfItem(atPath: modelURL.path),
+           let modificationDate = attributes[.modificationDate] as? Date,
+           Date().timeIntervalSince(modificationDate) < modelUpdateInterval {
+            return modelURL
+        }
+        
+        // Download updated model
+        do {
+            let (downloadURL, _) = try await URLSession.shared.download(from: getModelEndpoint(name))
+            try fileManager.moveItem(at: downloadURL, to: modelURL)
+            return modelURL
+            
+        } catch {
+            errorSubject.send(.modelDownloadFailed(error))
+            throw error
+        }
+    }
+    
+    private func scheduleModelUpdates() {
+        Timer.scheduledTimer(withTimeInterval: modelUpdateInterval, repeats: true) { [weak self] _ in
+            self?.setupModels()
+        }
+    }
+    
+    private func generateSingleRecommendation(using model: MLModel, mood: Mood) async throws -> Song {
+        do {
+            let prediction = try model.prediction(from: mood)
+            return try await fetchSongDetails(from: prediction)
+            
+        } catch {
+            errorSubject.send(.aiPredictionFailed(error))
+            throw error
+        }
+    }
+    
+    private func performPersonalityAnalysis(using model: MLModel, history: [Song]) async throws -> PersonalityProfile {
+        do {
+            let features = try extractFeatures(from: history)
+            return try model.prediction(from: features)
+            
+        } catch {
+            errorSubject.send(.aiAnalysisFailed(error))
+            throw error
+        }
+    }
+    
+    private func extractFeatures(from songs: [Song]) throws -> [String: MLFeatureValue] {
+        // Feature extraction implementation
+        var features: [String: MLFeatureValue] = [:]
+        
+        // Genre distribution
+        let genres = songs.compactMap { $0.genre }
+        let genreCounts = Dictionary(grouping: genres, by: { $0 }).mapValues { Float($0.count) / Float(genres.count) }
+        features["genreDistribution"] = MLFeatureValue(dictionary: genreCounts as [String: NSNumber])
+        
+        // Temporal features
+        let timestamps = songs.compactMap { $0.lastPlayed }
+        if let earliest = timestamps.min(), let latest = timestamps.max() {
+            features["listeningPeriod"] = MLFeatureValue(double: latest.timeIntervalSince(earliest))
+        }
+        
+        // Mood features
+        let moods = songs.compactMap { $0.dominantMood?.rawValue }
+        let moodCounts = Dictionary(grouping: moods, by: { $0 }).mapValues { Float($0.count) / Float(moods.count) }
+        features["moodDistribution"] = MLFeatureValue(dictionary: moodCounts as [String: NSNumber])
+        
+        return features
+    }
+    
+    private func fetchSongDetails(from prediction: MLFeatureProvider) async throws -> Song {
+        // Implementation of fetching actual song details based on model prediction
+        do {
+            guard let songId = prediction.featureValue(for: "recommendedSongId")?.stringValue else {
+                throw AppError.invalidPrediction
+            }
+            
+            return try await withRetries {
+                try await fetchSong(byId: songId)
+            }
+            
+        } catch {
+            errorSubject.send(.songFetchFailed(error))
+            throw error
+        }
+    }
+    
+    private func fetchSong(byId id: String) async throws -> Song {
+        // Actual API call implementation
+        let (data, response) = try await URLSession.shared.data(from: getSongEndpoint(id))
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw AppError.invalidResponse
+        }
+        
+        do {
+            return try JSONDecoder().decode(Song.self, from: data)
+        } catch {
+            throw AppError.decodingFailed(error)
+        }
+    }
+    
+    private func withRetries<T>(retries: Int = 3, operation: () async throws -> T) async throws -> T {
+        var attempts = 0
+        var lastError: Error?
+        
+        while attempts < retries {
+            do {
+                return try await operation()
+            } catch {
+                lastError = error
+                attempts += 1
+                
+                if attempts < retries {
+                    try await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+                }
+            }
+        }
+        
+        throw lastError ?? AppError.maxRetriesExceeded
+    }
+    
+    private func getModelEndpoint(_ name: String) -> URL {
+        // Implementation to get model download URL
+        URL(string: "https://api.aimixtapes.com/models/\(name)")!
+    }
+    
+    private func getSongEndpoint(_ id: String) -> URL {
+        // Implementation to get song details API endpoint
+        URL(string: "https://api.aimixtapes.com/songs/\(id)")!
+    }
+    
+    // MARK: - Siri Integration
+    
+    func handleSiriError(_ error: Error, type: String) {
+        let siriError = error as NSError
+        aiLogger.logError(model: "SiriIntegration", error: .siriError(siriError))
+        errorSubject.send(.siriError(siriError))
+    }
+    
+    func validateSiriAuthorization() -> Bool {
+        let status = INPreferences.siriAuthorizationStatus()
+        return status == .authorized
+    }
+}
+
+// MARK: - Supporting Types
+
+extension MLModel {
+    func prediction(from mood: Mood) throws -> MLFeatureProvider {
+        let input = try MLDictionaryFeatureProvider(dictionary: [
+            "mood": MLFeatureValue(string: mood.rawValue),
+            "confidence": MLFeatureValue(double: 1.0)
+        ])
+        
+        return try prediction(from: input)
+    }
+    
+    func prediction(from features: [String: MLFeatureValue]) throws -> PersonalityProfile {
+        let input = try MLDictionaryFeatureProvider(dictionary: features)
+        let output = try prediction(from: input)
+        
+        return PersonalityProfile(
+            openness: output.featureValue(for: "openness")?.doubleValue ?? 0,
+            conscientiousness: output.featureValue(for: "conscientiousness")?.doubleValue ?? 0,
+            extraversion: output.featureValue(for: "extraversion")?.doubleValue ?? 0,
+            agreeableness: output.featureValue(for: "agreeableness")?.doubleValue ?? 0,
+            neuroticism: output.featureValue(for: "neuroticism")?.doubleValue ?? 0
+        )
     }
 }
 

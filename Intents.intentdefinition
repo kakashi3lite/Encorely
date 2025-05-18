@@ -1,0 +1,310 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>INEnums</key>
+    <array>
+        <dict>
+            <key>Name</key>
+            <string>MoodType</string>
+            <key>Cases</key>
+            <array>
+                <dict>
+                    <key>Name</key>
+                    <string>energetic</string>
+                </dict>
+                <dict>
+                    <key>Name</key>
+                    <string>relaxed</string>
+                </dict>
+                <dict>
+                    <key>Name</key>
+                    <string>happy</string>
+                </dict>
+                <dict>
+                    <key>Name</key>
+                    <string>melancholic</string>
+                </dict>
+                <dict>
+                    <key>Name</key>
+                    <string>focused</string>
+                </dict>
+                <dict>
+                    <key>Name</key>
+                    <string>romantic</string>
+                </dict>
+                <dict>
+                    <key>Name</key>
+                    <string>angry</string>
+                </dict>
+                <dict>
+                    <key>Name</key>
+                    <string>neutral</string>
+                </dict>
+            </array>
+        </dict>
+    </array>
+    <key>INIntentDefinitionSystemVersion</key>
+    <string>21.0</string>
+    <key>INIntentDefinitionToolsBuildVersion</key>
+    <string>13.0</string>
+    <key>INIntentDefinitionToolsVersion</key>
+    <string>13.0</string>
+    <key>INIntents</key>
+    <array>
+        <dict>
+            <key>Category</key>
+            <string>play</string>
+            <key>CategoryName</key>
+            <string>Play Media</string>
+            <key>Description</key>
+            <string>Play music based on mood</string>
+            <key>Name</key>
+            <string>PlayMoodMusic</string>
+            <key>Parameters</key>
+            <array>
+                <dict>
+                    <key>Name</key>
+                    <string>mood</string>
+                    <key>Type</key>
+                    <string>MoodType</string>
+                </dict>
+            </array>
+            <key>Shortcuts</key>
+            <array>
+                <dict>
+                    <key>Name</key>
+                    <string>Play ${mood} music</string>
+                    <key>SuggestedInvocationPhrases</key>
+                    <array>
+                        <string>Play something ${mood}</string>
+                        <string>I want to hear ${mood} music</string>
+                    </array>
+                </dict>
+            </array>
+        </dict>
+        <dict>
+            <key>Category</key>
+            <string>create</string>
+            <key>CategoryName</key>
+            <string>Create Mixtape</string>
+            <key>Description</key>
+            <string>Create a new mixtape with specified mood</string>
+            <key>Name</key>
+            <string>CreateMoodMixtape</string>
+            <key>Parameters</key>
+            <array>
+                <dict>
+                    <key>Name</key>
+                    <string>mood</string>
+                    <key>Type</key>
+                    <string>MoodType</string>
+                </dict>
+            </array>
+            <key>Shortcuts</key>
+            <array>
+                <dict>
+                    <key>Name</key>
+                    <string>Create ${mood} mixtape</string>
+                    <key>SuggestedInvocationPhrases</key>
+                    <array>
+                        <string>Make a ${mood} mixtape</string>
+                        <string>Create a ${mood} playlist</string>
+                    </array>
+                </dict>
+            </array>
+        </dict>
+        <dict>
+            <key>Category</key>
+            <string>analyze</string>
+            <key>CategoryName</key>
+            <string>Analyze Music</string>
+            <key>Description</key>
+            <string>Analyze current song or mixtape</string>
+            <key>Name</key>
+            <string>AnalyzeMusic</string>
+            <key>Shortcuts</key>
+            <array>
+                <dict>
+                    <key>Name</key>
+                    <string>Analyze this song</string>
+                    <key>SuggestedInvocationPhrases</key>
+                    <array>
+                        <string>Analyze this song</string>
+                        <string>What's the mood of this song</string>
+                    </array>
+                </dict>
+            </array>
+        </dict>
+        <dict>
+            <key>Category</key>
+            <string>insights</string>
+            <key>CategoryName</key>
+            <string>Show Insights</string>
+            <key>Description</key>
+            <string>Show music insights and analytics</string>
+            <key>Name</key>
+            <string>ShowMusicInsights</string>
+            <key>Shortcuts</key>
+            <array>
+                <dict>
+                    <key>Name</key>
+                    <string>Show music insights</string>
+                    <key>SuggestedInvocationPhrases</key>
+                    <array>
+                        <string>Show my music insights</string>
+                        <string>Show my listening stats</string>
+                    </array>
+                </dict>
+            </array>
+        </dict>
+    </array>
+    <key>INIntentDefinitions</key>
+    <array>
+        <dict>
+            <key>category</key>
+            <string>play</string>
+            <key>categoryName</key>
+            <string>Play Mood Music</string>
+            <key>description</key>
+            <string>Play music matching a specific mood</string>
+            <key>identifier</key>
+            <string>PlayMoodMusicIntent</string>
+            <key>parameters</key>
+            <array>
+                <dict>
+                    <key>name</key>
+                    <string>mood</string>
+                    <key>type</key>
+                    <string>MoodType</string>
+                    <key>title</key>
+                    <string>Mood</string>
+                </dict>
+                <dict>
+                    <key>name</key>
+                    <string>duration</string>
+                    <key>type</key>
+                    <string>NSNumber</string>
+                    <key>title</key>
+                    <string>Duration (minutes)</string>
+                </dict>
+            </array>
+            <key>intentClass</key>
+            <string>PlayMoodMusicIntent</string>
+            <key>confirmationRequired</key>
+            <false/>
+        </dict>
+        
+        <dict>
+            <key>category</key>
+            <string>analyze</string>
+            <key>categoryName</key>
+            <string>Analyze Current Song</string>
+            <key>description</key>
+            <string>Analyze the currently playing song</string>
+            <key>identifier</key>
+            <string>AnalyzeCurrentSongIntent</string>
+            <key>parameters</key>
+            <array>
+                <dict>
+                    <key>name</key>
+                    <string>analysisType</string>
+                    <key>type</key>
+                    <string>NSString</string>
+                    <key>title</key>
+                    <string>Analysis Type</string>
+                </dict>
+            </array>
+            <key>intentClass</key>
+            <string>AnalyzeCurrentSongIntent</string>
+            <key>confirmationRequired</key>
+            <false/>
+        </dict>
+        
+        <dict>
+            <key>category</key>
+            <string>create</string>
+            <key>categoryName</key>
+            <string>Create AI Mixtape</string>
+            <key>description</key>
+            <string>Create a new AI-generated mixtape</string>
+            <key>identifier</key>
+            <string>CreateAIMixtapeIntent</string>
+            <key>parameters</key>
+            <array>
+                <dict>
+                    <key>name</key>
+                    <string>mood</string>
+                    <key>type</key>
+                    <string>MoodType</string>
+                    <key>title</key>
+                    <string>Mood</string>
+                </dict>
+                <dict>
+                    <key>name</key>
+                    <string>songCount</string>
+                    <key>type</key>
+                    <string>NSNumber</string>
+                    <key>title</key>
+                    <string>Number of Songs</string>
+                </dict>
+            </array>
+            <key>intentClass</key>
+            <string>CreateAIMixtapeIntent</string>
+            <key>confirmationRequired</key>
+            <true/>
+        </dict>
+    </array>
+</dict>
+</plist>
+
+// Intent Definitions
+
+// PlayMoodIntent
+intent PlayMoodIntent {
+    description = "Play music matching a specific mood"
+    
+    parameters {
+        parameter MoodParameter mood {
+            type = String
+            description = "The mood of music to play"
+        }
+    }
+    
+    response {
+        success: "Playing \(mood) music"
+        failure: "Sorry, I couldn't play \(mood) music"
+    }
+}
+
+// CreateMixtapeIntent
+intent CreateMixtapeIntent {
+    description = "Create a new AI-generated mixtape"
+    
+    response {
+        success: "Creating a new AI mixtape"
+        failure: "Sorry, I couldn't create a mixtape right now"
+    }
+}
+
+// AnalyzeCurrentSongIntent
+intent AnalyzeCurrentSongIntent {
+    description = "Analyze the current playing song"
+    
+    response {
+        success: "Analyzing the current song"
+        failure: "Sorry, I couldn't analyze the song"
+    }
+}
+
+// MoodParameter
+enumeration MoodParameter {
+    case energetic
+    case relaxed  
+    case happy
+    case melancholic
+    case focused
+    case romantic
+    case angry
+    case neutral
+}

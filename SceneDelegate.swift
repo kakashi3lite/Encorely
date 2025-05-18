@@ -44,6 +44,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             player: self.player
         )
         
+        // Donate initial shortcuts
+        siriIntegration.donateShortcuts()
+        
         // Create the SwiftUI view and set the context as the value for the managedObjectContext environment keyPath.
         // Add `@Environment(\.managedObjectContext)` in the views that will need the context.
         let playerItemObserver = PlayerItemObserver(player: self.player)
@@ -246,6 +249,42 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             siriIntegration.handle(intent: intent) { _ in
                 // Completion handler for after handling
             }
+        }
+    }
+    
+    // Handle Siri intent responses
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        guard let intent = userActivity.interaction?.intent else { return }
+        
+        switch intent {
+        case is PlayMoodIntent:
+            handlePlayMoodIntent(intent as! PlayMoodIntent)
+        case is CreateMixtapeIntent:
+            handleCreateMixtapeIntent(intent as! CreateMixtapeIntent)
+        case is AnalyzeCurrentSongIntent:
+            handleAnalyzeCurrentSongIntent(intent as! AnalyzeCurrentSongIntent)
+        default:
+            break
+        }
+    }
+    
+    // MARK: - Intent Handlers
+    
+    private func handlePlayMoodIntent(_ intent: PlayMoodIntent) {
+        siriIntegration.handle(intent: intent) { response in
+            // Handle response if needed
+        }
+    }
+    
+    private func handleCreateMixtapeIntent(_ intent: CreateMixtapeIntent) {
+        siriIntegration.handle(intent: intent) { response in
+            // Handle response if needed
+        }
+    }
+    
+    private func handleAnalyzeCurrentSongIntent(_ intent: AnalyzeCurrentSongIntent) {
+        siriIntegration.handle(intent: intent) { response in
+            // Handle response if needed
         }
     }
 }

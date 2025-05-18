@@ -5,7 +5,33 @@
 **Status**: Alpha Development (v0.9.0-alpha)  
 **Target**: iOS 15.0+, Swift 5.5+, Xcode 13.0+
 
----
+## 🎯 Core Principles
+
+### AI-First Mindset
+- Every feature begins with "How can AI improve this?"
+- Prioritize automation, personalization, and intelligence
+- Continuous learning from user interactions
+
+### UX as Interface to AI
+- AI interactions must be intuitive and explainable
+- User control and transparency are paramount
+- Avoid dark patterns and black-box decisions
+
+### Continuous Improvement
+- Regular iteration based on user feedback
+- Evolving AI capabilities integration
+- Best practices adherence
+
+## ✨ Core Features & AI Integration
+
+| Feature | AI Role | UX Best Practice |
+|---------|---------|------------------|
+| Mixtape Generator | Mood/activity-based playlists | Mood pickers, "Why this mixtape?" tooltip |
+| Smart Search | NLP & intent prediction | Auto-suggestions, voice input |
+| Dynamic Themes | UI adapts to user behavior | Subtle changes, opt-in toggles |
+| AI Cover Art | Generative AI artwork | Prompt input, live preview |
+| Social Collabs | Friend suggestions | Inline suggestions, easy invites |
+| Voice Assistant | Conversational playlist creation | Chat-style UI, fallback actions |
 
 ## 🎯 Overview
 
@@ -131,12 +157,56 @@ Examples of supported voice interactions:
 "Hey Siri, play relaxing music"
 ```
 
-## 🔒 Privacy & Security
+## 🛡️ Privacy & Security
 
-- **On-Device Processing**: All AI analysis happens locally
-- **No Cloud Dependencies**: Your music data never leaves your device
-- **Minimal Permissions**: Only requests necessary audio/microphone access
-- **Transparent AI**: Users can see and control how AI affects their experience
+### On-Device Processing
+- All AI analysis happens locally
+- No cloud dependencies for core features
+- Minimal permissions model
+- Regular security audits
+
+### Data Protection
+- End-to-end encryption for shared content
+- Local ML model updates
+- Transparent data usage
+- User control over data collection
+
+## 🧪 Development Guidelines
+
+### AI Implementation
+1. Use Vision API for face detection
+2. Implement Core ML for emotion classification
+3. Utilize SoundAnalysis for audio sentiment
+4. Real-time feature extraction with AVAudioEngine
+
+### Performance
+1. Bundle optimized ML models
+2. Implement proper memory management
+3. Background processing for heavy tasks
+4. Regular performance monitoring
+
+### Testing Requirements
+1. Unit tests for AI services
+2. Integration tests for ML pipelines
+3. User feedback collection
+4. A/B testing framework
+
+## 📅 Development Timeline
+
+### Week 1-2: Foundation
+- AI Use Cases & Research
+- User Flows with AI touchpoints
+- Low-Fidelity Wireframes
+
+### Week 3-4: Core Implementation
+- Mid-Fidelity Wireframes
+- High-Fidelity Prototypes
+- AI MVP Integration
+
+### Week 5-8: Development
+- Frontend Development
+- AI/UX Alignment
+- Testing & Iteration
 
 ## 🧪 Testing Strategy
 
@@ -151,6 +221,24 @@ Examples of supported voice interactions:
 - **Target**: Selected external users
 - **Duration**: 4-6 weeks
 - **Success Criteria**: Positive mood detection accuracy >80%
+
+## 📝 Workflow Logs
+
+This project uses workflow logs to track automated build, test, and deployment processes. These logs are essential for:
+- **Debugging**: Quickly identifying issues in CI/CD pipelines
+- **Traceability**: Auditing changes and their impact on the codebase
+- **Collaboration**: Sharing build/test results with contributors
+
+### Where to Find Workflow Logs
+- **GitHub Actions**: If using GitHub, logs are available under the 'Actions' tab of your repository.
+- **Local Logs**: Build and test logs are generated in the `BUILD_REPORT.md` file and other relevant log files in the project root.
+
+### How to Use Workflow Logs
+- Review logs after each commit or pull request to ensure all checks pass.
+- Use logs to trace errors, failed tests, or deployment issues.
+- Reference logs in issues or pull requests for better context.
+
+For more details, see the [BUILD_REPORT.md](./BUILD_REPORT.md) file and your repository's CI/CD provider documentation.
 
 ## 📈 Roadmap
 
@@ -176,7 +264,7 @@ This is currently a private project in alpha development. Contributing guideline
 
 ## 📄 License
 
-Copyright © 2025 Swanand Tanavade. All rights reserved.
+Copyright © 5 Swanand Tanavade. All rights reserved.
 Licensed under the MIT License - see LICENSE file for details.
 
 ## 🙏 Acknowledgments

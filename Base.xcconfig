@@ -1,0 +1,65 @@
+// AI-Mixtapes Configuration
+// Base configuration shared across all build configurations
+
+// App Versioning
+MARKETING_VERSION = 0.9.0
+CURRENT_PROJECT_VERSION = 1
+
+// Development Team
+DEVELOPMENT_TEAM = $(DEVELOPMENT_TEAM)
+
+// Bundle ID
+PRODUCT_BUNDLE_IDENTIFIER = com.swanand.aimixtapes
+
+// Deployment Target & SDK
+IPHONEOS_DEPLOYMENT_TARGET = 15.0
+SDKROOT = iphoneos
+
+// Swift & Objective-C Version
+SWIFT_VERSION = 5.5
+
+// ML Model Configuration
+COREML_CODEGEN_LANGUAGE = Swift
+COREML_MODEL_OPTIMIZATION = ALL
+
+// AI Feature Flags
+ENABLE_FACE_DETECTION = 1
+ENABLE_VOICE_ANALYSIS = 1
+ENABLE_BACKGROUND_PROCESSING = 1
+ENABLE_LOCAL_ML = 1
+
+// Memory Management
+MEMORY_MANAGEMENT_SAFETY = 1
+ML_MEMORY_BUDGET = 150 // MB
+
+// Privacy & Security
+FORCE_LOCAL_PROCESSING = 1
+ENABLE_ENCRYPTION = 1
+
+// Error Handling
+ENABLE_ERROR_REPORTING = 1
+ERROR_LOG_LEVEL = 2 // 0=none, 1=errors, 2=warnings, 3=info, 4=debug
+
+// Performance Monitoring
+ENABLE_PERFORMANCE_MONITORING = 1
+AI_INFERENCE_TIMEOUT = 100 // ms
+
+// Audio Processing
+AUDIO_BUFFER_SIZE = 2048
+AUDIO_PROCESSING_QUALITY = high // low, medium, high
+
+// Capabilities
+ENABLE_SIRI = 1
+ENABLE_BACKGROUND_AUDIO = 1
+
+// Build Settings
+GCC_OPTIMIZATION_LEVEL = s
+SWIFT_OPTIMIZATION_LEVEL = -O
+ENABLE_TESTABILITY = YES
+
+// Asset Optimization
+ASSETCATALOG_COMPILER_OPTIMIZATION = time
+
+// Framework Dependencies
+CLANG_MODULES_AUTOLINK = YES
+SWIFT_INCLUDE_PATHS = $(inherited)

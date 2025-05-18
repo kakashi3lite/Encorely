@@ -7,48 +7,53 @@
 
 import Foundation
 import CoreData
+import AVFoundation
 
 @objc(Song)
 public class Song: NSManagedObject {
-    
-    // MARK: - Core Data Properties
-    @NSManaged public var title: String?
-    @NSManaged public var artist: String?
-    @NSManaged public var duration: Double
+    // MARK: - Properties
+    @NSManaged public var name: String
+    @NSManaged public var positionInTape: Int16
+    @NSManaged public var urlData: Data
     @NSManaged public var mixTape: MixTape?
-    
+    @NSManaged public var audioFeatures: Data?
+    @NSManaged public var moodTag: String?
+    @NSManaged public var playCount: Int32
+
     // MARK: - Computed Properties
-    public var wrappedTitle: String {
-        title ?? "Unknown Song"
+    var wrappedName: String {
+        name
     }
-    
-    public var wrappedArtist: String {
-        artist ?? "Unknown Artist"
+
+    var wrappedUrl: URL {
+        do {
+            var isStale = false
+            return try URL(resolvingBookmarkData: urlData, bookmarkDataIsStale: &isStale)
+        } catch {
+            print("Error resolving URL: \(error)")
+            return URL(fileURLWithPath: "")
+        }
     }
-    
-    public var formattedDuration: String {
-        let minutes = Int(duration) / 60
-        let seconds = Int(duration) % 60
-        return String(format: "%d:%02d", minutes, seconds)
+
+    // MARK: - Lifecycle
+    public override func awakeFromInsert() {
+        super.awakeFromInsert()
+        playCount = 0
     }
-    
-    public var displayName: String {
-        return "\(wrappedTitle) - \(wrappedArtist)"
-    }
-    
+
     // MARK: - Methods
-    public func setMixTape(_ mixtape: MixTape?) {
-        // Remove from current mixtape if exists
-        if let currentMixTape = self.mixTape {
-            currentMixTape.removeFromSongs(self)
-        }
-        
-        // Set new mixtape
-        self.mixTape = mixtape
-        
-        // Add to new mixtape if exists
-        if let newMixTape = mixtape {
-            newMixTape.addToSongs(self)
-        }
+    func trackPlay() {
+        playCount += 1
+    }
+
+    func setAudioFeatures(_ features: AudioFeatures) throws {
+        let encoder = JSONEncoder()
+        audioFeatures = try encoder.encode(features)
+    }
+
+    func getAudioFeatures() -> AudioFeatures? {
+        guard let data = audioFeatures else { return nil }
+        let decoder = JSONDecoder()
+        return try? decoder.decode(AudioFeatures.self, from: data)
     }
 }

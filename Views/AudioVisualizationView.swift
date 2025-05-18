@@ -1,425 +1,225 @@
-//
-//  AudioVisualizationView.swift
-//  Mixtapes
-//
-//  Created by Claude AI on 05/16/25.
-//  Copyright © 2025 Swanand Tanavade. All rights reserved.
-//
-
 import SwiftUI
-import AVKit
+import AVFoundation
+import Combine
 
-/// View for displaying audio visualizations and analysis insights
 struct AudioVisualizationView: View {
-    // Player
-    let queuePlayer: AVQueuePlayer
+    // MARK: - Properties
     
-    // AI service
-    var aiService: AIIntegrationService
+    @ObservedObject var moodEngine: MoodEngine
+    @StateObject private var viewModel: AudioVisualizationViewModel
     
-    // Current song info
-    @ObservedObject var currentSongName: CurrentSongName
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 50)
+    private let timer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
     
-    // State
-    @State private var audioFeatures: AudioFeatures?
-    @State private var dominantMood: Mood = .neutral
-    @State private var isAnalyzing: Bool = false
-    @State private var visualizationData: [Float] = Array(repeating: 0.0, count: 8)
-    @State private var animationAmount: CGFloat = 1.0
+    // MARK: - Initialization
     
-    // Feature names for radar chart
-    private let featureNames = [
-        "Energy", "Valence", "Danceability", "Acousticness",
-        "Instrumental", "Speech", "Liveness", "Tempo"
-    ]
-    
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                // Title
-                Text("Audio Analysis")
-                    .font(.title)
-                    .fontWeight(.bold)
-                    .padding(.top)
-                
-                // Current song info
-                Text(currentSongName.name)
-                    .font(.headline)
-                    .lineLimit(1)
-                
-                // Mood badge
-                if !isAnalyzing {
-                    HStack {
-                        Text("Detected Mood:")
-                            .font(.subheadline)
-                        
-                        HStack(spacing: 4) {
-                            Image(systemName: dominantMood.systemIcon)
-                                .foregroundColor(dominantMood.color)
-                            
-                            Text(dominantMood.rawValue)
-                                .font(.subheadline)
-                                .foregroundColor(dominantMood.color)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(dominantMood.color.opacity(0.1))
-                        )
-                    }
-                    .padding(.vertical, 8)
-                }
-                
-                // Analyze button or progress indicator
-                if isAnalyzing {
-                    ProgressView("Analyzing audio...")
-                        .padding()
-                } else {
-                    Button(action: {
-                        analyzeCurrentAudio()
-                    }) {
-                        Label("Analyze Current Audio", systemImage: "waveform")
-                            .padding()
-                            .frame(maxWidth: .infinity)
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                            .padding(.horizontal)
-                    }
-                }
-                
-                // Feature visualization
-                if let features = audioFeatures {
-                    VStack(spacing: 24) {
-                        // Radar chart of features
-                        ZStack {
-                            RadarChartView(data: visualizationData, labels: featureNames)
-                                .frame(height: 300)
-                                .padding()
-                                .scaleEffect(animationAmount)
-                                .onAppear {
-                                    withAnimation(.easeInOut(duration: 0.5)) {
-                                        animationAmount = 1.0
-                                    }
-                                }
-                            
-                            // Highlight dominant mood
-                            VStack {
-                                Image(systemName: dominantMood.systemIcon)
-                                    .font(.system(size: 40))
-                                    .foregroundColor(dominantMood.color)
-                                
-                                Text(dominantMood.rawValue)
-                                    .font(.headline)
-                                    .foregroundColor(dominantMood.color)
-                            }
-                            .padding()
-                            .background(Circle().fill(Color.white.opacity(0.8)))
-                        }
-                        
-                        // Feature details
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Audio Features")
-                                .font(.headline)
-                                .padding(.horizontal)
-                            
-                            // BPM
-                            FeatureDetailRow(
-                                label: "Tempo",
-                                value: String(format: "%.0f BPM", features.tempo),
-                                icon: "metronome",
-                                color: .orange
-                            )
-                            
-                            // Energy
-                            FeatureDetailRow(
-                                label: "Energy",
-                                value: String(format: "%.0f%%", features.energy * 100),
-                                icon: "bolt.fill",
-                                color: .red
-                            )
-                            
-                            // Valence (happiness)
-                            FeatureDetailRow(
-                                label: "Positivity",
-                                value: String(format: "%.0f%%", features.valence * 100),
-                                icon: "sun.max.fill",
-                                color: .yellow
-                            )
-                            
-                            // Danceability
-                            FeatureDetailRow(
-                                label: "Danceability",
-                                value: String(format: "%.0f%%", features.danceability * 100),
-                                icon: "figure.wave",
-                                color: .purple
-                            )
-                            
-                            // Acousticness
-                            FeatureDetailRow(
-                                label: "Acoustic Elements",
-                                value: String(format: "%.0f%%", features.acousticness * 100),
-                                icon: "guitars",
-                                color: .green
-                            )
-                            
-                            // Instrumentalness
-                            FeatureDetailRow(
-                                label: "Instrumental Content",
-                                value: String(format: "%.0f%%", features.instrumentalness * 100),
-                                icon: "pianokeys",
-                                color: .blue
-                            )
-                        }
-                        .padding()
-                        .background(Color.white)
-                        .cornerRadius(12)
-                        .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
-                        .padding(.horizontal)
-                        
-                        // Mood insights
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Mood Insights")
-                                .font(.headline)
-                            
-                            Text(getMoodInsight(for: dominantMood))
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding()
-                        .background(Color.white)
-                        .cornerRadius(12)
-                        .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
-                        .padding(.horizontal)
-                    }
-                }
-                
-                Spacer(minLength: 40)
-            }
-        }
-        .onAppear {
-            // Initialize with defaults
-            if let features = createDefaultFeatures() {
-                audioFeatures = features
-                visualizationData = aiService.generateVisualizationData(from: features)
-                animationAmount = 0.5 // Start small for animation
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .AVPlayerItemDidPlayToEndTime)) { _ in
-            // Reset analysis when song ends
-            audioFeatures = nil
-        }
+    init(moodEngine: MoodEngine) {
+        self.moodEngine = moodEngine
+        _viewModel = StateObject(wrappedValue: AudioVisualizationViewModel(moodEngine: moodEngine))
     }
     
-    // Analyze current audio
-    private func analyzeCurrentAudio() {
-        guard queuePlayer.currentItem != nil else { return }
-        
-        isAnalyzing = true
-        animationAmount = 0.5 // Reset for animation
-        
-        // Use audio analysis service to analyze current song
-        aiService.detectMoodFromCurrentAudio(player: queuePlayer)
-        
-        // Simulate analysis with delay (in a real app, this would be actual analysis)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            // Generate random features for demonstration
-            let features = createRandomFeatures()
-            audioFeatures = features
-            
-            // Generate visualization data
-            visualizationData = aiService.generateVisualizationData(from: features)
-            
-            // Detect mood
-            dominantMood = aiService.audioAnalysisService.detectMood(from: features)
-            
-            // Animate chart
-            withAnimation(.spring()) {
-                animationAmount = 1.0
-            }
-            
-            isAnalyzing = false
-        }
-    }
-    
-    // Create default features
-    private func createDefaultFeatures() -> AudioFeatures? {
-        return AudioFeatures(
-            tempo: 120,
-            energy: 0.5,
-            valence: 0.5,
-            danceability: 0.5,
-            acousticness: 0.5,
-            instrumentalness: 0.5,
-            speechiness: 0.5,
-            liveness: 0.5
-        )
-    }
-    
-    // Create random features for demonstration
-    private func createRandomFeatures() -> AudioFeatures {
-        return AudioFeatures(
-            tempo: Float.random(in: 60...180),
-            energy: Float.random(in: 0...1),
-            valence: Float.random(in: 0...1),
-            danceability: Float.random(in: 0...1),
-            acousticness: Float.random(in: 0...1),
-            instrumentalness: Float.random(in: 0...1),
-            speechiness: Float.random(in: 0...1),
-            liveness: Float.random(in: 0...1)
-        )
-    }
-    
-    // Get mood insight text
-    private func getMoodInsight(for mood: Mood) -> String {
-        switch mood {
-        case .energetic:
-            return "This song has high energy with an upbeat tempo and dynamic elements. It's great for workouts, parties, or starting your day with enthusiasm."
-        case .relaxed:
-            return "This track has a slower tempo with gentle progressions and calming elements. Perfect for unwinding, reducing stress, or creating a peaceful atmosphere."
-        case .happy:
-            return "The song uses major keys and bright tones with a positive vibe. It's ideal for lifting your spirits and celebrating good moments."
-        case .melancholic:
-            return "This piece has emotional depth with reflective elements. It provides space for processing feelings and contemplative moments."
-        case .focused:
-            return "The track maintains a balanced pattern with minimal distraction. It's designed to enhance concentration and productivity during work or study."
-        case .romantic:
-            return "This song expresses emotions through intimate arrangements. It's perfect for special moments or creating a warm atmosphere."
-        case .angry:
-            return "The music features powerful dynamics and intense expressions. It can help channel and process strong emotions."
-        case .neutral:
-            return "This track has a balanced sound that works in various contexts without strongly evoking specific emotions. It's versatile for everyday listening."
-        }
-    }
-}
-
-/// Radar chart for visualizing audio features
-struct RadarChartView: View {
-    let data: [Float]
-    let labels: [String]
+    // MARK: - Body
     
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Background grid
-                ForEach(1...5, id: \.self) { level in
-                    createPolygon(
-                        sides: data.count,
-                        size: CGFloat(level) / 5.0 * min(geometry.size.width, geometry.size.height) / 2,
-                        center: CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
-                    )
-                    .stroke(Color.gray.opacity(0.3), lineWidth: level == 5 ? 2 : 1)
+                // Background gradient based on mood
+                LinearGradient(
+                    gradient: moodEngine.currentMood.gradient,
+                    startPoint: .bottom,
+                    endPoint: .top
+                )
+                .opacity(0.3)
+                
+                // Spectrum visualization
+                LazyVGrid(columns: columns, spacing: 2) {
+                    ForEach(Array(viewModel.spectrum.enumerated()), id: \.offset) { index, magnitude in
+                        SpectrumBar(
+                            magnitude: magnitude,
+                            mood: moodEngine.currentMood,
+                            maxHeight: geometry.size.height * 0.8
+                        )
+                        .animation(.easeOut(duration: 0.1), value: magnitude)
+                    }
                 }
                 
-                // Data polygon
-                createDataPolygon(
-                    data: data,
-                    size: min(geometry.size.width, geometry.size.height) / 2,
-                    center: CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
-                )
-                .fill(Color.blue.opacity(0.3))
-                
-                createDataPolygon(
-                    data: data,
-                    size: min(geometry.size.width, geometry.size.height) / 2,
-                    center: CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
-                )
-                .stroke(Color.blue, lineWidth: 2)
-                
-                // Labels
-                ForEach(0..<labels.count, id: \.self) { index in
-                    let point = pointOnCircle(
-                        center: CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2),
-                        radius: min(geometry.size.width, geometry.size.height) / 2 + 20,
-                        angle: 2 * .pi * CGFloat(index) / CGFloat(labels.count) - .pi / 2
+                // Mood indicators
+                if let moodIndicators = viewModel.currentMoodIndicators {
+                    MoodVisualizationOverlay(
+                        indicators: moodIndicators,
+                        mood: moodEngine.currentMood,
+                        size: geometry.size
                     )
-                    
-                    Text(labels[index])
-                        .font(.caption)
-                        .position(point)
-                        .foregroundColor(.secondary)
                 }
             }
-        }
-    }
-    
-    // Create polygon for grid
-    private func createPolygon(sides: Int, size: CGFloat, center: CGPoint) -> Path {
-        var path = Path()
-        let angle = 2 * .pi / CGFloat(sides)
-        
-        for side in 0..<sides {
-            let x = center.x + size * cos(CGFloat(side) * angle - .pi / 2)
-            let y = center.y + size * sin(CGFloat(side) * angle - .pi / 2)
-            
-            if side == 0 {
-                path.move(to: CGPoint(x: x, y: y))
-            } else {
-                path.addLine(to: CGPoint(x: x, y: y))
+            .onReceive(timer) { _ in
+                viewModel.updateVisualization()
             }
         }
-        
-        path.closeSubpath()
-        return path
-    }
-    
-    // Create polygon for data
-    private func createDataPolygon(data: [Float], size: CGFloat, center: CGPoint) -> Path {
-        var path = Path()
-        let angle = 2 * .pi / CGFloat(data.count)
-        
-        for (index, value) in data.enumerated() {
-            let scaledSize = CGFloat(value) * size
-            let x = center.x + scaledSize * cos(CGFloat(index) * angle - .pi / 2)
-            let y = center.y + scaledSize * sin(CGFloat(index) * angle - .pi / 2)
-            
-            if index == 0 {
-                path.move(to: CGPoint(x: x, y: y))
-            } else {
-                path.addLine(to: CGPoint(x: x, y: y))
-            }
-        }
-        
-        path.closeSubpath()
-        return path
-    }
-    
-    // Calculate point on circle for labels
-    private func pointOnCircle(center: CGPoint, radius: CGFloat, angle: CGFloat) -> CGPoint {
-        let x = center.x + radius * cos(angle)
-        let y = center.y + radius * sin(angle)
-        return CGPoint(x: x, y: y)
     }
 }
 
-/// Row displaying a feature detail
-struct FeatureDetailRow: View {
-    let label: String
-    let value: String
-    let icon: String
-    let color: Color
+// MARK: - Supporting Views
+
+struct SpectrumBar: View {
+    let magnitude: Float
+    let mood: Mood
+    let maxHeight: CGFloat
     
     var body: some View {
-        HStack {
-            // Icon
-            Image(systemName: icon)
-                .foregroundColor(.white)
-                .frame(width: 32, height: 32)
-                .background(Circle().fill(color))
+        RoundedRectangle(cornerRadius: 2)
+            .fill(mood.color)
+            .frame(height: CGFloat(magnitude) * maxHeight)
+            .overlay(
+                RoundedRectangle(cornerRadius: 2)
+                    .stroke(mood.color.opacity(0.5), lineWidth: 0.5)
+            )
+    }
+}
+
+struct MoodVisualizationOverlay: View {
+    let indicators: MoodIndicators
+    let mood: Mood
+    let size: CGSize
+    
+    var body: some View {
+        Canvas { context, size in
+            // Draw circular visualization
+            let center = CGPoint(x: size.width/2, y: size.height/2)
+            let radius = min(size.width, size.height) * 0.3
             
-            // Label
-            Text(label)
-                .font(.subheadline)
+            // Energy ring
+            context.stroke(
+                Circle().path(in: CGRect(x: center.x - radius,
+                                       y: center.y - radius,
+                                       width: radius * 2,
+                                       height: radius * 2)),
+                with: .color(mood.color.opacity(0.3)),
+                lineWidth: CGFloat(indicators.energy) * 20
+            )
             
-            Spacer()
+            // Complexity spikes
+            let complexityPoints = (0...12).map { i -> CGPoint in
+                let angle = Double(i) * .pi * 2 / 12
+                let spikeLength = radius * (1 + CGFloat(indicators.complexity) * 0.3)
+                return CGPoint(
+                    x: center.x + cos(angle) * spikeLength,
+                    y: center.y + sin(angle) * spikeLength
+                )
+            }
             
-            // Value
-            Text(value)
-                .font(.headline)
-                .foregroundColor(color)
+            for (i, point) in complexityPoints.enumerated() {
+                if i > 0 {
+                    context.stroke(
+                        Path { path in
+                            path.move(to: complexityPoints[i-1])
+                            path.addLine(to: point)
+                        },
+                        with: .color(mood.color.opacity(0.2)),
+                        lineWidth: 2
+                    )
+                }
+            }
+            
+            // Density particles
+            let particleCount = Int(indicators.density * 100)
+            for _ in 0..<particleCount {
+                let angle = Double.random(in: 0...(2 * .pi))
+                let distance = Double.random(in: 0...Double(radius))
+                let point = CGPoint(
+                    x: center.x + cos(angle) * distance,
+                    y: center.y + sin(angle) * distance
+                )
+                
+                context.fill(
+                    Circle().path(in: CGRect(x: point.x - 2,
+                                           y: point.y - 2,
+                                           width: 4,
+                                           height: 4)),
+                    with: .color(mood.color.opacity(0.3))
+                )
+            }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
+        .frame(width: size.width, height: size.height)
+        .allowsHitTesting(false)
+    }
+}
+
+// MARK: - ViewModel
+
+class AudioVisualizationViewModel: ObservableObject {
+    // MARK: - Properties
+    
+    @Published private(set) var spectrum: [Float] = Array(repeating: 0, count: 50)
+    @Published private(set) var currentMoodIndicators: MoodIndicators?
+    
+    private let moodEngine: MoodEngine
+    private let fftProcessor = FFTProcessor()
+    private let audioEngine = AVAudioEngine()
+    private var subscriptions = Set<AnyCancellable>()
+    
+    // MARK: - Initialization
+    
+    init(moodEngine: MoodEngine) {
+        self.moodEngine = moodEngine
+        setupAudioEngine()
+    }
+    
+    // MARK: - Public Methods
+    
+    func updateVisualization() {
+        guard let buffer = audioEngine.inputNode.outputFormat(forBus: 0).isCompressed else { return }
+        
+        // Get audio samples
+        let samples = Array(buffer.floatChannelData?[0] ?? [])
+        
+        // Update spectrum
+        spectrum = fftProcessor.getSpectrum(from: samples)
+        
+        // Update mood indicators
+        let features = fftProcessor.extractFeatures(from: samples)
+        currentMoodIndicators = features.moodIndicators()
+    }
+    
+    // MARK: - Private Methods
+    
+    private func setupAudioEngine() {
+        let input = audioEngine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        
+        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, time in
+            // Process audio buffer in real-time
+            self?.processAudioBuffer(buffer)
+        }
+        
+        do {
+            try audioEngine.start()
+        } catch {
+            print("Failed to start audio engine: \(error)")
+        }
+    }
+    
+    private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
+        guard let channelData = buffer.floatChannelData?[0] else { return }
+        
+        let samples = Array(UnsafeBufferPointer(start: channelData,
+                                              count: Int(buffer.frameLength)))
+        
+        DispatchQueue.main.async {
+            self.spectrum = self.fftProcessor.getSpectrum(from: samples)
+            
+            let features = self.fftProcessor.extractFeatures(from: samples)
+            self.currentMoodIndicators = features.moodIndicators()
+        }
+    }
+}
+
+// MARK: - Preview
+
+struct AudioVisualizationView_Previews: PreviewProvider {
+    static var previews: some View {
+        AudioVisualizationView(moodEngine: MoodEngine())
+            .frame(height: 200)
+            .padding()
     }
 }
