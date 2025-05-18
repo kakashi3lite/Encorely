@@ -1,31 +1,33 @@
-//
-//  FFTProcessor.swift
-//  Mixtapes
-//
-//  Created by Claude AI on 05/16/25.
-//  Copyright © 2025 Swanand Tanavade. All rights reserved.
-//
-
 import Foundation
 import Accelerate
 import AVFoundation
 
 /// Utility class for performing FFT analysis on audio data
 class FFTProcessor {
-    // FFT setup
+    // FFT configuration
     private let fftSetup: vDSP_DFT_Setup
     private let bufferSize: Int
     private let log2n: vDSP_Length
+    private let sampleRate: Float
+    private let nyquistFrequency: Float
+    
+    // Frequency bands for analysis
+    private let bassRange: ClosedRange<Float> = 20...250
+    private let midRange: ClosedRange<Float> = 250...2000
+    private let trebleRange: ClosedRange<Float> = 2000...8000
     
     // Working buffers
     private var window: [Float]
     private var fftInput: [Float]
     private var fftOutput: DSPSplitComplex
     private var magnitudes: [Float]
+    private var phases: [Float]
+    private var frequencies: [Float]
     
-    // Analysis parameters
-    private let sampleRate: Float
-    private let nyquistFrequency: Float
+    // Analysis state
+    private var lastMagnitudes: [Float]?
+    private var timeLastBeat: Float = 0
+    private var beatHistory: [Float] = []
     
     init(bufferSize: Int, sampleRate: Float) {
         self.bufferSize = bufferSize
@@ -33,230 +35,226 @@ class FFTProcessor {
         self.nyquistFrequency = sampleRate / 2.0
         self.log2n = vDSP_Length(log2(Float(bufferSize)))
         
+        // Initialize working buffers
+        self.window = [Float](repeating: 0, count: bufferSize)
+        self.fftInput = [Float](repeating: 0, count: bufferSize)
+        self.magnitudes = [Float](repeating: 0, count: bufferSize / 2)
+        self.phases = [Float](repeating: 0, count: bufferSize / 2)
+        self.frequencies = [Float](repeating: 0, count: bufferSize / 2)
+        
+        // Initialize split complex buffer for FFT output
+        let realp = UnsafeMutablePointer<Float>.allocate(capacity: bufferSize / 2)
+        let imagp = UnsafeMutablePointer<Float>.allocate(capacity: bufferSize / 2)
+        self.fftOutput = DSPSplitComplex(realp: realp, imagp: imagp)
+        
         // Create FFT setup
-        guard let setup = vDSP_DFT_zop_CreateSetup(nil, vDSP_Length(bufferSize), .FORWARD) else {
+        guard let setup = vDSP_DFT_zop_CreateSetup(
+            nil,
+            vDSP_Length(bufferSize),
+            vDSP_DFT_Direction.FORWARD
+        ) else {
             fatalError("Failed to create FFT setup")
         }
         self.fftSetup = setup
         
-        // Initialize working buffers
-        self.window = Array(repeating: 0.0, count: bufferSize)
-        self.fftInput = Array(repeating: 0.0, count: bufferSize)
-        self.magnitudes = Array(repeating: 0.0, count: bufferSize / 2)
-        
-        // Allocate split complex buffer
-        let halfSize = bufferSize / 2
-        self.fftOutput = DSPSplitComplex(
-            realp: UnsafeMutablePointer<Float>.allocate(capacity: halfSize),
-            imagp: UnsafeMutablePointer<Float>.allocate(capacity: halfSize)
-        )
-        
-        // Create Hann window
+        // Initialize window function
         createHannWindow()
+        initializeFrequencyArray()
     }
     
     deinit {
-        // Clean up FFT setup and buffers
-        vDSP_DFT_DestroySetup(fftSetup)
+        // Clean up allocated memory
         fftOutput.realp.deallocate()
         fftOutput.imagp.deallocate()
-    }
-    
-    /// Create Hann window for better frequency resolution
-    private func createHannWindow() {
-        vDSP_hann_window(&window, vDSP_Length(bufferSize), Int32(vDSP_HANN_NORM))
+        vDSP_DFT_DestroySetup(fftSetup)
     }
     
     /// Process audio buffer and extract spectral features
-    func processBuffer(_ audioBuffer: AVAudioPCMBuffer) -> SpectralFeatures? {
-        guard let channelData = audioBuffer.floatChannelData,
-              audioBuffer.frameLength == bufferSize else { return nil }
+    func processBuffer(_ buffer: AVAudioPCMBuffer) -> SpectralFeatures? {
+        guard let channelData = buffer.floatChannelData,
+              buffer.frameLength == bufferSize else { return nil }
         
-        // Copy and window the input data
-        let inputData = channelData[0]
-        vDSP_vmul(inputData, 1, window, 1, &fftInput, 1, vDSP_Length(bufferSize))
+        // Apply window function to input data
+        vDSP_vmul(channelData[0], 1, window, 1, &fftInput, 1, vDSP_Length(bufferSize))
         
-        // Perform FFT
-        vDSP_DFT_Execute(fftSetup, fftInput, fftOutput)
+        // Perform forward FFT
+        fftInput.withUnsafeBytes { ptr in
+            let typePtr = ptr.bindMemory(to: DSPComplex.self)
+            vDSP_ctoz(typePtr.baseAddress!, 2, &fftOutput, 1, vDSP_Length(bufferSize / 2))
+        }
+        vDSP_fft_zrip(fftSetup, &fftOutput, 1, log2n, FFTDirection(FFT_FORWARD))
         
-        // Calculate magnitudes
-        let halfSize = bufferSize / 2
-        vDSP_zvmags(&fftOutput, 1, &magnitudes, 1, vDSP_Length(halfSize))
+        // Calculate magnitude spectrum
+        vDSP_zvmags(&fftOutput, 1, &magnitudes, 1, vDSP_Length(bufferSize / 2))
         
-        // Convert to dB and normalize
-        var logMagnitudes = Array(repeating: Float(0.0), count: halfSize)
-        vDSP_vdbcon(magnitudes, 1, &logMagnitudes, 1, vDSP_Length(halfSize))
+        // Calculate phase spectrum
+        vDSP_zvphas(&fftOutput, 1, &phases, 1, vDSP_Length(bufferSize / 2))
         
-        // Extract features from the spectrum
-        return extractSpectralFeatures(from: logMagnitudes)
-    }
-    
-    /// Extract meaningful features from FFT magnitudes
-    private func extractSpectralFeatures(from spectrum: [Float]) -> SpectralFeatures {
-        let binWidth = nyquistFrequency / Float(spectrum.count)
+        // Extract spectral features
+        let spectralCentroid = calculateSpectralCentroid()
+        let spectralRolloff = calculateSpectralRolloff()
+        let spectralFlux = calculateSpectralFlux()
+        let spectralContrast = calculateSpectralContrast()
         
-        // Calculate spectral centroid (brightness)
-        let spectralCentroid = calculateSpectralCentroid(spectrum: spectrum, binWidth: binWidth)
+        // Calculate energy in different frequency bands
+        let bassEnergy = calculateBandEnergy(range: bassRange)
+        let midEnergy = calculateBandEnergy(range: midRange)
+        let trebleEnergy = calculateBandEnergy(range: trebleRange)
         
-        // Calculate spectral rolloff
-        let spectralRolloff = calculateSpectralRolloff(spectrum: spectrum, binWidth: binWidth)
+        // Estimate tempo and beat strength
+        let (estimatedTempo, beatStrength) = estimateTempoAndBeatStrength()
         
-        // Calculate spectral contrast
-        let spectralContrast = calculateSpectralContrast(spectrum: spectrum)
-        
-        // Calculate zero crossing rate
-        let zeroCrossingRate = calculateZeroCrossingRate()
-        
-        // Estimate tempo
-        let estimatedTempo = estimateTempo(from: spectrum)
-        
-        // Calculate energy distribution
-        let energyDistribution = calculateEnergyDistribution(spectrum: spectrum)
+        // Store current magnitudes for next flux calculation
+        lastMagnitudes = magnitudes
         
         return SpectralFeatures(
             spectralCentroid: spectralCentroid,
             spectralRolloff: spectralRolloff,
+            spectralFlux: spectralFlux,
             spectralContrast: spectralContrast,
-            zeroCrossingRate: zeroCrossingRate,
+            zeroCrossingRate: calculateZeroCrossingRate(buffer),
+            dynamicRange: calculateDynamicRange(),
+            bassEnergy: bassEnergy,
+            midEnergy: midEnergy,
+            trebleEnergy: trebleEnergy,
             estimatedTempo: estimatedTempo,
-            bassEnergy: energyDistribution.bass,
-            midEnergy: energyDistribution.mid,
-            trebleEnergy: energyDistribution.treble,
-            totalEnergy: energyDistribution.total
+            beatStrength: beatStrength
         )
     }
     
-    /// Calculate spectral centroid (brightness indicator)
-    private func calculateSpectralCentroid(spectrum: [Float], binWidth: Float) -> Float {
-        var weightedSum: Float = 0.0
-        var magnitudeSum: Float = 0.0
+    // MARK: - Feature Calculation Methods
+    
+    private func calculateSpectralCentroid() -> Float {
+        var weightedSum: Float = 0
+        var sum: Float = 0
         
-        for (bin, magnitude) in spectrum.enumerated() {
-            let frequency = Float(bin) * binWidth
-            let linearMagnitude = pow(10, magnitude / 20.0)
-            weightedSum += frequency * linearMagnitude
-            magnitudeSum += linearMagnitude
+        for i in 0..<bufferSize/2 {
+            weightedSum += frequencies[i] * magnitudes[i]
+            sum += magnitudes[i]
         }
         
-        return magnitudeSum > 0 ? weightedSum / magnitudeSum : 0.0
+        return sum > 0 ? weightedSum / sum : 0
     }
     
-    /// Calculate spectral rolloff
-    private func calculateSpectralRolloff(spectrum: [Float], binWidth: Float) -> Float {
-        let linearSpectrum = spectrum.map { pow(10, $0 / 20.0) }
-        let totalEnergy = linearSpectrum.reduce(0, +)
-        let threshold = totalEnergy * 0.85
+    private func calculateSpectralRolloff(percentage: Float = 0.85) -> Float {
+        let totalEnergy = magnitudes.reduce(0, +)
+        let threshold = totalEnergy * percentage
+        var accumulator: Float = 0
         
-        var cumulativeEnergy: Float = 0.0
-        for (bin, magnitude) in linearSpectrum.enumerated() {
-            cumulativeEnergy += magnitude
-            if cumulativeEnergy >= threshold {
-                return Float(bin) * binWidth
+        for i in 0..<bufferSize/2 {
+            accumulator += magnitudes[i]
+            if accumulator >= threshold {
+                return frequencies[i]
             }
         }
-        
         return nyquistFrequency
     }
     
-    /// Calculate spectral contrast
-    private func calculateSpectralContrast(spectrum: [Float]) -> Float {
-        let octaveBands = getOctaveBands()
-        var contrastSum: Float = 0.0
+    private func calculateSpectralFlux() -> Float {
+        guard let lastMags = lastMagnitudes else { return 0 }
         
-        for band in octaveBands {
-            let bandSpectrum = Array(spectrum[band.start..<band.end])
-            let peak = bandSpectrum.max() ?? -80.0
-            let valley = bandSpectrum.min() ?? -80.0
-            contrastSum += peak - valley
+        var flux: Float = 0
+        for i in 0..<bufferSize/2 {
+            let diff = magnitudes[i] - lastMags[i]
+            flux += diff * diff
         }
-        
-        return contrastSum / Float(octaveBands.count)
+        return sqrt(flux)
     }
     
-    /// Get octave band ranges
-    private func getOctaveBands() -> [(start: Int, end: Int)] {
-        let binWidth = nyquistFrequency / Float(magnitudes.count)
-        let octaveFreqs: [Float] = [250, 500, 1000, 2000, 4000, 8000]
-        var bands: [(start: Int, end: Int)] = []
+    private func calculateSpectralContrast() -> Float {
+        let valleyBins = 5
+        let peakBins = 5
         
-        for i in 0..<(octaveFreqs.count - 1) {
-            let startBin = Int(octaveFreqs[i] / binWidth)
-            let endBin = Int(octaveFreqs[i + 1] / binWidth)
-            if startBin < magnitudes.count && endBin <= magnitudes.count {
-                bands.append((start: startBin, end: endBin))
-            }
-        }
+        let sortedMagnitudes = magnitudes.sorted()
+        let valleys = sortedMagnitudes[..<valleyBins].reduce(0, +) / Float(valleyBins)
+        let peaks = sortedMagnitudes[(bufferSize/2 - peakBins)...].reduce(0, +) / Float(peakBins)
         
-        return bands
+        return peaks - valleys
     }
     
-    /// Calculate zero crossing rate
-    private func calculateZeroCrossingRate() -> Float {
-        var crossings = 0
-        for i in 1..<fftInput.count {
-            if (fftInput[i] >= 0) != (fftInput[i-1] >= 0) {
+    private func calculateZeroCrossingRate(_ buffer: AVAudioPCMBuffer) -> Float {
+        guard let data = buffer.floatChannelData?[0] else { return 0 }
+        
+        var crossings: Int = 0
+        for i in 1..<bufferSize {
+            if data[i-1] * data[i] < 0 {
                 crossings += 1
             }
         }
-        return Float(crossings) / Float(fftInput.count - 1)
+        
+        return Float(crossings) / Float(bufferSize)
     }
     
-    /// Estimate tempo from spectral flux
-    private func estimateTempo(from spectrum: [Float]) -> Float {
-        let rhythmBandStart = Int(60.0 / (nyquistFrequency / Float(spectrum.count)))
-        let rhythmBandEnd = Int(200.0 / (nyquistFrequency / Float(spectrum.count)))
+    private func calculateDynamicRange() -> Float {
+        let sortedMagnitudes = magnitudes.sorted()
+        let p90 = sortedMagnitudes[Int(Float(bufferSize/2) * 0.9)]
+        let p10 = sortedMagnitudes[Int(Float(bufferSize/2) * 0.1)]
+        return p90 - p10
+    }
+    
+    private func calculateBandEnergy(range: ClosedRange<Float>) -> Float {
+        var energy: Float = 0
+        var count: Int = 0
         
-        let startIndex = max(0, rhythmBandStart)
-        let endIndex = min(spectrum.count, rhythmBandEnd)
-        
-        if startIndex < endIndex {
-            let rhythmEnergy = spectrum[startIndex..<endIndex].reduce(0, +)
-            let normalizedEnergy = (rhythmEnergy + 80) / 80
-            return 60 + (normalizedEnergy * 120)
+        for i in 0..<bufferSize/2 {
+            if range.contains(frequencies[i]) {
+                energy += magnitudes[i]
+                count += 1
+            }
         }
         
-        return 120.0
+        return count > 0 ? energy / Float(count) : 0
     }
     
-    /// Calculate energy distribution across frequency bands
-    private func calculateEnergyDistribution(spectrum: [Float]) -> (bass: Float, mid: Float, treble: Float, total: Float) {
-        let binWidth = nyquistFrequency / Float(spectrum.count)
+    private func estimateTempoAndBeatStrength() -> (tempo: Float, strength: Float) {
+        let energyChange = calculateSpectralFlux()
+        let currentTime = Float(Date().timeIntervalSince1970)
         
-        let bassEnd = Int(250.0 / binWidth)
-        let midEnd = Int(4000.0 / binWidth)
-        let trebleEnd = spectrum.count
+        if energyChange > 0.5 && (currentTime - timeLastBeat) > 0.2 {  // 200ms minimum between beats
+            let beatInterval = currentTime - timeLastBeat
+            timeLastBeat = currentTime
+            
+            beatHistory.append(beatInterval)
+            if beatHistory.count > 8 { beatHistory.removeFirst() }
+        }
         
-        let bassEnergy = spectrum[0..<min(bassEnd, spectrum.count)]
-            .map { pow(10, $0 / 10) }.reduce(0, +)
+        // Calculate tempo from beat history
+        if beatHistory.isEmpty { return (0, 0) }
         
-        let midStart = min(bassEnd, spectrum.count)
-        let midEnergy = spectrum[midStart..<min(midEnd, spectrum.count)]
-            .map { pow(10, $0 / 10) }.reduce(0, +)
+        let averageInterval = beatHistory.reduce(0, +) / Float(beatHistory.count)
+        let tempo = 60.0 / averageInterval  // Convert to BPM
         
-        let trebleStart = min(midEnd, spectrum.count)
-        let trebleEnergy = spectrum[trebleStart..<trebleEnd]
-            .map { pow(10, $0 / 10) }.reduce(0, +)
+        // Calculate beat strength based on consistency
+        let variance = beatHistory.map { pow($0 - averageInterval, 2) }.reduce(0, +) / Float(beatHistory.count)
+        let beatStrength = 1.0 / (1.0 + variance)  // Normalize to 0-1 range
         
-        let totalEnergy = bassEnergy + midEnergy + trebleEnergy
-        
-        return (
-            bass: totalEnergy > 0 ? bassEnergy / totalEnergy : 0,
-            mid: totalEnergy > 0 ? midEnergy / totalEnergy : 0,
-            treble: totalEnergy > 0 ? trebleEnergy / totalEnergy : 0,
-            total: totalEnergy
-        )
+        return (tempo, beatStrength)
+    }
+    
+    // MARK: - Initialization Helpers
+    
+    private func createHannWindow() {
+        vDSP_hann_window(&window, vDSP_Length(bufferSize), Int32(vDSP_HANN_NORM))
+    }
+    
+    private func initializeFrequencyArray() {
+        for i in 0..<bufferSize/2 {
+            frequencies[i] = Float(i) * sampleRate / Float(bufferSize)
+        }
     }
 }
 
-/// Spectral features extracted from FFT analysis
+/// Structure containing extracted spectral features
 struct SpectralFeatures {
-    let spectralCentroid: Float
-    let spectralRolloff: Float
-    let spectralContrast: Float
-    let zeroCrossingRate: Float
-    let estimatedTempo: Float
-    let bassEnergy: Float
-    let midEnergy: Float
-    let trebleEnergy: Float
-    let totalEnergy: Float
+    let spectralCentroid: Float      // Weighted mean of frequencies
+    let spectralRolloff: Float       // Frequency below which 85% of energy exists
+    let spectralFlux: Float          // Rate of change of spectrum
+    let spectralContrast: Float      // Difference between peaks and valleys
+    let zeroCrossingRate: Float      // Rate of signal sign-changes
+    let dynamicRange: Float          // Difference between loudest and quietest parts
+    let bassEnergy: Float           // Energy in low frequencies
+    let midEnergy: Float            // Energy in mid frequencies
+    let trebleEnergy: Float         // Energy in high frequencies
+    let estimatedTempo: Float       // Estimated BPM
+    let beatStrength: Float         // Confidence in beat detection (0-1)
 }
