@@ -1,0 +1,132 @@
+name: AI-Mixtapes
+options:
+  bundleIdPrefix: com.swanand
+  deploymentTarget:
+    iOS: 15.0
+  xcodeVersion: "15.0"
+  groupSortPosition: top
+  defaultConfig: Debug
+  configs:
+    Debug:
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+      ENABLE_TESTABILITY: YES
+      GCC_PREPROCESSOR_DEFINITIONS:
+        - DEBUG=1
+        - $(inherited)
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
+      ENABLE_TESTABILITY: NO
+      SWIFT_COMPILATION_MODE: wholemodule
+  defaultConfig: Debug
+  configs:
+    Debug: debug
+    Release: release
+targets:
+  AI-Mixtapes:
+    type: application
+    platform: iOS
+    sources:
+      - path: .
+        excludes:
+          - .git
+          - "*.md"
+          - project.yml
+          - .github
+          - Tests
+          - Resources
+        group: AI-Mixtapes
+        createIntermediateGroups: true
+      - path: Resources
+        group: Resources
+        type: group
+          - .github
+          - Resources
+        group: AI-Mixtapes
+        createIntermediateGroups: true
+      - path: Resources
+        group: Resources
+        type: group
+        optional: true
+        createIntermediateGroups: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.swanand.AIMixtapes
+        DEVELOPMENT_TEAM: ""
+        SWIFT_VERSION: 5.0
+        TARGETED_DEVICE_FAMILY: 1,2
+        ENABLE_TESTABILITY: YES
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Info.plist
+        SUPPORTS_MACCATALYST: NO
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        CODE_SIGN_STYLE: Automatic
+        CURRENT_PROJECT_VERSION: 1
+        DEVELOPMENT_ASSET_PATHS: ""
+        MARKETING_VERSION: 1.0
+      configs:
+        Debug:
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+          ENABLE_TESTABILITY: YES
+        Release:
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
+          ENABLE_TESTABILITY: NO
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDevelopmentRegion: en
+        CFBundleDisplayName: AI-Mixtapes
+        UILaunchStoryboardName: LaunchScreen
+        UIMainStoryboardFile: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSMicrophoneUsageDescription: "AI-Mixtapes needs microphone access for audio analysis"
+        LSRequiresIPhoneOS: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default Configuration
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+    dependencies:
+      - framework: AVFoundation.framework
+      - framework: CoreData.framework
+      - framework: CoreML.framework
+    scheme:
+      testTargets:
+        - AI-MixtapesTests
+      gatherCoverageData: true
+      commandLineArguments: {}
+      environmentVariables: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.swanand.AIMixtapes
+        DEVELOPMENT_TEAM: ""
+        SWIFT_VERSION: 5.0
+        TARGETED_DEVICE_FAMILY: 1,2
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDevelopmentRegion: en
+        CFBundleDisplayName: AI-Mixtapes
+        UILaunchStoryboardName: LaunchScreen
+        UIMainStoryboardFile: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSMicrophoneUsageDescription: "AI-Mixtapes needs microphone access for audio analysis"
+        LSRequiresIPhoneOS: true
+    dependencies: []
+    preBuildScripts: []
+    postBuildScripts: []
+
+  AI-MixtapesTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+        excludes: []
+    dependencies:
+      - target: AI-Mixtapes
+    settings:
+      base:
+        SWIFT_VERSION: 5.0
+        GENERATE_INFOPLIST_FILE: YES
