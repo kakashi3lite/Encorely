@@ -3,7 +3,7 @@
 //  Mixtapes
 //
 //  Created by Swanand Tanavade on 03/25/23.
-//  Updated by Claude AI on 05/16/25.
+//  Updated by Claude AI on 05/20/25.
 //
 
 import UIKit
@@ -43,6 +43,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             moc: context,
             player: self.player
         )
+        
+        // Request Siri authorization
+        requestSiriAuthorization()
         
         // Create the SwiftUI view and set the context as the value for the managedObjectContext environment keyPath.
         // Add `@Environment(\.managedObjectContext)` in the views that will need the context.
@@ -206,6 +209,20 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         }
     }
     
+    // MARK: - Siri Authorization
+    
+    /// Request Siri authorization
+    func requestSiriAuthorization() {
+        INPreferences.requestSiriAuthorization { status in
+            DispatchQueue.main.async {
+                if status == .authorized {
+                    // If authorized, donate initial shortcuts
+                    self.siriIntegration.setupSiriShortcuts()
+                }
+            }
+        }
+    }
+    
     // MARK: - Siri Integration
     
     func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
@@ -242,7 +259,26 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
            let intent = interaction.intent as? INPlayMediaIntent {
             
             // Let the SiriIntegration service handle it
-            let response = INPlayMediaIntentResponse(code: .success, userActivity: nil)
+            siriIntegration.handle(intent: intent) { _ in
+                // Completion handler for after handling
+            }
+        }
+        // Check if it's a search media intent
+        else if userActivity.activityType == INSearchForMediaIntent.intentIdentifier,
+                let interaction = userActivity.interaction,
+                let intent = interaction.intent as? INSearchForMediaIntent {
+            
+            // Let the SiriIntegration service handle it
+            siriIntegration.handle(intent: intent) { _ in
+                // Completion handler for after handling
+            }
+        }
+        // Check if it's an add media intent
+        else if userActivity.activityType == INAddMediaIntent.intentIdentifier,
+                let interaction = userActivity.interaction,
+                let intent = interaction.intent as? INAddMediaIntent {
+            
+            // Let the SiriIntegration service handle it
             siriIntegration.handle(intent: intent) { _ in
                 // Completion handler for after handling
             }
