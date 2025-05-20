@@ -23,7 +23,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>AI-Mixtapes needs microphone access for audio analysis</string>
+	<string>AI-Mixtapes uses the microphone to analyze ambient sounds for mood detection and to enhance your music recommendations.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -31,6 +31,23 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>processing</string>
+	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>AI-Mixtapes can use facial expression analysis to detect your mood and tailor music recommendations (optional).</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>AI-Mixtapes can recognize voice commands for hands-free control of your music experience.</string>
+	<key>NSSiriUsageDescription</key>
+	<string>Use Siri to control AI-Mixtapes with voice commands for creating mood-based playlists and analyzing music.</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>INPlayMediaIntent</string>
+		<string>INSearchForMediaIntent</string>
+		<string>INAddMediaIntent</string>
 	</array>
 </dict>
 </plist>
