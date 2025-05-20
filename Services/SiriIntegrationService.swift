@@ -3,6 +3,7 @@
 //  Mixtapes
 //
 //  Created by Claude AI on 05/16/25.
+//  Updated by Claude AI on 05/20/25.
 //  Copyright © 2025 Swanand Tanavade. All rights reserved.
 //
 
@@ -13,7 +14,7 @@ import AVKit
 import CoreData
 
 /// Service for integrating with SiriKit to enable voice commands for AI Mixtapes
-class SiriIntegrationService: NSObject, INPlayMediaIntentHandling {
+class SiriIntegrationService: NSObject, INPlayMediaIntentHandling, INSearchForMediaIntentHandling, INAddMediaIntentHandling {
     // Core services
     private let aiService: AIIntegrationService
     private let moc: NSManagedObjectContext
@@ -43,6 +44,7 @@ class SiriIntegrationService: NSObject, INPlayMediaIntentHandling {
         handlers["play_mood_focused"] = { self.playMoodBasedMixtape(.focused) }
         handlers["play_mood_romantic"] = { self.playMoodBasedMixtape(.romantic) }
         handlers["play_mood_angry"] = { self.playMoodBasedMixtape(.angry) }
+        handlers["play_mood_neutral"] = { self.playMoodBasedMixtape(.neutral) }
         
         // Command: Create a [mood] mixtape
         handlers["create_mood_energetic"] = { self.createMoodBasedMixtape(.energetic) }
@@ -52,42 +54,39 @@ class SiriIntegrationService: NSObject, INPlayMediaIntentHandling {
         handlers["create_mood_focused"] = { self.createMoodBasedMixtape(.focused) }
         handlers["create_mood_romantic"] = { self.createMoodBasedMixtape(.romantic) }
         handlers["create_mood_angry"] = { self.createMoodBasedMixtape(.angry) }
+        handlers["create_mood_neutral"] = { self.createMoodBasedMixtape(.neutral) }
+        
+        // Activity-based mixtapes
+        handlers["create_activity_workout"] = { self.createActivityBasedMixtape(.workout) }
+        handlers["create_activity_study"] = { self.createActivityBasedMixtape(.study) }
+        handlers["create_activity_commute"] = { self.createActivityBasedMixtape(.commute) }
+        handlers["create_activity_party"] = { self.createActivityBasedMixtape(.party) }
+        handlers["create_activity_sleep"] = { self.createActivityBasedMixtape(.sleep) }
+        handlers["create_activity_work"] = { self.createActivityBasedMixtape(.work) }
+        handlers["create_activity_relaxation"] = { self.createActivityBasedMixtape(.relaxation) }
         
         // Command: Analyze current song
         handlers["analyze_current_song"] = { self.analyzeCurrentSong() }
         
         // Command: Show insights
         handlers["show_insights"] = { self.showInsights() }
+        
+        // Command: Open mood selector
+        handlers["open_mood_selector"] = { self.openMoodSelector() }
     }
     
     /// Setup predefined Siri shortcuts
     private func setupSiriShortcuts() {
-        // Common shortcuts for users to add
-        donateShortcut(for: "Play energizing music", with: "play_mood_energetic", suggestedPhrase: "Play something energizing")
-        donateShortcut(for: "Play relaxing music", with: "play_mood_relaxed", suggestedPhrase: "Play something relaxing")
-        donateShortcut(for: "Play happy music", with: "play_mood_happy", suggestedPhrase: "Play happy music")
-        donateShortcut(for: "Create focused mixtape", with: "create_mood_focused", suggestedPhrase: "Create a focus mixtape")
-        donateShortcut(for: "Analyze this song", with: "analyze_current_song", suggestedPhrase: "Analyze this song")
-        donateShortcut(for: "Show my music insights", with: "show_insights", suggestedPhrase: "Show my music insights")
-    }
-    
-    /// Donate a shortcut to Siri
-    private func donateShortcut(for activity: String, with identifier: String, suggestedPhrase: String) {
-        let intent = INPlayMediaIntent()
-        intent.mediaItems = [INMediaItem(identifier: identifier, title: activity, type: .music, artwork: nil)]
-        intent.suggestedInvocationPhrase = suggestedPhrase
-        
-        let interaction = INInteraction(intent: intent, response: nil)
-        interaction.donate { error in
-            if let error = error {
-                print("SiriIntegration - Failed to donate shortcut: \(error)")
-            }
-        }
+        // Donate common shortcuts for users to discover
+        donatePlayMoodShortcuts()
+        donateCreateMixtapeShortcuts()
+        donateActivityShortcuts()
+        donateAnalysisShortcuts()
     }
     
     // MARK: - Intent Handling
     
-    /// Handle "play media" intents from Siri
+    /// Handle play media intents from Siri
     func handle(intent: INPlayMediaIntent, completion: @escaping (INPlayMediaIntentResponse) -> Void) {
         // Extract the command from the media identifier
         if let mediaItems = intent.mediaItems, let firstItem = mediaItems.first, let identifier = firstItem.identifier {
@@ -113,6 +112,196 @@ class SiriIntegrationService: NSObject, INPlayMediaIntentHandling {
         // Return success response
         let response = INPlayMediaIntentResponse(code: .success, userActivity: nil)
         completion(response)
+    }
+    
+    /// Handle search for media intents
+    func handle(intent: INSearchForMediaIntent, completion: @escaping (INSearchForMediaIntentResponse) -> Void) {
+        // Extract search parameters
+        let searchTerm = intent.mediaSearch?.mediaName ?? ""
+        let mediaType = intent.mediaType
+        
+        // Search for matching mixtapes
+        searchMixtapes(term: searchTerm, mediaType: mediaType) { items in
+            // Create response with found items
+            let response = INSearchForMediaIntentResponse(code: .success, userActivity: nil)
+            response.mediaItems = items
+            completion(response)
+        }
+    }
+    
+    /// Handle add media intents (for creating playlists)
+    func handle(intent: INAddMediaIntent, completion: @escaping (INAddMediaIntentResponse) -> Void) {
+        // Extract media items and playlist name
+        guard let mediaItems = intent.mediaItems, !mediaItems.isEmpty else {
+            completion(INAddMediaIntentResponse(code: .failure, userActivity: nil))
+            return
+        }
+        
+        let playlistName = intent.playlistName ?? "New Siri Playlist"
+        
+        // Create a new mixtape with the given name
+        createMixtapeFromSiri(name: playlistName, mediaItems: mediaItems) { success in
+            let response = INAddMediaIntentResponse(code: success ? .success : .failure, userActivity: nil)
+            completion(response)
+        }
+    }
+    
+    // MARK: - Intent Resolution Methods
+    
+    /// Resolve media items for play intent
+    func resolveMediaItems(for intent: INPlayMediaIntent, with completion: @escaping ([INMediaItemResolutionResult]) -> Void) {
+        // If media items are provided, return success
+        if let mediaItems = intent.mediaItems, !mediaItems.isEmpty {
+            let resolutionResults = mediaItems.map { INMediaItemResolutionResult.success(with: $0) }
+            completion(resolutionResults)
+        } else {
+            // If no media items provided, suggest default items based on current mood
+            let defaultItem = createMediaItemForCurrentMood()
+            completion([INMediaItemResolutionResult.success(with: defaultItem)])
+        }
+    }
+    
+    /// Resolve media search for search intent
+    func resolveMediaSearch(for intent: INSearchForMediaIntent, with completion: @escaping (INMediaSearchResolutionResult) -> Void) {
+        if intent.mediaSearch != nil {
+            completion(.success(with: intent.mediaSearch!))
+        } else {
+            completion(.needsValue())
+        }
+    }
+    
+    /// Resolve media type for search intent
+    func resolveMediaType(for intent: INSearchForMediaIntent, with completion: @escaping (INMediaItemTypeResolutionResult) -> Void) {
+        if intent.mediaType != .unknown {
+            completion(.success(with: intent.mediaType))
+        } else {
+            completion(.success(with: .music))
+        }
+    }
+    
+    // MARK: - Shortcut Donation Methods
+    
+    /// Donate shortcuts for playing mood-based music
+    private func donatePlayMoodShortcuts() {
+        for mood in Mood.allCases {
+            let intent = INPlayMediaIntent()
+            
+            // Create media item
+            let mediaItem = INMediaItem(
+                identifier: "play_mood_\(mood.rawValue.lowercased())",
+                title: "Play \(mood.rawValue) Music",
+                type: .music,
+                artwork: nil
+            )
+            
+            // Set additional properties
+            intent.mediaItems = [mediaItem]
+            intent.suggestedInvocationPhrase = "Play \(mood.rawValue.lowercased()) music"
+            
+            // Donate the shortcut
+            let interaction = INInteraction(intent: intent, response: nil)
+            interaction.donate { error in
+                if let error = error {
+                    print("SiriIntegration - Failed to donate play mood shortcut: \(error)")
+                }
+            }
+        }
+    }
+    
+    /// Donate shortcuts for creating mixtapes
+    private func donateCreateMixtapeShortcuts() {
+        for mood in Mood.allCases {
+            let intent = INPlayMediaIntent()
+            
+            // Create media item
+            let mediaItem = INMediaItem(
+                identifier: "create_mood_\(mood.rawValue.lowercased())",
+                title: "Create \(mood.rawValue) Mixtape",
+                type: .music,
+                artwork: nil
+            )
+            
+            // Set additional properties
+            intent.mediaItems = [mediaItem]
+            intent.suggestedInvocationPhrase = "Create a \(mood.rawValue.lowercased()) mixtape"
+            
+            // Donate the shortcut
+            let interaction = INInteraction(intent: intent, response: nil)
+            interaction.donate { error in
+                if let error = error {
+                    print("SiriIntegration - Failed to donate create mixtape shortcut: \(error)")
+                }
+            }
+        }
+    }
+    
+    /// Donate shortcuts for activity-based mixtapes
+    private func donateActivityShortcuts() {
+        let activities = ["workout", "study", "commute", "party", "sleep", "work", "relaxation"]
+        let displayNames = ["Workout", "Study", "Commute", "Party", "Sleep", "Work", "Relaxation"]
+        
+        for (index, activity) in activities.enumerated() {
+            let intent = INPlayMediaIntent()
+            
+            // Create media item
+            let mediaItem = INMediaItem(
+                identifier: "create_activity_\(activity)",
+                title: "Create \(displayNames[index]) Mixtape",
+                type: .music,
+                artwork: nil
+            )
+            
+            // Set additional properties
+            intent.mediaItems = [mediaItem]
+            intent.suggestedInvocationPhrase = "Create a \(activity) mixtape"
+            
+            // Donate the shortcut
+            let interaction = INInteraction(intent: intent, response: nil)
+            interaction.donate { error in
+                if let error = error {
+                    print("SiriIntegration - Failed to donate activity shortcut: \(error)")
+                }
+            }
+        }
+    }
+    
+    /// Donate shortcuts for analysis features
+    private func donateAnalysisShortcuts() {
+        // Analyze current song shortcut
+        let analyzeIntent = INPlayMediaIntent()
+        let analyzeItem = INMediaItem(
+            identifier: "analyze_current_song",
+            title: "Analyze Current Song",
+            type: .music,
+            artwork: nil
+        )
+        analyzeIntent.mediaItems = [analyzeItem]
+        analyzeIntent.suggestedInvocationPhrase = "Analyze this song"
+        
+        let analyzeInteraction = INInteraction(intent: analyzeIntent, response: nil)
+        analyzeInteraction.donate { error in
+            if let error = error {
+                print("SiriIntegration - Failed to donate analyze shortcut: \(error)")
+            }
+        }
+        
+        // Show insights shortcut
+        let insightsIntent = INPlayMediaIntent()
+        let insightsItem = INMediaItem(
+            identifier: "show_insights",
+            title: "Show Music Insights",
+            type: .music,
+            artwork: nil
+        )
+        insightsIntent.mediaItems = [insightsItem]
+        insightsIntent.suggestedInvocationPhrase = "Show my music insights"
+        
+        let insightsInteraction = INInteraction(intent: insightsIntent, response: nil)
+        insightsInteraction.donate { error in
+            if let error = error {
+                print("SiriIntegration - Failed to donate insights shortcut: \(error)")
+            }
+        }
     }
     
     // MARK: - Command Implementations
@@ -164,11 +353,39 @@ class SiriIntegrationService: NSObject, INPlayMediaIntentHandling {
         }
     }
     
+    /// Create a new mixtape for a specific activity
+    private func createActivityBasedMixtape(_ activity: ActivityType) {
+        // Determine the best mood for this activity
+        let mood = getDefaultMoodForActivity(activity)
+        
+        // Generate a new mixtape
+        let newMixtape = aiService.generateMoodMixtape(mood: mood, context: moc)
+        
+        // Update title to reflect activity
+        newMixtape.title = getActivityMixtapeTitle(activity)
+        
+        // Save to CoreData
+        do {
+            try moc.save()
+            
+            // Track interaction
+            aiService.trackInteraction(type: "siri_create_activity_mixtape_\(activity.rawValue)")
+        } catch {
+            print("SiriIntegration - Error saving activity mixtape: \(error)")
+        }
+    }
+    
     /// Analyze the currently playing song
     private func analyzeCurrentSong() {
-        // In a real app, this would trigger the audio analysis
+        // In a real app, this would navigate to the audio analysis view
         // For now, just track the interaction
         aiService.trackInteraction(type: "siri_analyze_current_song")
+        
+        // If there's a current song, analyze it
+        if let currentItem = player.currentItem {
+            // Use audio analysis service to analyze
+            aiService.detectMoodFromCurrentAudio(player: player)
+        }
     }
     
     /// Show the insights dashboard
@@ -176,6 +393,13 @@ class SiriIntegrationService: NSObject, INPlayMediaIntentHandling {
         // In a real app, this would navigate to the insights view
         // For now, just track the interaction
         aiService.trackInteraction(type: "siri_show_insights")
+    }
+    
+    /// Open the mood selector
+    private func openMoodSelector() {
+        // In a real app, this would open the mood selector view
+        // For now, just track the interaction
+        aiService.trackInteraction(type: "siri_open_mood_selector")
     }
     
     /// Play a recommended mixtape
@@ -219,6 +443,109 @@ class SiriIntegrationService: NSObject, INPlayMediaIntentHandling {
         
         // Track interaction
         aiService.trackInteraction(type: "siri_play_mixtape", mixtape: mixtape)
+    }
+    
+    /// Search for mixtapes matching a term
+    private func searchMixtapes(term: String, mediaType: INMediaItemType, completion: @escaping ([INMediaItem]) -> Void) {
+        // Create fetch request
+        let fetchRequest: NSFetchRequest<MixTape> = MixTape.fetchRequest()
+        
+        // If search term is a mood, search by mood tag
+        if let mood = Mood.allCases.first(where: { $0.rawValue.lowercased() == term.lowercased() }) {
+            fetchRequest.predicate = NSPredicate(format: "moodTags CONTAINS[cd] %@", mood.rawValue)
+        } else if !term.isEmpty {
+            // Otherwise search by title
+            fetchRequest.predicate = NSPredicate(format: "title CONTAINS[cd] %@", term)
+        }
+        
+        do {
+            // Fetch matching mixtapes
+            let mixtapes = try moc.fetch(fetchRequest)
+            
+            // Convert to INMediaItems
+            let mediaItems = mixtapes.map { mixtape -> INMediaItem in
+                return INMediaItem(
+                    identifier: mixtape.objectID.uriRepresentation().absoluteString,
+                    title: mixtape.wrappedTitle,
+                    type: .music,
+                    artwork: nil
+                )
+            }
+            
+            completion(mediaItems)
+        } catch {
+            print("SiriIntegration - Error searching mixtapes: \(error)")
+            completion([])
+        }
+    }
+    
+    /// Create a mixtape from Siri request
+    private func createMixtapeFromSiri(name: String, mediaItems: [INMediaItem], completion: @escaping (Bool) -> Void) {
+        // Create a new mixtape
+        let newMixtape = MixTape(context: moc)
+        newMixtape.title = name
+        
+        // Set properties
+        newMixtape.aiGenerated = true
+        
+        // Try to determine mood from name
+        for mood in Mood.allCases {
+            if name.lowercased().contains(mood.rawValue.lowercased()) {
+                newMixtape.moodTags = mood.rawValue
+                break
+            }
+        }
+        
+        // In a real implementation, we would add the songs here
+        // For now, just save the empty mixtape
+        do {
+            try moc.save()
+            aiService.trackInteraction(type: "siri_create_mixtape")
+            completion(true)
+        } catch {
+            print("SiriIntegration - Error creating mixtape: \(error)")
+            completion(false)
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    /// Create a media item based on current mood
+    private func createMediaItemForCurrentMood() -> INMediaItem {
+        let currentMood = aiService.moodEngine.currentMood
+        
+        return INMediaItem(
+            identifier: "play_mood_\(currentMood.rawValue.lowercased())",
+            title: "Play \(currentMood.rawValue) Music",
+            type: .music,
+            artwork: nil
+        )
+    }
+    
+    /// Get default mood for an activity
+    private func getDefaultMoodForActivity(_ activity: ActivityType) -> Mood {
+        switch activity {
+        case .workout: return .energetic
+        case .study: return .focused
+        case .commute: return .happy
+        case .party: return .energetic
+        case .sleep: return .relaxed
+        case .work: return .focused
+        case .relaxation: return .relaxed
+        }
+    }
+    
+    /// Get a title for an activity-based mixtape
+    private func getActivityMixtapeTitle(_ activity: ActivityType) -> String {
+        switch activity {
+        case .workout: return "Workout Mix"
+        case .study: return "Study Session"
+        case .commute: return "Commute Companion"
+        case .party: return "Party Starter"
+        case .sleep: return "Sleep Sounds"
+        case .work: return "Work Focus"
+        case .relaxation: return "Relaxation Time"
+        }
     }
 }
 
@@ -289,10 +616,11 @@ class SiriShortcutsViewController: UIViewController, INUIAddVoiceShortcutViewCon
             stackView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20)
         ])
         
-        // Add shortcut buttons
+        // Add shortcut buttons for common actions
         addShortcutButton(to: stackView, title: "Play energizing music", identifier: "play_mood_energetic")
         addShortcutButton(to: stackView, title: "Play relaxing music", identifier: "play_mood_relaxed")
         addShortcutButton(to: stackView, title: "Create focused mixtape", identifier: "create_mood_focused")
+        addShortcutButton(to: stackView, title: "Create workout playlist", identifier: "create_activity_workout")
         addShortcutButton(to: stackView, title: "Analyze current song", identifier: "analyze_current_song")
         addShortcutButton(to: stackView, title: "Show music insights", identifier: "show_insights")
     }
@@ -342,6 +670,7 @@ class SiriShortcutsViewController: UIViewController, INUIAddVoiceShortcutViewCon
         case "play_mood_energetic": return "Play something energizing"
         case "play_mood_relaxed": return "Play something relaxing"
         case "create_mood_focused": return "Create a focus mixtape"
+        case "create_activity_workout": return "Make me a workout playlist"
         case "analyze_current_song": return "Analyze this song"
         case "show_insights": return "Show my music insights"
         default: return "Play music"
