@@ -1,0 +1,35 @@
+{
+  "generatedAt": "2025-05-20T17:28:48.367Z",
+  "assets": [
+    {
+      "name": "AppIcon",
+      "type": "appiconset",
+      "path": "./Assets.xcassets/AppIcon.appiconset",
+      "requiredForApp": true
+    },
+    {
+      "name": "LaunchIcon",
+      "type": "imageset",
+      "path": "./Assets.xcassets/LaunchIcon.imageset",
+      "requiredForApp": true
+    },
+    {
+      "name": "Colors/appPrimary",
+      "type": "colorset",
+      "path": "./Assets.xcassets/Colors/appPrimary.colorset",
+      "requiredForApp": true
+    },
+    {
+      "name": "Colors/appSecondary",
+      "type": "colorset",
+      "path": "./Assets.xcassets/Colors/appSecondary.colorset",
+      "requiredForApp": true
+    },
+    {
+      "name": "Colors/background",
+      "type": "colorset",
+      "path": "./Assets.xcassets/Colors/background.colorset",
+      "requiredForApp": true
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+# Custom SwiftLint rule for asset verification
+included:
+  - Sources
+  - Tests
+
+excluded:
+  - Tests/LinuxMain.swift
+  - .build
+
+custom_rules:
+  asset_validation:
+    name: "Asset Validation Rule"
+    regex: 'UIImage\(named:\s*"([^"]+)"\)'
+    message: "Make sure this image asset is included in ASSET_MANIFEST.json"
+    severity: warning
+
+  color_validation:
+    name: "Color Asset Validation Rule"
+    regex: 'UIColor\(named:\s*"([^"]+)"\)'
+    message: "Make sure this color asset is included in ASSET_MANIFEST.json"
+    severity: warning
+
+  # Rule to ensure all images are loaded through our asset helper
+  use_asset_helper:
+    name: "Use Asset Helper"
+    regex: 'UIImage\(named:'
+    message: "Consider using `Asset.image(name:)` to ensure assets are properly validated at compile time"
+    severity: warning
