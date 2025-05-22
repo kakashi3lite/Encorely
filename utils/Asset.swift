@@ -1,8 +1,17 @@
 import UIKit
 import SwiftUI
 
-/// Asset loading error types
-enum AssetError: LocalizedError {
+/// Errors that can occur when loading assets.
+///
+/// These errors provide specific information about missing resources
+/// and proper error handling in both debug and release builds.
+///
+/// ## Topics
+///
+/// ### Error Cases
+/// - ``missingImage(_:)``
+/// - ``missingColor(_:)``
+public enum AssetError: LocalizedError {
     case missingImage(String)
     case missingColor(String)
     
@@ -16,10 +25,67 @@ enum AssetError: LocalizedError {
     }
 }
 
-/// Provides type-safe access to app assets
-enum Asset {
-    /// App images
-    enum Image: String, CaseIterable {
+/// Asset management system for the AIMixtapes framework.
+///
+/// The `Asset` enum provides type-safe access to app resources including:
+/// - Images
+/// - Colors
+/// - Mood-based color schemes
+/// - Personality-based color schemes
+///
+/// ## Overview
+///
+/// The asset system ensures compile-time safety for resource access and provides
+/// proper error handling for missing assets in both debug and release builds.
+///
+/// ### Using Images
+/// ```swift
+/// // Get a UIImage
+/// let image = Asset.Image.launchIcon.uiImage
+///
+/// // Get a SwiftUI Image
+/// let swiftUIImage = Asset.Image.launchIcon.image
+/// ```
+///
+/// ### Using Colors
+/// ```swift
+/// // Get a UIColor
+/// let color = Asset.Color.appPrimary.uiColor
+///
+/// // Get a SwiftUI Color
+/// let swiftUIColor = Asset.Color.appPrimary.color
+/// ```
+///
+/// ### Using Mood Colors
+/// ```swift
+/// let happyColor = Asset.MoodColor.happy.color
+/// let energeticWithOpacity = Asset.MoodColor.energetic.withOpacity(0.5)
+/// ```
+///
+/// ## Topics
+///
+/// ### Image Assets
+/// - ``Image``
+///
+/// ### Color Assets
+/// - ``Color``
+/// - ``MoodColor``
+/// - ``PersonalityColor``
+///
+/// ### Error Handling
+/// - ``AssetError``
+public enum Asset {
+    /// Typed access to app image assets.
+    ///
+    /// Provides compile-time validation of image names and
+    /// convenient conversion between UIImage and SwiftUI.Image.
+    ///
+    /// ## Example
+    /// ```swift
+    /// let launchIcon = Asset.Image.launchIcon.uiImage
+    /// let swiftUIIcon = Asset.Image.launchIcon.image
+    /// ```
+    public enum Image: String, CaseIterable {
         case launchIcon = "LaunchIcon"
         
         /// Get a UIImage for this asset
@@ -37,8 +103,17 @@ enum Asset {
         }
     }
     
-    /// App colors
-    enum Color: String, CaseIterable {
+    /// Type-safe access to app color assets.
+    ///
+    /// Provides compile-time validation of color names and
+    /// convenient conversion between UIColor and SwiftUI.Color.
+    ///
+    /// ## Example
+    /// ```swift
+    /// let primary = Asset.Color.appPrimary.uiColor
+    /// let background = Asset.Color.background.color
+    /// ```
+    public enum Color: String, CaseIterable {
         case appPrimary
         case appSecondary
         case background
@@ -58,8 +133,27 @@ enum Asset {
         }
     }
     
-    /// Mood-based colors
-    enum MoodColor: String, CaseIterable {
+    /// Mood-based color schemes.
+    ///
+    /// Provides color assets that represent different moods,
+    /// with support for both UIKit and SwiftUI.
+    ///
+    /// ## Example
+    /// ```swift
+    /// let happyColor = Asset.MoodColor.happy.color
+    /// let energeticFaded = Asset.MoodColor.energetic.withOpacity(0.5)
+    /// ```
+    ///
+    /// ## Topics
+    ///
+    /// ### Available Moods
+    /// - ``angry``
+    /// - ``energetic``
+    /// - ``focused``
+    /// - ``happy``
+    /// - ``melancholic``
+    /// - ``relaxed``
+    public enum MoodColor: String, CaseIterable {
         case angry = "Angry"
         case energetic = "Energetic"
         case focused = "Focused"
@@ -92,8 +186,24 @@ enum Asset {
         }
     }
     
-    /// Personality-based colors
-    enum PersonalityColor: String, CaseIterable {
+    /// Personality-based color schemes.
+    ///
+    /// Provides color assets that represent different personality types,
+    /// with support for both UIKit and SwiftUI.
+    ///
+    /// ## Example
+    /// ```swift
+    /// let curatorColor = Asset.PersonalityColor.curator.color
+    /// let explorerFaded = Asset.PersonalityColor.explorer.withOpacity(0.5)
+    /// ```
+    ///
+    /// ## Topics
+    ///
+    /// ### Available Personalities
+    /// - ``curator``
+    /// - ``enthusiast``
+    /// - ``explorer``
+    public enum PersonalityColor: String, CaseIterable {
         case curator = "Curator"
         case enthusiast = "Enthusiast"
         case explorer = "Explorer"
