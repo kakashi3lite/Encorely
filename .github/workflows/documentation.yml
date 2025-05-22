@@ -1,0 +1,33 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Select Xcode
+      uses: maxim-lobanov/setup-xcode@v1
+      with:
+        xcode-version: latest-stable
+        
+    - name: Build documentation
+      run: |
+        swift package --allow-writing-to-directory ./docs \
+          generate-documentation --target AIMixtapes \
+          --disable-indexing \
+          --transform-for-static-hosting \
+          --hosting-base-path AI-Mixtapes \
+          --output-path ./docs
+          
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./docs

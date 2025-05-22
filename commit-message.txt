@@ -1,0 +1,14 @@
+chore(assets): add asset verification script
+
+This commit implements a comprehensive asset management pipeline to ensure
+reliability and prevent missing assets. The implementation includes:
+
+- AssetScanner for cataloging all assets in Assets.xcassets
+- AssetManifestGenerator for creating ASSET_MANIFEST.json
+- AssetValidator for validation against the manifest
+- Asset helper for type-safe access to app assets
+- GitHub Action workflow for CI/CD integration
+- Pre-commit hook for local validation
+- SwiftLint rules for asset usage compliance
+
+Resolves #23

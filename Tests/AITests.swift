@@ -4,18 +4,21 @@ import Vision
 @testable import AIMixtapes
 
 class AITests: XCTestCase {
+    var colorTransitionManager: ColorTransitionManager!
     var moodEngine: MoodEngine!
     var personalityEngine: PersonalityEngine!
     var aiLogger: AILogger!
     
     override func setUp() {
         super.setUp()
+        colorTransitionManager = ColorTransitionManager()
         moodEngine = MoodEngine()
         personalityEngine = PersonalityEngine()
         aiLogger = AILogger.shared
     }
     
     override func tearDown() {
+        colorTransitionManager = nil
         moodEngine = nil
         personalityEngine = nil
         aiLogger.resetMetrics()
@@ -313,6 +316,72 @@ class AITests: XCTestCase {
         }
     }
     
+    // MARK: - Mood Color Transition Tests
+    
+    func testMoodColorTransitions() {
+        // Test mood transitions
+        let expectation = XCTestExpectation(description: "Mood transition")
+        
+        // Initial state
+        XCTAssertEqual(colorTransitionManager.currentMoodColor, .happy)
+        
+        // Transition to new mood
+        colorTransitionManager.transition(to: .energetic) {
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(colorTransitionManager.currentMoodColor, .energetic)
+    }
+    
+    func testPersonalityColorUpdates() {
+        // Test personality updates
+        XCTAssertEqual(colorTransitionManager.currentPersonalityColor, .enthusiast)
+        
+        colorTransitionManager.updatePersonality(.curator)
+        XCTAssertEqual(colorTransitionManager.currentPersonalityColor, .curator)
+    }
+    
+    func testColorAssetAvailability() {
+        // Test mood colors
+        for mood in Asset.MoodColor.allCases {
+            XCTAssertNotNil(mood.color, "Mood color \(mood.rawValue) should exist")
+            XCTAssertNotNil(mood.uiColor, "UIColor for mood \(mood.rawValue) should exist")
+        }
+        
+        // Test personality colors
+        for personality in Asset.PersonalityColor.allCases {
+            XCTAssertNotNil(personality.color, "Personality color \(personality.rawValue) should exist")
+            XCTAssertNotNil(personality.uiColor, "UIColor for personality \(personality.rawValue) should exist")
+        }
+    }
+    
+    func testMoodEngineIntegration() {
+        let moodExpectation = XCTestExpectation(description: "Mood detection")
+        
+        // Test mood detection
+        moodEngine.detectMood(from: "energetic upbeat music") { result in
+            switch result {
+            case .success(let mood):
+                XCTAssertEqual(mood, .energetic)
+            case .failure(let error):
+                XCTFail("Mood detection failed: \(error)")
+            }
+            moodExpectation.fulfill()
+        }
+        
+        wait(for: [moodExpectation], timeout: 2.0)
+    }
+    
+    func testPerformance() {
+        measure {
+            // Test color transition performance
+            for mood in Asset.MoodColor.allCases {
+                colorTransitionManager.transition(to: mood)
+            }
+        }
+    }
+    
     // MARK: - Helper Functions
     
     private func reportMemoryUsage() -> Int {
@@ -348,5 +417,107 @@ private enum MockData {
             "tempo": ["slow": 0.3, "medium": 0.4, "fast": 0.3],
             "totalListeningTime": 3600
         ]
+    }
+}
+
+// MARK: - Performance Benchmarks
+
+extension AITests {
+    func testAudioProcessingBenchmark() {
+        let sampleCounts = [1024, 2048, 4096, 8192]
+        
+        for count in sampleCounts {
+            measure(metrics: [
+                XCTCPUMetric(),
+                XCTMemoryMetric(),
+                XCTStorageMetric(),
+                XCTClockMetric()
+            ]) {
+                let samples = (0..<count).map { _ in Float.random(in: -1...1) }
+                let features = fftProcessor.extractFeatures(from: samples)
+                XCTAssertNotNil(features)
+            }
+        }
+    }
+    
+    func testMoodDetectionBenchmark() async {
+        measure(metrics: [
+            XCTCPUMetric(),
+            XCTMemoryMetric(),
+            XCTClockMetric()
+        ]) {
+            let expectation = expectation(description: "Mood detection")
+            
+            Task {
+                let audioURL = Bundle.main.url(forResource: "happy_song", withExtension: "mp3")!
+                _ = try? await moodEngine.detectMood(from: audioURL)
+                expectation.fulfill()
+            }
+            
+            wait(for: [expectation], timeout: 5.0)
+        }
+    }
+    
+    func testPersonalityPredictionBenchmark() {
+        measure(metrics: [
+            XCTCPUMetric(),
+            XCTMemoryMetric(),
+            XCTClockMetric()
+        ]) {
+            for _ in 0..<10 {
+                let history = MockData.createListeningHistory()
+                let prediction = personalityEngine.predictPersonality(from: history)
+                XCTAssertNotNil(prediction)
+            }
+        }
+    }
+    
+    func testColorTransitionBenchmark() {
+        measure(metrics: [
+            XCTCPUMetric(),
+            XCTMemoryMetric(),
+            XCTClockMetric()
+        ]) {
+            let expectation = expectation(description: "Color transitions")
+            var transitionCount = 0
+            
+            for mood in Asset.MoodColor.allCases {
+                colorTransitionManager.transition(to: mood) {
+                    transitionCount += 1
+                    if transitionCount == Asset.MoodColor.allCases.count {
+                        expectation.fulfill()
+                    }
+                }
+            }
+            
+            wait(for: [expectation], timeout: 5.0)
+        }
+    }
+    
+    func testRecommendationEngineBenchmark() async {
+        measure(metrics: [
+            XCTCPUMetric(),
+            XCTMemoryMetric(),
+            XCTClockMetric()
+        ]) {
+            let recommendationEngine = RecommendationEngine(
+                moodEngine: moodEngine,
+                personalityEngine: personalityEngine
+            )
+            
+            let expectation = expectation(description: "Recommendations")
+            
+            Task {
+                let startMemory = reportMemoryUsage()
+                let recommendations = try? await recommendationEngine.getRecommendations(limit: 20)
+                let endMemory = reportMemoryUsage()
+                
+                XCTAssertNotNil(recommendations)
+                XCTAssertLessThanOrEqual(endMemory - startMemory, 200 * 1024 * 1024) // 200MB limit
+                expectation.fulfill()
+            }
+            
+            wait(for: [expectation], timeout: 10.0)
+        }
     }
 }

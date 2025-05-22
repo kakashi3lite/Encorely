@@ -28,61 +28,86 @@ struct MainTabView: View {
     @State private var navigationPath = NavigationPath()
     @State private var newlyCreatedMixtape: MixTape?
     @State private var shouldNavigateToMixtape = false
-    
-    var body: some View {
-        TabView(selection: $selectedTab) {
-            // Library Tab with NavigationStack
-            NavigationStack(path: $navigationPath) {
-                ContentView(
-                    queuePlayer: queuePlayer,
-                    playerItemObserver: playerItemObserver,
-                    playerStatusObserver: playerStatusObserver,
-                    currentPlayerItems: currentPlayerItems,
-                    currentSongName: currentSongName,
-                    isPlaying: isPlaying,
-                    aiService: aiService
-                )
-                .navigationDestination(for: MixTape.self) { mixtape in
-                    MixTapeView(
-                        songs: mixtape.songsArray,
-                        mixTape: mixtape,
-                        currentMixTapeName: .constant(""),
-                        currentMixTapeImage: .constant(URL(fileURLWithPath: "")),
+      var body: some View {
+        ZStack(alignment: .bottom) {
+            TabView(selection: $selectedTab) {
+                // Library Tab with NavigationStack
+                NavigationStack(path: $navigationPath) {
+                    ContentView(
                         queuePlayer: queuePlayer,
-                        currentStatusObserver: playerStatusObserver,
-                        currentItemObserver: playerItemObserver,
+                        playerItemObserver: playerItemObserver,
+                        playerStatusObserver: playerStatusObserver,
                         currentPlayerItems: currentPlayerItems,
                         currentSongName: currentSongName,
                         isPlaying: isPlaying,
                         aiService: aiService
                     )
+                    .navigationDestination(for: MixTape.self) { mixtape in
+                        MixTapeView(
+                            songs: mixtape.songsArray,
+                            mixTape: mixtape,
+                            currentMixTapeName: .constant(""),
+                            currentMixTapeImage: .constant(URL(fileURLWithPath: "")),
+                            queuePlayer: queuePlayer,
+                            currentStatusObserver: playerStatusObserver,
+                            currentItemObserver: playerItemObserver,
+                            currentPlayerItems: currentPlayerItems,
+                            currentSongName: currentSongName,
+                            isPlaying: isPlaying,
+                            aiService: aiService
+                        )
+                    }
                 }
-            }
-            .environment(\.managedObjectContext, moc)
-            .tabItem { Label("Library", systemImage: "music.note.list") }
-            .tag(0)
-            
-            // AI Generate Tab with completion callback
-            AIGeneratedMixtapeViewWrapper(
-                aiService: aiService,
-                onMixtapeCreated: handleMixtapeCreated
-            )
-            .environment(\.managedObjectContext, moc)
-            .tabItem { Label("Generate", systemImage: "wand.and.stars") }
-            .tag(1)
-            
-            AudioVisualizationView(queuePlayer: queuePlayer, aiService: aiService, currentSongName: currentSongName)
-                .tabItem { Label("Analyze", systemImage: "waveform") }
-                .tag(2)
-            
-            InsightsDashboardView(aiService: aiService)
                 .environment(\.managedObjectContext, moc)
-                .tabItem { Label("Insights", systemImage: "chart.bar") }
-                .tag(3)
+                .tabItem {
+                    Label("Library", systemImage: "music.note.list")
+                        .environment(\.symbolVariants, selectedTab == 0 ? .fill : .none)
+                }
+                .tag(0)
             
-            SettingsView(aiService: aiService)
-                .tabItem { Label("Settings", systemImage: "gear") }
-                .tag(4)
+                // AI Generate Tab
+                AIGeneratedMixtapeViewWrapper(
+                    aiService: aiService,
+                    onMixtapeCreated: handleMixtapeCreated
+                )
+                .environment(\.managedObjectContext, moc)
+                .tabItem {
+                    Label("Generate", systemImage: "wand.and.stars")
+                        .environment(\.symbolVariants, selectedTab == 1 ? .fill : .none)
+                }
+                .tag(1)
+            
+                AudioVisualizationView(queuePlayer: queuePlayer, aiService: aiService, currentSongName: currentSongName)
+                    .tabItem {
+                        Label("Analyze", systemImage: "waveform")
+                            .environment(\.symbolVariants, selectedTab == 2 ? .fill : .none)
+                    }
+                    .tag(2)
+            
+                InsightsDashboardView(aiService: aiService)
+                    .environment(\.managedObjectContext, moc)
+                    .tabItem {
+                        Label("Insights", systemImage: "chart.bar")
+                            .environment(\.symbolVariants, selectedTab == 3 ? .fill : .none)
+                    }
+                    .tag(3)
+            
+                SettingsView(aiService: aiService)
+                    .tabItem {
+                        Label("Settings", systemImage: "gear")
+                            .environment(\.symbolVariants, selectedTab == 4 ? .fill : .none)
+                    }
+                    .tag(4)
+            }
+            .tint(aiService.moodEngine.currentMood.color)
+
+            // AI Suggestion Banner
+            AISuggestionBanner(
+                isVisible: .constant(true),
+                aiService: aiService,
+                tabSelection: $selectedTab
+            )
+            .padding(.bottom, 60)
         }
         .onChange(of: shouldNavigateToMixtape) { navigate in
             if navigate, let mixtape = newlyCreatedMixtape {
@@ -220,53 +245,95 @@ struct AISuggestionBanner: View {
     
     /// Generate a context-aware suggestion
     private func generateSuggestion() {
-        // In a real app, this would be based on user context, time of day, etc.
-        // For now, we'll use some examples
-        
         let currentMood = aiService.moodEngine.currentMood
         let personality = aiService.personalityEngine.currentPersonality
+        let timeOfDay = Calendar.current.component(.hour, from: Date())
         
-        // Possible suggestions
-        let suggestions = [
-            AISuggestion(
-                title: "Create a \(currentMood.rawValue) Mixtape",
-                message: "Generate a mixtape that matches your current \(currentMood.rawValue.lowercased()) mood.",
-                icon: currentMood.systemIcon,
-                color: currentMood.color,
-                action: .navigateToTab(1),
-                actionTitle: "Create Now"
-            ),
-            AISuggestion(
-                title: "Analyze Your Music",
-                message: "Discover the audio features and mood patterns in your current song.",
-                icon: "waveform.path.ecg",
+        // Dynamic suggestions based on time and context
+        var suggestions: [AISuggestion] = []
+        
+        // Morning suggestions (6 AM - 12 PM)
+        if timeOfDay >= 6 && timeOfDay < 12 {
+            suggestions.append(AISuggestion(
+                title: "Morning Energy Mix",
+                message: "Start your day with an energizing \(currentMood.rawValue) playlist",
+                icon: "sunrise.fill",
                 color: .orange,
-                action: .navigateToTab(2),
-                actionTitle: "Analyze"
-            ),
-            AISuggestion(
-                title: "Check Your Insights",
-                message: "See how your listening habits have changed this week.",
-                icon: "chart.bar",
-                color: .green,
-                action: .navigateToTab(3),
-                actionTitle: "View Insights"
-            ),
-            AISuggestion(
-                title: "Voice Commands Available",
-                message: "Try saying 'Hey Siri, play a \(currentMood.rawValue.lowercased()) playlist'",
-                icon: "waveform.and.mic",
+                action: .createMixtape(currentMood),
+                actionTitle: "Create Mix"
+            ))
+        }
+        
+        // Work hours suggestions (9 AM - 5 PM)
+        if timeOfDay >= 9 && timeOfDay < 17 {
+            suggestions.append(AISuggestion(
+                title: "Focus Enhancement",
+                message: "Generate a concentration-boosting playlist based on your work patterns",
+                icon: "brain.head.profile",
                 color: .blue,
-                action: nil,
-                actionTitle: nil
+                action: .navigateToTab(1),
+                actionTitle: "Enhance Focus"
+            ))
+        }
+        
+        // Evening suggestions (5 PM - 11 PM)
+        if timeOfDay >= 17 && timeOfDay < 23 {
+            suggestions.append(AISuggestion(
+                title: "Evening Unwinding",
+                message: "Create a relaxing mix to match your evening mood",
+                icon: "moon.stars.fill",
+                color: .purple,
+                action: .createMixtape(.relaxed),
+                actionTitle: "Unwind"
+            ))
+        }
+        
+        // Personality-based suggestions
+        switch personality {
+        case .explorer:
+            suggestions.append(AISuggestion(
+                title: "Discover New Sounds",
+                message: "Let AI find fresh tracks that match your adventurous taste",
+                icon: "compass.fill",
+                color: .green,
+                action: .navigateToTab(1),
+                actionTitle: "Explore"
+            ))
+        case .curator:
+            suggestions.append(AISuggestion(
+                title: "Organize Your Collection",
+                message: "Use AI to optimize your playlist organization",
+                icon: "square.stack.3d.up.fill",
+                color: .indigo,
+                action: .navigateToTab(3),
+                actionTitle: "Optimize"
+            ))
+        default:
+            suggestions.append(contentsOf: defaultSuggestions(mood: currentMood))
+        }
+        
+        // Pick most relevant suggestion
+        self.suggestion = selectMostRelevantSuggestion(from: suggestions)
+        aiService.trackInteraction(type: "ai_suggestion_shown")
+    }
+    
+    private func selectMostRelevantSuggestion(from suggestions: [AISuggestion]) -> AISuggestion? {
+        // Prioritize suggestions based on user's recent interactions
+        // For now, return random but in future could use more sophisticated selection
+        return suggestions.randomElement()
+    }
+    
+    private func defaultSuggestions(mood: Mood) -> [AISuggestion] {
+        [
+            AISuggestion(
+                title: "Mood-Matched Mix",
+                message: "Create a playlist that matches your \(mood.rawValue.lowercased()) mood",
+                icon: mood.systemIcon,
+                color: mood.color,
+                action: .createMixtape(mood),
+                actionTitle: "Create Now"
             )
         ]
-        
-        // Pick a random suggestion
-        self.suggestion = suggestions.randomElement()
-        
-        // Track impression
-        aiService.trackInteraction(type: "ai_suggestion_shown")
     }
     
     /// Set up a timer to periodically show suggestions

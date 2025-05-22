@@ -1,0 +1,43 @@
+//
+//  BuildConfig.xcconfig
+//  AIMixtapes
+//
+//  Created by Claude AI on 05/16/25.
+//
+
+// Configuration settings file format documentation can be found at:
+// https://help.apple.com/xcode/#/dev745c5c974
+
+// App Version
+MARKETING_VERSION = 1.0.0
+CURRENT_PROJECT_VERSION = 1
+
+// Deployment
+IPHONEOS_DEPLOYMENT_TARGET = 15.0
+MACOSX_DEPLOYMENT_TARGET = 12.0
+
+// Swift settings
+SWIFT_VERSION = 5.0
+SWIFT_OPTIMIZATION_LEVEL = -O
+SWIFT_COMPILATION_MODE = wholemodule
+
+// Build settings
+ENABLE_BITCODE = NO
+ENABLE_TESTABILITY = YES
+ENABLE_STRICT_OBJC_MSGSEND = YES
+CLANG_ENABLE_MODULES = YES
+CLANG_ENABLE_OBJC_ARC = YES
+
+// Signing
+CODE_SIGN_STYLE = Automatic
+DEVELOPMENT_TEAM = ${DEVELOPMENT_TEAM}
+
+// Asset compilation
+ASSETCATALOG_COMPILER_OPTIMIZATION = time
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
+
+// Other Linker Flags
+OTHER_LDFLAGS = $(inherited) -ObjC
+
+// Build Active Architecture Only
+ONLY_ACTIVE_ARCH = YES

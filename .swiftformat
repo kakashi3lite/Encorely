@@ -1,0 +1,57 @@
+# Swift format configuration
+
+--swiftversion 5.5
+
+# Basic formatting
+--indent 4
+--maxwidth 120
+--wraparguments before-first
+--wrapcollections before-first
+--wrapparameters before-first
+--xcodeindentation enabled
+--semicolons never
+--commas always
+--trimwhitespace always
+--indent-switch-case true
+
+# Braces
+--allman false
+--closingparen same-line
+
+# Organization
+--organizetypes class,struct,enum,extension
+--marktypes never
+--markextensions always
+--typeblanklines remove
+
+# Documentation
+--beforemarks empty
+--betweenmarks empty
+--organizemark "MARK: - "
+
+# Rules
+--enable blankLinesBetweenScopes
+--enable consecutiveSpaces
+--enable duplicateImports
+--enable elseOnSameLine
+--enable emptyBraces
+--enable leadingDelimiters
+--enable redundantInit
+--enable redundantLet
+--enable redundantNilInit
+--enable redundantParens
+--enable redundantPattern
+--enable redundantRawValues
+--enable redundantVoidReturnType
+--enable semicolons
+--enable sortedImports
+--enable spaceAroundBrackets
+--enable spaceAroundComments
+--enable spaceAroundGenerics
+--enable spaceAroundOperators
+--enable spaceInsideBrackets
+--enable spaceInsideGenerics
+--enable todos
+--enable trailingSpace
+--enable typeSugar
+--enable void

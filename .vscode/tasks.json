@@ -1,0 +1,45 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build for Mac",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-scheme",
+                "AIMixtapes",
+                "-configuration",
+                "Release",
+                "-destination",
+                "platform=macOS"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Clean Build",
+            "type": "shell",
+            "command": "xcodebuild clean && rm -rf ~/Library/Developer/Xcode/DerivedData/*",
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Performance Tests",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-scheme",
+                "AIMixtapes",
+                "-destination",
+                "platform=macOS",
+                "test",
+                "ONLY_TESTING=AIMixtapesTests/PerformanceTests"
+            ],
+            "group": "test"
+        }
+    ]
+}

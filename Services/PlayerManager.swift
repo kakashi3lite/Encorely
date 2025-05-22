@@ -11,7 +11,7 @@ import AVFoundation
 import Combine
 
 /// Manages audio playback and session handling for the app
-class PlayerManager {
+final class PlayerManager {
     static let shared = PlayerManager()
     
     // Main player and observers
@@ -26,6 +26,7 @@ class PlayerManager {
     
     private var playerItemObservation: NSKeyValueObservation?
     private var cancellables = Set<AnyCancellable>()
+    private var memoryWarningObserver: NSObjectProtocol?
     
     private init() {
         // Initialize player components
@@ -35,6 +36,7 @@ class PlayerManager {
         
         setupAudioSession()
         setupObservers()
+        setupMemoryWarningObserver()
     }
     
     private func setupAudioSession() {
@@ -82,6 +84,20 @@ class PlayerManager {
             .store(in: &cancellables)
     }
     
+    private func setupMemoryWarningObserver() {
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: .performanceMemoryWarning,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleMemoryWarning()
+        }
+    }
+    
+    private func handleMemoryWarning() {
+        cleanupResources()
+    }
+    
     private func handleAudioInterruption(_ notification: Notification) {
         guard let userInfo = notification.userInfo,
               let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
@@ -118,9 +134,19 @@ class PlayerManager {
         }
     }
     
+    private func cleanupResources() {
+        NotificationCenter.default.removeObserver(self)
+        currentPlayerItem?.asset.cancelLoading()
+        queue.async { [weak self] in
+            self?.playbackCache.removeAllObjects()
+        }
+    }
+
     deinit {
-        playerItemObservation?.invalidate()
-        cancellables.removeAll()
+        if let observer = memoryWarningObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        cleanupResources()
     }
 }
 
@@ -142,7 +168,21 @@ extension PlayerManager {
         isPlaying.value = true
     }
     
+    func play(_ track: Track) {
+        PerformanceMonitor.shared.startTracking("track_playback_\(track.id)")
+        queuePlayer.play()
+        isPlaying.value = true
+    }
+    
     func pause() {
+        queuePlayer.pause()
+        isPlaying.value = false
+    }
+    
+    func stop() {
+        if let currentTrack = currentTrack {
+            PerformanceMonitor.shared.endTracking("track_playback_\(currentTrack.id)")
+        }
         queuePlayer.pause()
         isPlaying.value = false
     }
