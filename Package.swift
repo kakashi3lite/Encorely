@@ -17,7 +17,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-collections", from: "1.0.0"),
         .package(url: "https://github.com/nalexn/ViewInspector", from: "0.9.0"),
         .package(url: "https://github.com/pointfreeco/swift-composable-architecture", from: "1.2.0"),
-        .package(url: "https://github.com/AudioKit/AudioKit", from: "5.6.0")
+        .package(url: "https://github.com/AudioKit/AudioKit", from: "5.6.0"),
+        .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", from: "1.11.1")
     ],
     targets: [
         .target(
@@ -35,7 +36,8 @@ let package = Package(
             name: "AIMixtapesTests",
             dependencies: [
                 "AIMixtapes",
-                "ViewInspector"
+                "ViewInspector",
+                .product(name: "SnapshotTesting", package: "swift-snapshot-testing")
             ],
             resources: [
                 .copy("TestResources")
