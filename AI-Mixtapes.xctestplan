@@ -6,9 +6,29 @@
       "options" : {
 
       }
+    },
+    {
+      "id" : "FB97B6E9-7C7D-43F6-B5DE-DA45C7E2DB15",
+      "name" : "Configuration 1",
+      "options" : {
+        "targetForVariableExpansion" : {
+          "containerPath" : "container:AI-Mixtapes.xcodeproj",
+          "identifier" : "13B07F861A680F5B00A75B9A",
+          "name" : "AI-Mixtapes"
+        }
+      }
     }
   ],
   "defaultOptions" : {
+    "codeCoverage" : {
+      "targets" : [
+        {
+          "containerPath" : "container:AI-Mixtapes.xcodeproj",
+          "identifier" : "13B07F861A680F5B00A75B9A",
+          "name" : "AI-Mixtapes"
+        }
+      ]
+    },
     "targetForVariableExpansion" : {
       "containerPath" : "container:AI-Mixtapes.xcodeproj",
       "identifier" : "88F2A67C2B3D7C0100E11D98",
@@ -21,6 +41,29 @@
         "containerPath" : "container:AI-Mixtapes.xcodeproj",
         "identifier" : "88F2A6922B3D7C0200E11D98",
         "name" : "AI-MixtapesTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:AI-Mixtapes.xcodeproj",
+        "identifier" : "00E356ED1AD99517003FC87E",
+        "name" : "AIMixtapesTests"
+      }
+    },
+    {
+      "enabled" : false,
+      "parallelizable" : true,
+      "target" : {
+        "containerPath" : "container:AI-Mixtapes.xcodeproj",
+        "identifier" : "00E356EE1AD99517003FC87E",
+        "name" : "AIMixtapesUITests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:AI-Mixtapes.xcodeproj",
+        "identifier" : "NEW_TARGET_ID",
+        "name" : "PerformanceTests"
       }
     }
   ],
