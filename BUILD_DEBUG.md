@@ -121,3 +121,57 @@ xcodebuild -project AI-Mixtapes.xcodeproj -scheme AI-Mixtapes -showBuildSettings
 - XcodeGen 2.43.0+
 - Swift 5.0+
 - iOS 15.0+ deployment target
+
+## Mac Performance Debugging
+
+### Performance Monitoring
+To track app performance:
+1. Check Xcode Instruments for:
+   - Memory leaks
+   - CPU usage
+   - I/O activity
+2. Use the PerformanceMonitor service:
+   ```swift
+   PerformanceMonitor.shared.startTracking("operation_name")
+   // ... your code ...
+   PerformanceMonitor.shared.endTracking("operation_name")
+   ```
+
+### Memory Management
+Watch for memory issues:
+1. Monitor Console.app for memory warnings
+2. Check PerformanceMonitor logs:
+   ```bash
+   xcrun simctl spawn booted log stream --predicate 'subsystem == "com.ai-mixtapes" AND category == "Performance"'
+   ```
+3. Use Xcode Memory Graph Debugger for leak detection
+
+### Build Configuration
+For optimal Mac builds:
+1. Use the "Build for Mac" task in VS Code
+2. Check BuildConfig.xcconfig for Mac-specific settings
+3. Monitor build logs for optimization opportunities
+
+### Performance Testing
+Run performance tests:
+1. Use the "Run Performance Tests" task
+2. Check test results for:
+   - Memory usage patterns
+   - Execution time regressions
+   - Resource cleanup efficiency
+
+### Common Issues and Solutions
+1. High Memory Usage
+   - Check PlayerManager resource cleanup
+   - Verify image cache purging
+   - Monitor Core Data fetch requests
+
+2. Slow UI Response
+   - Use trackPerformance modifier
+   - Check main thread operations
+   - Verify SwiftUI view updates
+
+3. Background Task Issues
+   - Monitor background task completion
+   - Check task cancellation handling
+   - Verify state restoration
