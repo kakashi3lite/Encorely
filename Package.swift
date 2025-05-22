@@ -15,14 +15,18 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-algorithms", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-collections", from: "1.0.0"),
-        .package(url: "https://github.com/nalexn/ViewInspector", from: "0.9.0")
+        .package(url: "https://github.com/nalexn/ViewInspector", from: "0.9.0"),
+        .package(url: "https://github.com/pointfreeco/swift-composable-architecture", from: "1.2.0"),
+        .package(url: "https://github.com/AudioKit/AudioKit", from: "5.6.0")
     ],
     targets: [
         .target(
             name: "AIMixtapes",
             dependencies: [
                 .product(name: "Algorithms", package: "swift-algorithms"),
-                .product(name: "Collections", package: "swift-collections")
+                .product(name: "Collections", package: "swift-collections"),
+                .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
+                .product(name: "AudioKit", package: "AudioKit")
             ],
             resources: [
                 .process("Resources")

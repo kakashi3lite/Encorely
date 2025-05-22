@@ -10,7 +10,28 @@ struct AIMixtapesApp: App {
                     setupPerformanceMonitoring()
                 }
         }
+        #if os(macOS)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Performance Settings...") {
+                    showPerformanceSettings()
+                }
+                .keyboardShortcut("P", modifiers: [.command, .option])
+            }
+        }
+        
+        // Add a separate window for performance settings
+        Window("Performance Settings", id: "performance_settings") {
+            PerformanceSettingsView()
+        }
+        #endif
     }
+    
+    #if os(macOS)
+    private func showPerformanceSettings() {
+        NSApp.sendAction(Selector(("showPerformanceSettings:")), to: nil, from: nil)
+    }
+    #endif
     
     private func setupPerformanceMonitoring() {
         // Report initial memory usage

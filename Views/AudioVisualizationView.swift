@@ -14,6 +14,8 @@ struct AudioVisualizationView: View {
     @State private var showingMoodHistory = false
     @State private var showingFrequencyDetails = false
     @State private var selectedTimeRange: TimeRange = .lastHour
+    @State private var visualizationStyle: VisualizationStyle = .modern
+    @State private var sensitivity: Double = 1.0
     
     // MARK: - Body
     var body: some View {
@@ -28,16 +30,52 @@ struct AudioVisualizationView: View {
                     )
                     .padding(.horizontal)
                     
+                    // Visualization style picker
+                    Picker("Style", selection: $visualizationStyle) {
+                        ForEach(VisualizationStyle.allCases, id: \.self) { style in
+                            Text(style.description).tag(style)
+                        }
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .padding(.horizontal)
+                    
                     // Visualization area
-                    VisualizationView(data: visualizationData)
-                        .frame(height: 200)
-                        .padding(.horizontal)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color(.systemBackground))
-                                .shadow(radius: 2)
-                        )
-                        .padding(.horizontal)
+                    Group {
+                        if visualizationStyle == .modern {
+                            AnimatedVisualizationView(
+                                audioData: visualizationData,
+                                mood: currentMood,
+                                sensitivity: sensitivity
+                            )
+                            .frame(height: 300)
+                            .cornerRadius(16)
+                            .shadow(radius: 2)
+                        } else {
+                            VisualizationView(data: visualizationData)
+                                .frame(height: 200)
+                        }
+                    }
+                    .padding(.horizontal)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color(.systemBackground))
+                            .shadow(radius: 2)
+                    )
+                    .padding(.horizontal)
+                    
+                    // Sensitivity slider
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Visualization Sensitivity")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        
+                        HStack {
+                            Image(systemName: "speaker.wave.1")
+                            Slider(value: $sensitivity, in: 0.1...2.0)
+                            Image(systemName: "speaker.wave.3")
+                        }
+                    }
+                    .padding(.horizontal)
                     
                     // Audio characteristics
                     AudioCharacteristicsGrid(
@@ -344,6 +382,19 @@ enum TimeRange: String, CaseIterable {
         case .lastDay: return "24 Hours"
         case .lastWeek: return "1 Week"
         case .lastMonth: return "1 Month"
+        }
+    }
+}
+
+// MARK: - Visualization Style
+enum VisualizationStyle: String, CaseIterable {
+    case classic
+    case modern
+    
+    var description: String {
+        switch self {
+        case .classic: return "Classic"
+        case .modern: return "Modern"
         }
     }
 }

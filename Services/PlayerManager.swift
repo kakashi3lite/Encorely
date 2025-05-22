@@ -27,6 +27,9 @@ final class PlayerManager {
     private var playerItemObservation: NSKeyValueObservation?
     private var cancellables = Set<AnyCancellable>()
     private var memoryWarningObserver: NSObjectProtocol?
+    private var highMemoryPressureObserver: NSObjectProtocol?
+    private var highCPUUsageObserver: NSObjectProtocol?
+    private var highDiskUsageObserver: NSObjectProtocol?
     
     private init() {
         // Initialize player components
@@ -37,6 +40,7 @@ final class PlayerManager {
         setupAudioSession()
         setupObservers()
         setupMemoryWarningObserver()
+        setupPerformanceObservers()
     }
     
     private func setupAudioSession() {
@@ -94,8 +98,97 @@ final class PlayerManager {
         }
     }
     
+    private func setupPerformanceObservers() {
+        #if os(macOS)
+        // High Memory Pressure Observer
+        highMemoryPressureObserver = NotificationCenter.default.addObserver(
+            forName: .performanceHighMemoryPressure,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleHighMemoryPressure()
+        }
+        
+        // High CPU Usage Observer
+        highCPUUsageObserver = NotificationCenter.default.addObserver(
+            forName: .performanceHighCPUUsage,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleHighCPUUsage()
+        }
+        
+        // High Disk Usage Observer
+        highDiskUsageObserver = NotificationCenter.default.addObserver(
+            forName: .performanceHighDiskUsage,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleHighDiskUsage()
+        }
+        #endif
+    }
+    
     private func handleMemoryWarning() {
         cleanupResources()
+    }
+    
+    private func handleHighMemoryPressure() {
+        // Reduce memory usage
+        cleanupResources()
+        // Clear any caches
+        imageCache.removeAll()
+        // Stop any background processing
+        cancelBackgroundTasks()
+    }
+    
+    private func handleHighCPUUsage() {
+        // Reduce processing load
+        reduceProcessingQuality()
+        // Pause non-essential background tasks
+        pauseBackgroundProcessing()
+    }
+    
+    private func handleHighDiskUsage() {
+        // Clear temporary files
+        clearTemporaryFiles()
+        // Reduce cache size
+        reduceCacheSize()
+    }
+    
+    private func reduceProcessingQuality() {
+        // Reduce audio processing quality temporarily
+        audioProcessor?.setQuality(.low)
+        // Disable real-time effects
+        disableNonEssentialEffects()
+    }
+    
+    private func pauseBackgroundProcessing() {
+        // Pause any background analysis
+        audioAnalysisQueue.suspend()
+        // Pause recommendation updates
+        recommendationEngine?.pauseUpdates()
+    }
+    
+    private func clearTemporaryFiles() {
+        let fileManager = FileManager.default
+        guard let tempDir = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
+        
+        do {
+            let tempFiles = try fileManager.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)
+            for file in tempFiles {
+                try? fileManager.removeItem(at: file)
+            }
+        } catch {
+            logger.error("Failed to clear temporary files: \(error.localizedDescription)")
+        }
+    }
+    
+    private func reduceCacheSize() {
+        // Reduce audio buffer cache size
+        audioBufferCache.trim(toSize: 10 * 1024 * 1024) // 10MB limit
+        // Reduce image cache size
+        imageCache.trim(toSize: 5 * 1024 * 1024) // 5MB limit
     }
     
     private func handleAudioInterruption(_ notification: Notification) {
@@ -144,6 +237,15 @@ final class PlayerManager {
 
     deinit {
         if let observer = memoryWarningObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = highMemoryPressureObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = highCPUUsageObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        if let observer = highDiskUsageObserver {
             NotificationCenter.default.removeObserver(observer)
         }
         cleanupResources()
