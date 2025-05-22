@@ -38,27 +38,31 @@ struct ContentView: View {
     @ObservedObject var aiService: AIIntegrationService
     
     var body: some View {
+        moodAwareBody
+    }
+    
+    // MARK: - Mood-Aware Body Implementation
+    
+    var moodAwareBody: some View {
         ZStack {
             VStack(spacing: 0) {
-                // AI insights banner at the top
+                // AI insights banner
                 AIInsightsView(aiService: aiService)
-                    .padding(.top, 8)
-                    .padding(.horizontal, 8)
+                    .padding(.vertical, 8)
                 
                 // Personalized message banner
                 PersonalizedMessageBanner(aiService: aiService)
-                    .padding(.vertical, 8)
+                    .padding(.bottom, 8)
                 
                 NavigationView {
                     VStack(spacing: 0) {
-                        // Mood-aware recommendations section if applicable
-                        if aiService.moodEngine.moodConfidence > 0.3 {
+                        // Mood-aware recommendations section (if applicable)
+                        if aiService.moodEngine.moodConfidence > 0.6 {
                             moodRecommendationsSection
-                                .padding(.bottom, 8)
                         }
                         
-                        // Main mixtape list
-                        mixtapeListView
+                        // Adaptive list based on personality & mood
+                        adaptiveListContent
                     }
                     .navigationBarTitle("Mixtapes")
                     .navigationBarItems(
@@ -76,12 +80,12 @@ struct ContentView: View {
                         trailing:
                             HStack {
                                 Button(action: {
-                                    self.showingMoodSelector.toggle()
+                                    showingMoodSelector.toggle()
                                     aiService.trackInteraction(type: "open_mood_selector")
                                 }) {
                                     Image(systemName: aiService.moodEngine.currentMood.systemIcon)
-                                        .imageScale(.large)
                                         .foregroundColor(aiService.moodEngine.currentMood.color)
+                                        .imageScale(.large)
                                 }
                                 .sheet(isPresented: $showingMoodSelector) {
                                     MoodView(moodEngine: aiService.moodEngine)
@@ -90,18 +94,20 @@ struct ContentView: View {
                                 Button(action: { 
                                     self.showingDocsPicker.toggle()
                                     aiService.trackInteraction(type: "create_mixtape_button")
-                                 }) {
+                                }) {
                                     Image(systemName: "plus").imageScale(.large)
                                 }
                                 .sheet(isPresented: self.$showingDocsPicker) {
-                                    NewMixTapeView(isPresented: self.$showingDocsPicker, aiService: self.aiService)
-                                        .environment(\.managedObjectContext, self.moc)
+                                    NewMixTapeView(
+                                        isPresented: self.$showingDocsPicker,
+                                        aiService: self.aiService
+                                    ).environment(\.managedObjectContext, self.moc)
                                 }
                             }
                     )
                 }
                 
-                // Enhanced now playing button
+                // Enhanced now playing bar with mood awareness
                 NowPlayingButtonView(
                     showingNowPlayingSheet: $showingNowPlayingSheet,
                     queuePlayer: self.queuePlayer,
@@ -126,20 +132,20 @@ struct ContentView: View {
                 }
             }
             .onAppear {
+                // Track session start
+                trackSessionStart()
+                
                 // Check if first launch
                 if !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
                     showingOnboarding = true
                 }
-                
-                // Track session start
-                aiService.trackInteraction(type: "session_start")
             }
             .onDisappear {
                 // Track session end
-                aiService.trackInteraction(type: "session_end")
+                trackSessionEnd()
             }
             
-            // Conditional onboarding overlay
+            // Conditional onboarding sheet
             if showingOnboarding {
                 OnboardingView(
                     personalityEngine: aiService.personalityEngine,
@@ -154,8 +160,6 @@ struct ContentView: View {
         }
         .animation(.spring(), value: showingOnboarding)
     }
-    
-    // MARK: - Component Views
     
     // Mood-based recommendations section
     var moodRecommendationsSection: some View {
@@ -180,10 +184,7 @@ struct ContentView: View {
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 16) {
-                    // Convert recommendations to an array we can use
-                    let recommendations = aiService.getPersonalizedRecommendations()
-                    
-                    ForEach(recommendations.prefix(5), id: \.wrappedTitle) { mixtape in
+                    ForEach(aiService.moodEngine.getMoodBasedRecommendations().prefix(5), id: \.wrappedTitle) { mixtape in
                         NavigationLink(destination:
                             MixTapeView(
                                 songs: mixtape.songsArray,
@@ -200,7 +201,7 @@ struct ContentView: View {
                             ).environment(\.managedObjectContext, self.moc)
                         ) {
                             VStack(alignment: .leading) {
-                                // Mixtape cover art
+                                // Mixtape preview
                                 if mixtape.urlData != nil {
                                     Image(uiImage: getCoverArtImage(url: mixtape.wrappedUrl))
                                         .resizable()
@@ -250,13 +251,317 @@ struct ContentView: View {
         }
     }
     
-    // Main mixtape list view
-    var mixtapeListView: some View {
+    // Combined adaptive list content based on personality & mood
+    var adaptiveListContent: some View {
         Group {
+            // Different layouts based on dominant personality with mood influences
+            if aiService.personalityEngine.currentPersonality == .explorer {
+                // Explorer emphasizes discovery with mood influences
+                explorerLayout
+            } else if aiService.personalityEngine.currentPersonality == .curator {
+                // Curator emphasizes organization with mood influences
+                curatorLayout
+            } else if aiService.personalityEngine.currentPersonality == .enthusiast {
+                // Enthusiast emphasizes deep diving with mood influences
+                enthusiastLayout
+            } else if aiService.personalityEngine.currentPersonality == .social {
+                // Social emphasizes sharing with mood influences
+                socialLayout
+            } else if aiService.personalityEngine.currentPersonality == .ambient {
+                // Ambient emphasizes mood-based organization
+                ambientLayout
+            } else if aiService.personalityEngine.currentPersonality == .analyzer {
+                // Analyzer emphasizes technical details with mood influences
+                analyzerLayout
+            } else {
+                // Default layout with mood influences
+                defaultLayout
+            }
+        }
+    }
+    
+    // Explorer layout emphasizing discovery
+    var explorerLayout: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                // AI-recommended section
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Discover")
+                        .font(.headline)
+                        .padding(.horizontal)
+                    
+                    Text("Personalized recommendations just for you")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+                    
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 16) {
+                            ForEach(aiService.getPersonalizedRecommendations().prefix(5), id: \.wrappedTitle) { mixtape in
+                                NavigationLink(destination:
+                                    MixTapeView(
+                                        songs: mixtape.songsArray,
+                                        mixTape: mixtape,
+                                        currentMixTapeName: self.$currentMixTapeName,
+                                        currentMixTapeImage: self.$currentMixTapeImage,
+                                        queuePlayer: self.queuePlayer,
+                                        currentStatusObserver: self.playerStatusObserver,
+                                        currentItemObserver: self.playerItemObserver,
+                                        currentPlayerItems: self.currentPlayerItems,
+                                        currentSongName: self.currentSongName,
+                                        isPlaying: self.isPlaying,
+                                        aiService: self.aiService
+                                    ).environment(\.managedObjectContext, self.moc)
+                                ) {
+                                    VStack(alignment: .leading) {
+                                        // Mixtape preview
+                                        if mixtape.urlData != nil {
+                                            Image(uiImage: getCoverArtImage(url: mixtape.wrappedUrl))
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fill)
+                                                .frame(width: 160, height: 160)
+                                                .cornerRadius(8)
+                                        } else {
+                                            ZStack {
+                                                Rectangle()
+                                                    .fill(aiService.personalityEngine.currentPersonality.themeColor.opacity(0.2))
+                                                    .frame(width: 160, height: 160)
+                                                    .cornerRadius(8)
+                                                
+                                                Image(systemName: "music.note.list")
+                                                    .font(.system(size: 40))
+                                                    .foregroundColor(aiService.personalityEngine.currentPersonality.themeColor)
+                                            }
+                                        }
+                                        
+                                        Text(mixtape.wrappedTitle)
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.primary)
+                                            .lineLimit(1)
+                                        
+                                        Text("\(mixtape.numberOfSongs) songs")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .frame(width: 160)
+                                    .onTapGesture {
+                                        aiService.trackInteraction(
+                                            type: "select_discovery_recommendation",
+                                            mixtape: mixtape
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.bottom, 12)
+                    }
+                }
+                
+                // All mixtapes
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Your Mixtapes")
+                        .font(.headline)
+                        .padding(.horizontal)
+                    
+                    if mixTapes.isEmpty {
+                        EmptyStateView(
+                            title: "Start Your Discovery",
+                            message: "Create your first mixtape to begin exploring music in a new way",
+                            systemImage: "safari",
+                            action: { 
+                                self.showingDocsPicker.toggle()
+                                aiService.trackInteraction(type: "empty_state_create_mixtape")
+                            }
+                        )
+                    } else {
+                        ForEach(mixTapes, id:\.wrappedTitle) { tape in
+                            NavigationLink(destination:
+                                MixTapeView(
+                                    songs: tape.songsArray,
+                                    mixTape: tape,
+                                    currentMixTapeName: self.$currentMixTapeName,
+                                    currentMixTapeImage: self.$currentMixTapeImage,
+                                    queuePlayer: self.queuePlayer,
+                                    currentStatusObserver: self.playerStatusObserver,
+                                    currentItemObserver: self.playerItemObserver,
+                                    currentPlayerItems: self.currentPlayerItems,
+                                    currentSongName: self.currentSongName,
+                                    isPlaying: self.isPlaying,
+                                    aiService: self.aiService
+                                ).environment(\.managedObjectContext, self.moc)
+                            ) {
+                                HStack {
+                                    if tape.urlData != nil {
+                                        Image(uiImage: getCoverArtImage(url: tape.wrappedUrl))
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: 60, height: 60)
+                                            .cornerRadius(6)
+                                    } else {
+                                        ZStack {
+                                            Rectangle()
+                                                .fill(Color.gray.opacity(0.2))
+                                                .frame(width: 60, height: 60)
+                                                .cornerRadius(6)
+                                            
+                                            Image(systemName: "music.note")
+                                                .font(.system(size: 24))
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                    
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(tape.wrappedTitle)
+                                            .font(.headline)
+                                        
+                                        Text("\(tape.numberOfSongs) songs")
+                                            .font(.subheadline)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Button(action: {
+                                        // Play the mixtape
+                                        playMixtape(tape)
+                                        aiService.trackInteraction(type: "play_from_list", mixtape: tape)
+                                    }) {
+                                        Image(systemName: "play.fill")
+                                            .font(.headline)
+                                            .foregroundColor(.white)
+                                            .frame(width: 36, height: 36)
+                                            .background(Circle().fill(aiService.personalityEngine.currentPersonality.themeColor))
+                                    }
+                                }
+                                .padding(.vertical, 8)
+                                .padding(.horizontal)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    aiService.trackInteraction(type: "select_mixtape", mixtape: tape)
+                                }
+                            }
+                        }
+                        .onDelete(perform: deleteMixTape)
+                    }
+                }
+                .padding(.top, 8)
+            }
+            .padding(.top, 8)
+        }
+    }
+    
+    // Curator layout emphasizing organization
+    var curatorLayout: some View {
+        List {
             if mixTapes.isEmpty {
                 EmptyStateView(
-                    title: "Start Your Collection",
-                    message: "Create your first mixtape to begin exploring music in a new way",
+                    title: "Curate Your Collection",
+                    message: "Start building your perfectly organized music library",
+                    systemImage: "folder.fill",
+                    action: { 
+                        self.showingDocsPicker.toggle()
+                        aiService.trackInteraction(type: "empty_state_create_mixtape")
+                    }
+                )
+            } else {
+                // Recently played section
+                if currentSongName.name != "Not Playing" {
+                    Section(header: Text("Recently Played")) {
+                        let filteredTapes = mixTapes.filter { tape in
+                            tape.wrappedTitle == currentMixTapeName
+                        }
+                        
+                        ForEach(filteredTapes, id: \.wrappedTitle) { tape in
+                            NavigationLink(destination:
+                                MixTapeView(
+                                    songs: tape.songsArray,
+                                    mixTape: tape,
+                                    currentMixTapeName: self.$currentMixTapeName,
+                                    currentMixTapeImage: self.$currentMixTapeImage,
+                                    queuePlayer: self.queuePlayer,
+                                    currentStatusObserver: self.playerStatusObserver,
+                                    currentItemObserver: self.playerItemObserver,
+                                    currentPlayerItems: self.currentPlayerItems,
+                                    currentSongName: self.currentSongName,
+                                    isPlaying: self.isPlaying,
+                                    aiService: self.aiService
+                                ).environment(\.managedObjectContext, self.moc)
+                            ) {
+                                mixtapeRow(tape)
+                            }
+                            .onTapGesture {
+                                aiService.trackInteraction(type: "select_recent_mixtape", mixtape: tape)
+                            }
+                        }
+                    }
+                }
+                
+                // All mixtapes organized by size
+                Section(header: Text("All Mixtapes")) {
+                    let sortedTapes = mixTapes.sorted { $0.numberOfSongs > $1.numberOfSongs }
+                    
+                    ForEach(sortedTapes, id: \.wrappedTitle) { tape in
+                        NavigationLink(destination:
+                            MixTapeView(
+                                songs: tape.songsArray,
+                                mixTape: tape,
+                                currentMixTapeName: self.$currentMixTapeName,
+                                currentMixTapeImage: self.$currentMixTapeImage,
+                                queuePlayer: self.queuePlayer,
+                                currentStatusObserver: self.playerStatusObserver,
+                                currentItemObserver: self.playerItemObserver,
+                                currentPlayerItems: self.currentPlayerItems,
+                                currentSongName: self.currentSongName,
+                                isPlaying: self.isPlaying,
+                                aiService: self.aiService
+                            ).environment(\.managedObjectContext, self.moc)
+                        ) {
+                            mixtapeRow(tape)
+                        }
+                        .onTapGesture {
+                            aiService.trackInteraction(type: "select_mixtape", mixtape: tape)
+                        }
+                    }
+                    .onDelete(perform: deleteMixTape)
+                }
+                
+                // Mood-specific section
+                moodBasedSection
+            }
+        }
+        .listStyle(InsetGroupedListStyle())
+    }
+    
+    // For brevity, placeholder methods for the other layouts
+    var enthusiastLayout: some View {
+        // Implementation would be similar to curatorLayout but with focus on deep diving
+        defaultLayout
+    }
+    
+    var socialLayout: some View {
+        // Implementation would be similar but with focus on sharing
+        defaultLayout
+    }
+    
+    var ambientLayout: some View {
+        // Implementation would be similar but with focus on background listening
+        defaultLayout
+    }
+    
+    var analyzerLayout: some View {
+        // Implementation would be similar but with focus on technical details
+        defaultLayout
+    }
+    
+    // Default layout as fallback
+    var defaultLayout: some View {
+        List {
+            if mixTapes.isEmpty {
+                EmptyStateView(
+                    title: "No Mixtapes Yet",
+                    message: "Create your first mixtape to start organizing your music collection",
                     systemImage: "music.note.list",
                     action: { 
                         self.showingDocsPicker.toggle()
@@ -264,53 +569,7 @@ struct ContentView: View {
                     }
                 )
             } else {
-                // Choose display style based on personality
-                switch aiService.personalityEngine.currentPersonality {
-                case .explorer:
-                    gridListView
-                case .curator:
-                    detailedListView
-                default:
-                    standardListView
-                }
-            }
-        }
-    }
-    
-    // Standard list view
-    var standardListView: some View {
-        List {
-            ForEach(mixTapes, id: \.wrappedTitle) { tape in
-                NavigationLink(destination:
-                    MixTapeView(
-                        songs: tape.songsArray,
-                        mixTape: tape,
-                        currentMixTapeName: self.$currentMixTapeName,
-                        currentMixTapeImage: self.$currentMixTapeImage,
-                        queuePlayer: self.queuePlayer,
-                        currentStatusObserver: self.playerStatusObserver,
-                        currentItemObserver: self.playerItemObserver,
-                        currentPlayerItems: self.currentPlayerItems,
-                        currentSongName: self.currentSongName,
-                        isPlaying: self.isPlaying,
-                        aiService: self.aiService
-                    ).environment(\.managedObjectContext, self.moc)
-                ) {
-                    Text(tape.wrappedTitle)
-                }
-            }
-            .onDelete(perform: deleteMixTape)
-        }
-    }
-    
-    // Grid list view for explorers
-    var gridListView: some View {
-        ScrollView {
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 16) {
-                ForEach(mixTapes, id: \.wrappedTitle) { tape in
+                ForEach(mixTapes, id:\.wrappedTitle) { tape in
                     NavigationLink(destination:
                         MixTapeView(
                             songs: tape.songsArray,
@@ -326,57 +585,23 @@ struct ContentView: View {
                             aiService: self.aiService
                         ).environment(\.managedObjectContext, self.moc)
                     ) {
-                        VStack(alignment: .leading) {
-                            if tape.urlData != nil {
-                                Image(uiImage: getCoverArtImage(url: tape.wrappedUrl))
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(height: 160)
-                                    .cornerRadius(12)
-                            } else {
-                                ZStack {
-                                    Rectangle()
-                                        .fill(Color.gray.opacity(0.2))
-                                        .frame(height: 160)
-                                        .cornerRadius(12)
-                                    
-                                    Image(systemName: "music.note")
-                                        .font(.system(size: 40))
-                                        .foregroundColor(.gray)
-                                }
-                            }
-                            
-                            Text(tape.wrappedTitle)
-                                .font(.headline)
-                                .foregroundColor(.primary)
-                                .lineLimit(1)
-                            
-                            Text("\(tape.numberOfSongs) songs")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding(.bottom, 8)
+                        mixtapeRow(tape)
                     }
-                    .buttonStyle(PlainButtonStyle())
-                    .contextMenu {
-                        Button(action: {
-                            self.moc.delete(tape)
-                            try? self.moc.save()
-                            aiService.trackInteraction(type: "delete_mixtape", mixtape: tape)
-                        }) {
-                            Label("Delete", systemImage: "trash")
-                        }
+                    .onTapGesture {
+                        aiService.trackInteraction(type: "select_mixtape", mixtape: tape)
                     }
                 }
+                .onDelete(perform: deleteMixTape)
             }
-            .padding()
         }
     }
     
-    // Detailed list view for curators
-    var detailedListView: some View {
-        List {
-            ForEach(mixTapes, id: \.wrappedTitle) { tape in
+    // Mood-based section that can be included in various layouts
+    var moodBasedSection: some View {
+        Section(header: Text("For Your \(aiService.moodEngine.currentMood.rawValue) Mood")) {
+            let recommendations = aiService.moodEngine.getMoodBasedRecommendations().prefix(3)
+            
+            ForEach(Array(recommendations), id: \.wrappedTitle) { tape in
                 NavigationLink(destination:
                     MixTapeView(
                         songs: tape.songsArray,
@@ -393,76 +618,88 @@ struct ContentView: View {
                     ).environment(\.managedObjectContext, self.moc)
                 ) {
                     HStack {
-                        if tape.urlData != nil {
-                            Image(uiImage: getCoverArtImage(url: tape.wrappedUrl))
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 60, height: 60)
-                                .cornerRadius(6)
-                        } else {
-                            ZStack {
+                        // Mixtape image with mood indicator
+                        ZStack {
+                            if tape.urlData != nil {
+                                Image(uiImage: getCoverArtImage(url: tape.wrappedUrl))
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 50, height: 50)
+                                    .cornerRadius(6)
+                            } else {
                                 Rectangle()
                                     .fill(Color.gray.opacity(0.2))
-                                    .frame(width: 60, height: 60)
+                                    .frame(width: 50, height: 50)
                                     .cornerRadius(6)
                                 
                                 Image(systemName: "music.note")
-                                    .font(.system(size: 24))
+                                    .font(.system(size: 20))
                                     .foregroundColor(.gray)
                             }
+                            
+                            // Mood indicator
+                            Circle()
+                                .fill(aiService.moodEngine.currentMood.color)
+                                .frame(width: 18, height: 18)
+                                .overlay(
+                                    Image(systemName: aiService.moodEngine.currentMood.systemIcon)
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.white)
+                                )
+                                .offset(x: 20, y: 20)
                         }
                         
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: 2) {
                             Text(tape.wrappedTitle)
-                                .font(.headline)
+                                .font(.subheadline)
                             
                             Text("\(tape.numberOfSongs) songs")
-                                .font(.subheadline)
+                                .font(.caption)
                                 .foregroundColor(.secondary)
-                                
-                            // Mood tag if available
-                            if let moodTags = tape.moodTags, !moodTags.isEmpty {
-                                Text(moodTags)
-                                    .font(.caption)
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                        
-                        Spacer()
-                        
-                        // Quick play button
-                        Button(action: {
-                            playMixtape(tape)
-                            aiService.trackInteraction(type: "play_from_list", mixtape: tape)
-                        }) {
-                            Image(systemName: "play.fill")
-                                .foregroundColor(.white)
-                                .frame(width: 32, height: 32)
-                                .background(Circle().fill(Color.blue))
                         }
                     }
-                    .padding(.vertical, 4)
+                }
+                .onTapGesture {
+                    aiService.trackInteraction(type: "select_mood_mixtape", mixtape: tape)
                 }
             }
-            .onDelete(perform: deleteMixTape)
         }
     }
     
-    // MARK: - Helper Functions
-    
-    func deleteMixTape(offsets: IndexSet) {
-        for index in offsets {
-            let tape = mixTapes[index]
-            aiService.trackInteraction(type: "delete_mixtape", mixtape: tape)
-            moc.delete(tape)
-        }
-        do {
-            try moc.save()
-        } catch {
-            print(error)
+    // Helper function to create consistent mixtape rows
+    func mixtapeRow(_ tape: MixTape) -> some View {
+        HStack {
+            if tape.urlData != nil {
+                Image(uiImage: getCoverArtImage(url: tape.wrappedUrl))
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 50, height: 50)
+                    .cornerRadius(6)
+            } else {
+                ZStack {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 50, height: 50)
+                        .cornerRadius(6)
+                    
+                    Image(systemName: "music.note")
+                        .font(.system(size: 20))
+                        .foregroundColor(.gray)
+                }
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(tape.wrappedTitle)
+                    .font(.subheadline)
+                
+                Text("\(tape.numberOfSongs) songs")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
     }
     
+    // Helper function to play a mixtape
     func playMixtape(_ tape: MixTape) {
         if currentMixTapeName != tape.wrappedTitle {
             currentMixTapeName = tape.wrappedTitle
@@ -476,175 +713,38 @@ struct ContentView: View {
         
         loadPlayer(arrayOfPlayerItems: currentPlayerItems.items, player: queuePlayer)
         queuePlayer.play()
-        
-        // Track play in mixtape model
-        tape.trackPlay()
-        try? moc.save()
     }
-}
-
-// MARK: - NewMixTapeView with AI
-
-struct NewMixTapeView: View {
-    // Environment and state
-    @Environment(\.managedObjectContext) var moc
-    @FetchRequest(entity: MixTape.entity(), sortDescriptors: []) var mixTapes: FetchedResults<MixTape>
     
-    // State variables
-    @State var tapeTitle: String = ""
-    @State private var showingDocsPicker: Bool = false
-    @State private var showingImagePicker: Bool = false
-    @State var mixTapePicked: Bool = false
-    @State var imagePicked: Bool = false
-    @Binding var isPresented: Bool
-    
-    // AI service
-    var aiService: AIIntegrationService
-    
-    // AI-suggested titles
-    @State private var suggestedTitles: [String] = []
-    
-    // Validate mixtape name
-    var inValidName: Bool {
-        // mixtape names must be unique to preserve NavigationView functionality
-        let bool = mixTapes.contains{ $0.title == tapeTitle }
-        return bool
+    // Track user interactions for AI analysis
+    func trackSessionStart() {
+        aiService.trackInteraction(type: "session_start")
     }
-
-    var body: some View {
-        NavigationView {
-            Form {
-                Section(header: Text("Mixtape Name")) {
-                    TextField("Enter Mixtape Name: ", text: $tapeTitle)
-                }
-                .disabled(mixTapePicked)
-                
-                // AI suggested names
-                Section(header: Text("Suggested Names")) {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(suggestedTitles, id: \.self) { title in
-                                Button(action: {
-                                    self.tapeTitle = title
-                                    aiService.trackInteraction(type: "select_suggested_title")
-                                }) {
-                                    Text(title)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .fill(self.tapeTitle == title ? 
-                                                     aiService.personalityEngine.currentPersonality.themeColor : Color.gray.opacity(0.1))
-                                        )
-                                        .foregroundColor(self.tapeTitle == title ? .white : .primary)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 8)
-                    }
-                }
-                
-                // Mood tags selection
-                Section(header: Text("Mood Tags (Optional)")) {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(Mood.allCases, id: \.self) { mood in
-                                Button(action: {
-                                    // In a real app, we would store selected moods for the new mixtape
-                                    aiService.trackInteraction(type: "select_mood_tag_\(mood.rawValue)")
-                                }) {
-                                    HStack {
-                                        Image(systemName: mood.systemIcon)
-                                            .foregroundColor(mood.color)
-                                        
-                                        Text(mood.rawValue)
-                                            .foregroundColor(.primary)
-                                    }
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(mood.color, lineWidth: 1)
-                                    )
-                                }
-                            }
-                        }
-                        .padding(.vertical, 8)
-                    }
-                }
-                
-                // Add songs section
-                Section {
-                    Button(action: { self.showingDocsPicker.toggle() }) {
-                         HStack {
-                             Image(systemName: "folder.badge.plus").imageScale(.large)
-                             Text("Add Songs")
-                         }
-                     }
-                     .sheet(isPresented: self.$showingDocsPicker) {
-                      MixTapePicker(nameofTape: self.tapeTitle, mixTapePicked: self.$mixTapePicked, moc: self.moc)
-                     }
-                }
-                .disabled(tapeTitle.isEmpty || inValidName || mixTapePicked)
-                
-                // Add cover image section
-                Section {
-                    Button(action: { self.showingImagePicker.toggle() }) {
-                        HStack {
-                            Image(systemName: "photo").imageScale(.large)
-                            Text("Add Cover Image")
-                        }
-                     }
-                     .sheet(isPresented: self.$showingImagePicker) {
-                        ImagePickerView(mixTapes: self.mixTapes, moc: self.moc, imagePicked: self.$imagePicked)
-                     }
-                }
-                .disabled(imagePicked || !mixTapePicked)
-                
-                // Finish section
-                Section {
-                    Button(action: { 
-                        self.isPresented.toggle()
-                        aiService.trackInteraction(type: "create_mixtape")
-                    }) {
-                        Text("Add Mixtape")
-                    }
-                }
-                .disabled(!mixTapePicked)
-            }
-            .navigationBarTitle("New Mixtape", displayMode: .inline)
-            .navigationBarItems(trailing: Button("Cancel") {
-                self.isPresented.toggle()
-            })
-            .onAppear {
-                loadSuggestedTitles()
-                aiService.trackInteraction(type: "open_create_mixtape")
-            }
+    
+    func trackSessionEnd() {
+        aiService.trackInteraction(type: "session_end")
+    }
+    
+    // MARK: - Other Utility Functions
+    
+    func deleteMixTape(offsets: IndexSet) {
+        for index in offsets {
+            let tape = mixTapes[index]
+            aiService.trackInteraction(type: "delete_mixtape", mixtape: tape)
+            moc.delete(tape)
+        }
+        do {
+            try moc.save()
+        } catch {
+            print(error)
         }
     }
-    
-    // Load AI-suggested mixtape titles
-    func loadSuggestedTitles() {
-        // Get suggestions from recommendation engine
-        let recommendedTitles = aiService.recommendationEngine.getSuggestedMixtapeTitles()
-        suggestedTitles = recommendedTitles
-    }
 }
 
-// MARK: - NowPlayingButtonView with AI
+// MARK: - NowPlayingButtonView with Mood
 
-struct NowPlayingButtonView: View {
-    // Core properties
-    @Binding var showingNowPlayingSheet: Bool
-    let queuePlayer: AVQueuePlayer
-    let currentItemObserver: PlayerItemObserver
-    @ObservedObject var currentSongName: CurrentSongName
-    @ObservedObject var isPlaying: IsPlaying
-    
-    // AI service
-    var aiService: AIIntegrationService
-    
-    var body: some View {
+extension NowPlayingButtonView {
+    // Add mood-aware body to NowPlayingButtonView
+    var moodAwareBody: some View {
         HStack {
             Button(action: {
                 self.showingNowPlayingSheet.toggle()
@@ -665,7 +765,7 @@ struct NowPlayingButtonView: View {
                     
                     Spacer()
                     
-                    // Enhanced display with mood indicator
+                    // Add mood indicator
                     HStack {
                         Text(self.currentSongName.name)
                             .onReceive(currentItemObserver.$currentItem) { item in
@@ -699,206 +799,48 @@ struct NowPlayingButtonView: View {
     }
 }
 
-// MARK: - Enhanced PlayerView with AI
+// MARK: - NewMixTapeView Extensions
 
-struct PlayerView: View {
-    // Core properties
-    @Binding var currentMixTapeName: String
-    @Binding var currentMixTapeImage: URL
-    let queuePlayer: AVQueuePlayer
-    let playerItemObserver: PlayerItemObserver
-    let playerStatusObserver: PlayerStatusObserver
-    @ObservedObject var currentPlayerItems: CurrentPlayerItems
-    @ObservedObject var currentSongName: CurrentSongName
-    @ObservedObject var isPlaying: IsPlaying
-    
-    // AI service
-    var aiService: AIIntegrationService
-    
-    // State for mood-related features
-    @State private var showingMoodPicker: Bool = false
-    @State private var showingReorderOptions: Bool = false
-    
-    var body: some View {
-        GeometryReader { geometry in
-            VStack(spacing: 24) {
-                // Cover art with mood indicator overlay
-                ZStack(alignment: .topTrailing) {
-                    if self.currentMixTapeName != "" {
-                        Image(uiImage: getCoverArtImage(url: self.currentMixTapeImage))
-                             .resizable()
-                             .frame(width: geometry.size.width - 24, height: geometry.size.width - 24)
-                             .cornerRadius(16)
-                             .shadow(radius: 10)
-
-                    } else {
-                        ZStack {
-                            Rectangle()
-                                .fill(aiService.moodEngine.currentMood.color.opacity(0.2))
-                                .frame(width: geometry.size.width - 24, height: geometry.size.width - 24)
-                                .cornerRadius(16)
-                                .shadow(radius: 10)
-                            
-                            Image(systemName: "hifispeaker.fill")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 100)
-                                .foregroundColor(aiService.moodEngine.currentMood.color)
-                        }
-                    }
-                    
-                    // Mood indicator
-                    Button(action: {
-                        self.showingMoodPicker.toggle()
-                        aiService.trackInteraction(type: "open_mood_picker_from_player")
-                    }) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.white)
-                                .frame(width: 44, height: 44)
-                                .shadow(radius: 3)
-                            
-                            Circle()
-                                .fill(aiService.moodEngine.currentMood.color)
-                                .frame(width: 36, height: 36)
-                            
-                            Image(systemName: aiService.moodEngine.currentMood.systemIcon)
-                                .foregroundColor(.white)
-                        }
-                        .padding(.top, 16)
-                        .padding(.trailing, 16)
-                    }
-                    .sheet(isPresented: $showingMoodPicker) {
-                        MoodView(moodEngine: aiService.moodEngine)
-                    }
-                }
-
-                // Song and mixtape info
-                VStack {
-                    Text(self.currentSongName.name)
-                            .font(Font.system(.title).bold())
-                            .lineLimit(1)
-                    
-                    Text(self.currentMixTapeName)
-                        .font(Font.system(.title))
-                        .lineLimit(1)
-                }
-               
-                // Playback controls
-                HStack(spacing: 40) {
-                    Button(action: { 
-                        skipBack(currentPlayerItems: self.currentPlayerItems.items, currentSongName: self.currentSongName.name, queuePlayer: self.queuePlayer, isPlaying: self.isPlaying.value)
-                        aiService.trackInteraction(type: "previous_song")
-                    }) {
-                        ZStack {
-                            Circle()
-                                .frame(width: 80, height: 80)
-                                .foregroundColor(aiService.personalityEngine.currentPersonality.themeColor)
-                                .shadow(radius: 10)
-                            Image(systemName: "backward.fill")
-                                .foregroundColor(.white)
-                                .font(.system(.title))
-                        }
-                    }
-
-                    Button(action: {
-                        if self.isPlaying.value {
-                            self.queuePlayer.pause()
-                            aiService.trackInteraction(type: "pause")
-                        } else {
-                            self.queuePlayer.play()
-                            aiService.trackInteraction(type: "play")
-                        }
-                        
-                    }) {
-                        ZStack {
-                            Circle()
-                                .frame(width: 80, height: 80)
-                                .foregroundColor(aiService.personalityEngine.currentPersonality.themeColor)
-                                .shadow(radius: 10)
-                            Image(systemName: self.isPlaying.value ? "pause.fill" : "play.fill").imageScale(.large)
-                                .foregroundColor(.white)
-                                .font(.system(.title))
-                        }
-                    }
-
-                    Button(action: {
-                        self.queuePlayer.currentItem?.seek(to: CMTime.zero, completionHandler: nil)
-                        self.queuePlayer.advanceToNextItem()
-                        aiService.trackInteraction(type: "skip_song")
-                    }) {
-                        ZStack {
-                            Circle()
-                                .frame(width: 80, height: 80)
-                                .foregroundColor(aiService.personalityEngine.currentPersonality.themeColor)
-                                .shadow(radius: 10)
-                            Image(systemName: "forward.fill")
-                                .foregroundColor(.white)
-                                .font(.system(.title))
-                        }
-                    }
-                }
-                
-                // AI reordering button
-                if currentMixTapeName != "" {
-                    Button(action: {
-                        self.showingReorderOptions.toggle()
-                        aiService.trackInteraction(type: "mood_reorder_options")
-                    }) {
-                        HStack {
-                            Image(systemName: "wand.and.stars")
-                                .font(.system(.body))
-                            
-                            Text("Smart Reordering")
-                                .font(.system(.body))
-                        }
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(
-                            Capsule()
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            aiService.moodEngine.currentMood.color,
-                                            aiService.personalityEngine.currentPersonality.themeColor
-                                        ]),
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                        )
-                        .shadow(radius: 3)
-                    }
-                    .actionSheet(isPresented: $showingReorderOptions) {
-                        ActionSheet(
-                            title: Text("Smart Reordering"),
-                            message: Text("Choose how to reorder songs based on mood"),
-                            buttons: [
-                                .default(Text("Energize: Start relaxed, build energy")) {
-                                    // In a real app, we would implement this reordering
-                                    aiService.trackInteraction(type: "reorder_relaxed_to_energetic")
-                                },
-                                .default(Text("Wind Down: Start energetic, end relaxed")) {
-                                    aiService.trackInteraction(type: "reorder_energetic_to_relaxed")
-                                },
-                                .default(Text("Maintain Current Mood")) {
-                                    aiService.trackInteraction(type: "reorder_maintain_mood")
-                                },
-                                .cancel()
-                            ]
-                        )
+extension NewMixTapeView {
+    // Add this function to initialize suggested titles
+    func loadSuggestedTitles() {
+        var titles: [String] = []
+        
+        // Get mood-based suggestions
+        if let moodEngine = aiService?.moodEngine {
+            for action in moodEngine.getMoodBasedActions() {
+                if action.action.contains("create_mixtape_") {
+                    let title = action.title
+                    if !titles.contains(title) {
+                        titles.append(title)
                     }
                 }
             }
-            .padding(.vertical)
         }
+        
+        // Get personality-based suggestions
+        if let personalityEngine = aiService?.personalityEngine,
+           let recommendationEngine = aiService?.recommendationEngine {
+            
+            let personalitySuggestions = recommendationEngine.getSuggestedMixtapeTitles()
+            for title in personalitySuggestions {
+                if !titles.contains(title) {
+                    titles.append(title)
+                }
+            }
+        }
+        
+        // Ensure we have at least some default suggestions
+        if titles.isEmpty {
+            titles = [
+                "My Mixtape",
+                "Favorites Collection",
+                "New Mixtape",
+                "Playlist 1",
+                "Music Collection"
+            ]
+        }
+        
+        suggestedTitles = titles
     }
-}
-
-// MARK: - MixTapeView with AI
-
-extension MixTapeView {
-    // Add AI service to MixTapeView
-    var aiService: AIIntegrationService? { nil }
 }

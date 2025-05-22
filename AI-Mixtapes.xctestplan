@@ -1,0 +1,28 @@
+{
+  "configurations" : [
+    {
+      "id" : "983DD291-8A9A-4225-8B04-50A4F621C3C1",
+      "name" : "Default",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:AI-Mixtapes.xcodeproj",
+      "identifier" : "88F2A67C2B3D7C0100E11D98",
+      "name" : "AI-Mixtapes"
+    }
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:AI-Mixtapes.xcodeproj",
+        "identifier" : "88F2A6922B3D7C0200E11D98",
+        "name" : "AI-MixtapesTests"
+      }
+    }
+  ],
+  "version" : 1
+}
