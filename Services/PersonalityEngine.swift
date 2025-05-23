@@ -12,23 +12,16 @@ import Combine
 import CoreML
 import os.log
 
-/// Enum representing different user personality types for UI/UX adaptation
-enum PersonalityType: String, CaseIterable {
-    case explorer = "Explorer"   // Values discovery and variety
-    case curator = "Curator"     // Values organization and quality
-    case enthusiast = "Enthusiast" // Values deep dives and expertise
-    case social = "Social"       // Values sharing and connecting
-    case ambient = "Ambient"     // Values background/passive use
-    case analyzer = "Analyzer"   // Values technical details and control
-    case neutral = "Neutral"     // Neutral personality type
-    
+// PersonalityType is now defined in SharedTypes.swift
+extension PersonalityType {
     /// Returns a theme color associated with each personality type
     var themeColor: Color {
         switch self {
-        case .explorer: return Color.blue
-        case .curator: return Color.purple
-        case .enthusiast: return Color.orange
-        case .social: return Color.green
+        case .analyzer: return Color.blue
+        case .explorer: return Color.purple
+        case .planner: return Color.orange
+        case .creative: return Color.green
+        case .balanced: return Color.gray
         case .ambient: return Color.teal
         case .analyzer: return Color.gray
         case .neutral: return Color.secondary

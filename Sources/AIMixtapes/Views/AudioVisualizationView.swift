@@ -14,35 +14,78 @@ struct AudioVisualizationView: View {
     @State private var showingMoodHistory = false
     @State private var showingFrequencyDetails = false
     @State private var selectedTimeRange: TimeRange = .lastHour
+    @State private var visualizationStyle: VisualizationStyle = .classic
+    @State private var sensitivity: Double = 1.0
     
     // MARK: - Body
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Current playback card
+                    // Playback info card
                     PlaybackCard(
-                        songName: currentSongName.wrappedValue,
-                        mood: currentMood,
+                        songName: currentSongName ?? "Not Playing",
+                        mood: aiService.moodEngine.currentMood,
                         isAnalyzing: isAnalyzing
                     )
                     .padding(.horizontal)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Now playing: \(currentSongName ?? "No song playing")")
+                    .accessibilityAddTraits(.updatesFrequently)
+                    
+                    // Visualization style picker
+                    Picker("Style", selection: $visualizationStyle) {
+                        ForEach(VisualizationStyle.allCases, id: \.self) { style in
+                            Text(style.description).tag(style)
+                        }
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    .padding(.horizontal)
+                    .accessibilityLabel("Visualization style")
+                    .accessibilityHint("Select how the audio visualization is displayed")
                     
                     // Visualization area
-                    VisualizationView(data: visualizationData)
-                        .frame(height: 200)
-                        .padding(.horizontal)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .fill(Color(.systemBackground))
-                                .shadow(radius: 2)
-                        )
-                        .padding(.horizontal)
+                    Group {
+                        if visualizationStyle == .modern {
+                            AnimatedVisualizationView(
+                                audioData: visualizationData,
+                                mood: currentMood,
+                                sensitivity: sensitivity
+                            )
+                            .frame(height: 300)
+                            .cornerRadius(16)
+                            .shadow(radius: 2)
+                            .accessibilityLabel("Audio visualization")
+                            .accessibilityValue("Modern style visualization")
+                            .accessibilityAddTraits(.updatesFrequently)
+                        } else {
+                            VisualizationView(data: visualizationData)
+                                .frame(height: 200)
+                                .accessibilityLabel("Audio visualization")
+                                .accessibilityValue("Classic style visualization")
+                                .accessibilityAddTraits(.updatesFrequently)
+                        }
+                    }
+                    .padding(.horizontal)
                     
-                    // Audio characteristics
-                    AudioCharacteristicsGrid(
-                        characteristics: getCurrentAudioCharacteristics()
-                    )
+                    // Sensitivity control
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Visualization Sensitivity")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .accessibilityHidden(true)
+                        
+                        HStack {
+                            Image(systemName: "speaker.wave.1")
+                                .accessibilityHidden(true)
+                            Slider(value: $sensitivity, in: 0.1...2.0)
+                                .accessibilityLabel("Visualization sensitivity")
+                                .accessibilityValue("\(Int(sensitivity * 100))%")
+                                .accessibilityHint("Adjust how sensitive the visualization is to audio changes")
+                            Image(systemName: "speaker.wave.3")
+                                .accessibilityHidden(true)
+                        }
+                    }
                     .padding(.horizontal)
                     
                     // Analysis controls
@@ -55,6 +98,8 @@ struct AudioVisualizationView: View {
                         }
                         .pickerStyle(SegmentedPickerStyle())
                         .padding(.horizontal)
+                        .accessibilityLabel("Analysis time range")
+                        .accessibilityHint("Select the time period for audio analysis")
                         
                         // Action buttons
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -64,18 +109,24 @@ struct AudioVisualizationView: View {
                                     icon: "chart.line.uptrend.xyaxis",
                                     action: { showingMoodHistory = true }
                                 )
+                                .accessibilityLabel("View mood history")
+                                .accessibilityHint("Shows how your music mood has changed over time")
                                 
                                 AnalysisButton(
                                     title: "Frequency Analysis",
                                     icon: "waveform.path.ecg",
                                     action: { showingFrequencyDetails = true }
                                 )
+                                .accessibilityLabel("View frequency analysis")
+                                .accessibilityHint("Shows detailed frequency breakdown of your music")
                                 
                                 AnalysisButton(
                                     title: "Generate Report",
                                     icon: "doc.text.viewfinder",
                                     action: generateAnalysisReport
                                 )
+                                .accessibilityLabel("Generate analysis report")
+                                .accessibilityHint("Creates a detailed report of your music analysis")
                             }
                             .padding(.horizontal)
                         }
@@ -115,6 +166,7 @@ struct AudioVisualizationView: View {
                         Text("Now Playing")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
+                            .accessibilityHidden(true)
                         Text(songName == "Not Playing" ? "No song playing" : songName)
                             .font(.title3)
                             .fontWeight(.semibold)
@@ -128,12 +180,14 @@ struct AudioVisualizationView: View {
                             Text("Current Mood")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
+                                .accessibilityHidden(true)
                             HStack(spacing: 4) {
                                 Image(systemName: mood.systemIcon)
+                                    .accessibilityHidden(true)
                                 Text(mood.rawValue)
                                     .fontWeight(.medium)
+                                    .foregroundColor(mood.color)
                             }
-                            .foregroundColor(mood.color)
                         }
                     }
                 }
@@ -142,18 +196,22 @@ struct AudioVisualizationView: View {
                     // Analysis progress
                     HStack(spacing: 8) {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle())
-                            .scaleEffect(0.7)
-                        Text("Analyzing audio characteristics...")
+                            .accessibilityLabel("Analysis in progress")
+                        Text("Analyzing audio...")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.updatesFrequently)
                 }
             }
             .padding()
             .background(Color(.systemBackground))
-            .cornerRadius(16)
-            .shadow(color: Color.black.opacity(0.05), radius: 5)
+            .cornerRadius(12)
+            .shadow(radius: 2)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(songName == "Not Playing" ? "No song playing" : "Now playing: \(songName)")")
+            .accessibilityValue(songName != "Not Playing" ? "Current mood: \(mood.rawValue)" : "")
         }
     }
     
@@ -192,8 +250,14 @@ struct AudioVisualizationView: View {
                         icon: characteristic.icon,
                         color: characteristic.color
                     )
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("\(characteristic.name)")
+                    .accessibilityValue(characteristic.value)
+                    .accessibilityAddTraits(.updatesFrequently)
                 }
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Audio characteristics")
         }
     }
     
@@ -208,6 +272,7 @@ struct AudioVisualizationView: View {
                 HStack {
                     Image(systemName: icon)
                         .foregroundColor(color)
+                        .accessibilityHidden(true)
                     Text(title)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
@@ -222,7 +287,7 @@ struct AudioVisualizationView: View {
             .padding()
             .background(Color(.systemBackground))
             .cornerRadius(12)
-            .shadow(color: color.opacity(0.1), radius: 5)
+            .shadow(radius: 2)
         }
     }
     
@@ -345,6 +410,15 @@ enum TimeRange: String, CaseIterable {
         case .lastWeek: return "1 Week"
         case .lastMonth: return "1 Month"
         }
+    }
+}
+
+enum VisualizationStyle: String, CaseIterable {
+    case classic = "Classic"
+    case modern = "Modern"
+    
+    var description: String {
+        rawValue
     }
 }
 

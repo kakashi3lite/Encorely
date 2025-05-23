@@ -11,6 +11,10 @@ import SwiftUI
 import AVKit
 import MediaPlayer
 import Intents
+import CoreData
+
+// Internal modules
+import AIMixtapes // This module contains our SharedTypes
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 

@@ -9,6 +9,7 @@
 import SwiftUI
 import CoreData
 import AVKit
+import AIMixtapes // Contains SharedTypes
 
 struct ContentView: View {
     // Core environment and state

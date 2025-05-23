@@ -3,7 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>AI-Mixtapes</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,98 +15,22 @@
 	<key>CFBundleName</key>
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
-	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>UIApplicationSceneManifest</key>
-	<dict>
-		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
-		<key>UISceneConfigurations</key>
-		<dict>
-			<key>UIWindowSceneSessionRoleApplication</key>
-			<array>
-				<dict>
-					<key>UISceneConfigurationName</key>
-					<string>Default Configuration</string>
-					<key>UISceneDelegateClassName</key>
-					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
-				</dict>
-			</array>
-		</dict>
-	</dict>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>audio</string>
-		<string>fetch</string>
-	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>AI-Mixtapes needs microphone access for audio analysis</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
-	<key>UIRequiredDeviceCapabilities</key>
-	<array>
-		<string>armv7</string>
-	</array>
+	<key>UIMainStoryboardFile</key>
+	<string></string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-	</array>
-	<key>UISupportedInterfaceOrientations~ipad</key>
-	<array>
-		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<!-- AI-related permissions -->
-	<key>NSMicrophoneUsageDescription</key>
-	<string>AI Mixtapes needs microphone access for Siri voice commands</string>
-	<key>NSFaceIDUsageDescription</key>
-	<string>AI-Mixtapes can use facial expression analysis to detect your mood and tailor music recommendations (optional).</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Optional: Enable camera access to enhance mood detection through facial expressions. All processing is done on-device and no images are stored or transmitted.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Access your photo library to customize mixtape cover art. Images are processed locally using on-device AI.</string>
-	<key>NSAppleMusicUsageDescription</key>
-	<string>Access your music library to create personalized AI-powered mixtapes. Your music data stays on your device.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Enable voice commands for hands-free playlist control. Speech processing is handled on-device.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Optional: Enable local network for sharing mixtapes with nearby friends. All sharing is peer-to-peer encrypted.</string>
-	<key>NSSiriUsageDescription</key>
-	<string>Use Siri to control your music by mood and create AI mixtapes hands-free</string>
-	<!-- Intents Extension -->
-	<key>NSUserActivityTypes</key>
-	<array>
-		<string>INPlayMediaIntent</string>
-		<string>INSearchForMediaIntent</string>
-		<string>INAddMediaIntent</string>
-		<string>PlayMoodIntent</string>
-		<string>CreateMixtapeIntent</string>
-		<string>AnalyzeCurrentSongIntent</string>
-	</array>
-	<key>INIntentsSupported</key>
-	<array>
-		<string>PlayMoodIntent</string>
-		<string>CreateMixtapeIntent</string>
-		<string>AnalyzeCurrentSongIntent</string>
-	</array>
-	<!-- ML Model Permissions -->
-	<key>NSCoreMLUsageDescription</key>
-	<string>AI-Mixtapes uses on-device machine learning to provide personalized music experiences.</string>
-	<!-- App Privacy Details -->
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
-	<key>SupportedIntents</key>
-	<array>
-		<string>PlayMoodIntent</string>
-		<string>CreateMixtapeIntent</string>
-		<string>AnalyzeCurrentSongIntent</string>
 	</array>
 </dict>
 </plist>

@@ -20,8 +20,12 @@ class CoreDataMigrationManager: NSObject {
     /// Available model versions in order of creation (oldest first)
     private let modelVersions = ["AI_Mixtapes", "AI_Mixtapes_v2"]
     
+    private let backupStoreURL: URL
+    
     init(storeURL: URL) {
         self.storeURL = storeURL
+        self.backupStoreURL = storeURL.deletingLastPathComponent()
+            .appendingPathComponent("AI_Mixtapes.backup.sqlite")
     }
     
     override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
@@ -37,6 +41,20 @@ class CoreDataMigrationManager: NSObject {
         guard needsMigration() else {
             logger.info("No migration needed, store is at current version")
             return true
+        }
+        
+        // Create backup of existing store
+        if FileManager.default.fileExists(atPath: storeURL.path) {
+            do {
+                if FileManager.default.fileExists(atPath: backupStoreURL.path) {
+                    try FileManager.default.removeItem(at: backupStoreURL)
+                }
+                try FileManager.default.copyItem(at: storeURL, to: backupStoreURL)
+                logger.info("Created backup of store at \(backupStoreURL.path)")
+            } catch {
+                logger.error("Failed to create backup: \(error.localizedDescription)")
+                return false
+            }
         }
         
         logger.info("Beginning CoreData migration process")
@@ -61,8 +79,30 @@ class CoreDataMigrationManager: NSObject {
             
         } catch {
             logger.error("Migration failed: \(error.localizedDescription)")
+            return restoreFromBackup()
+        }
+    }
+    
+    /// Restores the store from backup after a failed migration
+    /// - Returns: false to indicate migration failure
+    private func restoreFromBackup() -> Bool {
+        guard FileManager.default.fileExists(atPath: backupStoreURL.path) else {
+            logger.error("No backup available to restore from")
             return false
         }
+        
+        do {
+            if FileManager.default.fileExists(atPath: storeURL.path) {
+                try FileManager.default.removeItem(at: storeURL)
+            }
+            try FileManager.default.copyItem(at: backupStoreURL, to: storeURL)
+            logger.info("Successfully restored from backup")
+        } catch {
+            logger.error("Failed to restore from backup: \(error.localizedDescription)")
+        }
+        
+        // Always return false to indicate migration failure
+        return false
     }
     
     /// Checks if the store needs migration

@@ -15,7 +15,12 @@ extension MixTape {
     @NSManaged public var aiGenerated: Bool
     @NSManaged public var urlData: Data?
     @NSManaged public var songs: Set<Song>
-    @NSManaged public var songs: Set<Song>
+    @NSManaged public var personalityType: String?
+    @NSManaged public var moodLabel: String?
+    @NSManaged public var isPublic: Bool
+    @NSManaged public var note: String?
+    @NSManaged public var totalDuration: Double
+    @NSManaged public var coverImageData: Data?
     
     public var songsArray: [Song] {
         Array(songs).sorted { $0.title < $1.title }
@@ -26,8 +31,22 @@ extension MixTape {
         title 
     }
     
-    public var wrappedMoodLabel: String {
-        moodLabel ?? "neutral"
+    public var personality: PersonalityType {
+        get {
+            PersonalityType(rawValue: personalityType ?? "balanced") ?? .balanced
+        }
+        set {
+            personalityType = newValue.rawValue
+        }
+    }
+    
+    public var dominantMood: Mood {
+        get {
+            Mood(rawValue: moodLabel ?? "neutral") ?? .neutral
+        }
+        set {
+            moodLabel = newValue.rawValue
+        }
     }
 }
 

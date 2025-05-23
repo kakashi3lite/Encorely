@@ -57,6 +57,9 @@ struct MainTabView: View {
                 // Mode Selector at the top
                 AnimatedModeSelector(selectedMode: $selectedMode, aiService: aiService)
                     .padding(.top, 8)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("Mode selection")
+                    .accessibilityHint("Select between Player, Podcast and News modes")
                 
                 // Mode-specific content
                 ZStack {
@@ -64,18 +67,24 @@ struct MainTabView: View {
                     if selectedMode == 0 {
                         playerModeContent
                             .transition(.opacity.combined(with: .move(edge: .leading)))
+                            .accessibilityElement(children: .contain)
+                            .accessibilityLabel("Player mode")
                     }
                     
                     // Podcast Mode Content
                     if selectedMode == 1 {
                         podcastModeContent
                             .transition(.opacity.combined(with: .move(edge: selectedMode > 1 ? .leading : .trailing)))
+                            .accessibilityElement(children: .contain)
+                            .accessibilityLabel("Podcast mode") 
                     }
                     
                     // News Mode Content
                     if selectedMode == 2 {
                         newsModeContent
                             .transition(.opacity.combined(with: .move(edge: .trailing)))
+                            .accessibilityElement(children: .contain)
+                            .accessibilityLabel("News mode")
                     }
                 }
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selectedMode)
@@ -91,6 +100,8 @@ struct MainTabView: View {
                     .tabItem {
                         Label("Library", systemImage: "music.note.list")
                             .environment(\.symbolVariants, selectedTab == 0 ? .fill : .none)
+                            .accessibilityLabel("Library")
+                            .accessibilityHint("Browse your music library")
                     }
                     .tag(0)
                 
@@ -99,6 +110,8 @@ struct MainTabView: View {
                     .tabItem {
                         Label("Generate", systemImage: "wand.and.stars")
                             .environment(\.symbolVariants, selectedTab == 1 ? .fill : .none)
+                            .accessibilityLabel("Generate")
+                            .accessibilityHint("Create new AI-generated mixtapes")
                     }
                     .tag(1)
                 
@@ -106,6 +119,8 @@ struct MainTabView: View {
                         .tabItem {
                             Label("Analyze", systemImage: "waveform")
                                 .environment(\.symbolVariants, selectedTab == 2 ? .fill : .none)
+                                .accessibilityLabel("Analyze")
+                                .accessibilityHint("Analyze your music data")
                         }
                         .tag(2)
                 
@@ -113,6 +128,8 @@ struct MainTabView: View {
                         .tabItem {
                             Label("Insights", systemImage: "chart.bar")
                                 .environment(\.symbolVariants, selectedTab == 3 ? .fill : .none)
+                                .accessibilityLabel("Insights")
+                                .accessibilityHint("View AI insights and reports")
                         }
                         .tag(3)
                 
@@ -120,6 +137,8 @@ struct MainTabView: View {
                         .tabItem {
                             Label("Settings", systemImage: "gear")
                                 .environment(\.symbolVariants, selectedTab == 4 ? .fill : .none)
+                                .accessibilityLabel("Settings")
+                                .accessibilityHint("Configure app settings")
                         }
                         .tag(4)
                 }

@@ -74,6 +74,7 @@ struct PlayerView: View {
                     }
                 }
                 .padding(.horizontal)
+                .accessibilityHidden(true) // Hide visualization from VoiceOver
                 
                 // Song info
                 VStack(spacing: 8) {
@@ -85,149 +86,138 @@ struct PlayerView: View {
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Now playing")
+                .accessibilityValue("\(currentSongName.wrappedValue ?? "Not Playing") from \(currentMixTapeName)")
+                .accessibilityAddTraits(.updatesFrequently)
                 
                 // Progress bar
                 VStack(spacing: 8) {
                     Slider(value: $progress)
                         .accentColor(aiService.moodEngine.currentMood.color)
+                        .accessibilityLabel("Playback progress")
+                        .accessibilityValue("\(currentTime) of \(totalTime)")
+                        .accessibilityHint("Adjust to seek through the song")
                     
                     HStack {
                         Text(currentTime)
+                            .accessibilityHidden(true)
                         Spacer()
                         Text(totalTime)
+                            .accessibilityHidden(true)
                     }
                     .font(.caption)
                     .foregroundColor(.secondary)
                 }
-                .padding(.horizontal)
                 
-                // Playback controls
-                HStack(spacing: 32) {
-                    Button(action: toggleShuffle) {
-                        Image(systemName: "shuffle")
-                            .font(.title3)
-                            .foregroundColor(isShuffleOn ? .accentColor : .primary)
-                    }
-                    
+                // Player controls
+                HStack(spacing: 40) {
+                    // Previous
                     Button(action: previousTrack) {
                         Image(systemName: "backward.fill")
-                            .font(.title2)
+                            .font(.title)
                     }
+                    .accessibilityLabel("Previous track")
+                    .accessibilityHint("Play previous song")
                     
-                    Button(action: togglePlayback) {
+                    // Play/Pause
+                    Button(action: playPause) {
                         Image(systemName: isPlaying.wrappedValue ? "pause.circle.fill" : "play.circle.fill")
                             .font(.system(size: 64))
                             .foregroundColor(aiService.moodEngine.currentMood.color)
                     }
+                    .accessibilityLabel(isPlaying.wrappedValue ? "Pause" : "Play")
+                    .accessibilityHint(isPlaying.wrappedValue ? "Pause current song" : "Play current song")
+                    .accessibilityAddTraits(isPlaying.wrappedValue ? .startsMediaSession : .playsSound)
                     
+                    // Next
                     Button(action: nextTrack) {
                         Image(systemName: "forward.fill")
-                            .font(.title2)
+                            .font(.title)
+                    }
+                    .accessibilityLabel("Next track")
+                    .accessibilityHint("Play next song")
+                }
+                
+                // Volume and playlist controls
+                HStack(spacing: 20) {
+                    // Volume slider
+                    HStack {
+                        Image(systemName: "speaker.fill")
+                            .foregroundColor(.secondary)
+                            .accessibilityHidden(true)
+                        
+                        Slider(value: $volume)
+                            .accessibilityLabel("Volume")
+                            .accessibilityValue("\(Int(volume * 100))%")
+                            .accessibilityHint("Adjust volume")
+                            
+                        Image(systemName: "speaker.wave.2.fill")
+                            .foregroundColor(.secondary)
+                            .accessibilityHidden(true)
                     }
                     
+                    // Shuffle
+                    Button(action: toggleShuffle) {
+                        Image(systemName: "shuffle")
+                            .foregroundColor(isShuffleOn ? aiService.moodEngine.currentMood.color : .secondary)
+                    }
+                    .accessibilityLabel("Shuffle")
+                    .accessibilityValue(isShuffleOn ? "On" : "Off")
+                    .accessibilityHint("Toggle shuffle play")
+                    .accessibilityAddTraits(isShuffleOn ? .isSelected : [])
+                    
+                    // Repeat
                     Button(action: cycleRepeatMode) {
                         Image(systemName: repeatMode.icon)
-                            .font(.title3)
-                            .foregroundColor(repeatMode != .off ? .accentColor : .primary)
+                            .foregroundColor(repeatMode != .off ? aiService.moodEngine.currentMood.color : .secondary)
                     }
-                }
-                
-                // Volume slider
-                HStack {
-                    Image(systemName: "speaker.fill")
-                        .foregroundColor(.secondary)
-                    
-                    Slider(value: $volume)
-                        .accentColor(.secondary)
-                    
-                    Image(systemName: "speaker.wave.3.fill")
-                        .foregroundColor(.secondary)
-                }
-                .padding(.horizontal)
-                
-                // Additional controls
-                HStack(spacing: 40) {
-                    Button(action: { showingLyrics.toggle() }) {
-                        VStack(spacing: 4) {
-                            Image(systemName: "text.quote")
-                                .font(.title3)
-                            Text("Lyrics")
-                                .font(.caption)
-                        }
-                    }
-                    
-                    Button(action: {
-                        // Add to playlist
-                    }) {
-                        VStack(spacing: 4) {
-                            Image(systemName: "plus.rectangle.on.rectangle")
-                                .font(.title3)
-                            Text("Add to")
-                                .font(.caption)
-                        }
-                    }
-                    
-                    ShareLink(item: "Check out this song!") {
-                        VStack(spacing: 4) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.title3)
-                            Text("Share")
-                                .font(.caption)
-                        }
-                    }
-                }
-                .foregroundColor(.primary)
-            }
-            .padding(.vertical)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: { presentationMode.wrappedValue.dismiss() }) {
-                        Image(systemName: "chevron.down")
-                            .imageScale(.large)
-                    }
+                    .accessibilityLabel("Repeat mode")
+                    .accessibilityValue(repeatModeDescription)
+                    .accessibilityHint("Change repeat mode")
                 }
             }
-            .sheet(isPresented: $showingLyrics) {
-                LyricsView(song: currentSongName.wrappedValue ?? "")
-            }
+            .padding()
         }
     }
     
-    // MARK: - Actions
+    // Computed property for repeat mode description
+    private var repeatModeDescription: String {
+        switch repeatMode {
+        case .off: return "Off"
+        case .all: return "Repeat all"
+        case .one: return "Repeat one"
+        }
+    }
     
-    private func togglePlayback() {
+    // MARK: - Control Functions
+    
+    private func playPause() {
         if isPlaying.wrappedValue {
             queuePlayer.pause()
+            aiService.trackInteraction(type: "pause")
         } else {
             queuePlayer.play()
+            aiService.trackInteraction(type: "play")
         }
     }
     
     private func previousTrack() {
         queuePlayer.seek(to: .zero)
-        if let items = currentPlayerItems.items {
-            if let currentItem = queuePlayer.currentItem,
-               let currentIndex = items.firstIndex(of: currentItem),
-               currentIndex > 0 {
-                queuePlayer.replaceCurrentItem(with: items[currentIndex - 1])
-            }
+        if let previous = currentPlayerItems.items.first(where: { $0.title == currentSongName.wrappedValue }) {
+            queuePlayer.seek(to: .zero, completionHandler: nil)
         }
+        aiService.trackInteraction(type: "previous_track")
     }
     
     private func nextTrack() {
-        if let items = currentPlayerItems.items {
-            if let currentItem = queuePlayer.currentItem,
-               let currentIndex = items.firstIndex(of: currentItem),
-               currentIndex < items.count - 1 {
-                queuePlayer.replaceCurrentItem(with: items[currentIndex + 1])
-            }
-        }
+        queuePlayer.advanceToNextItem()
+        aiService.trackInteraction(type: "next_track")
     }
     
     private func toggleShuffle() {
         isShuffleOn.toggle()
-        // Implement shuffle logic
+        aiService.trackInteraction(type: "toggle_shuffle_\(isShuffleOn ? "on" : "off")")
     }
     
     private func cycleRepeatMode() {
@@ -236,7 +226,7 @@ struct PlayerView: View {
         case .all: repeatMode = .one
         case .one: repeatMode = .off
         }
-        // Implement repeat logic
+        aiService.trackInteraction(type: "change_repeat_mode_\(repeatMode)")
     }
 }
 

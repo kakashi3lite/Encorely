@@ -27,7 +27,7 @@ struct PersonalityView: View {
                 .padding()
             
             // Personality Selection
-            ForEach(Asset.PersonalityColor.allCases, id: \.rawValue) { personality in
+            ForEach(PersonalityType.allCases, id: \.rawValue) { personality in
                 PersonalityCard(
                     personality: personality,
                     isSelected: personality == personalityEngine.currentPersonality

@@ -20,6 +20,7 @@ struct MiniPlayerView: View {
                     .font(.system(size: 16))
                     .foregroundColor(.gray)
             }
+            .accessibilityHidden(true) // Hide art from VoiceOver since it's decorative
             
             // Song info
             VStack(alignment: .leading, spacing: 2) {
@@ -32,6 +33,8 @@ struct MiniPlayerView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Now playing: \(currentSongName.wrappedValue ?? "Not Playing")")
             
             Spacer()
             
@@ -48,6 +51,8 @@ struct MiniPlayerView: View {
                         .font(.system(size: 22))
                         .foregroundColor(.primary)
                 }
+                .accessibilityLabel(isPlaying.wrappedValue ? "Pause" : "Play")
+                .accessibilityHint(isPlaying.wrappedValue ? "Pause current song" : "Play current song")
                 
                 Button(action: {
                     showingFullPlayer = true
@@ -56,6 +61,8 @@ struct MiniPlayerView: View {
                         .font(.system(size: 20))
                         .foregroundColor(.primary)
                 }
+                .accessibilityLabel("More options")
+                .accessibilityHint("Open full player view")
             }
         }
         .padding(.horizontal)
@@ -68,5 +75,7 @@ struct MiniPlayerView: View {
         .onTapGesture {
             showingFullPlayer = true
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.updatesFrequently)
     }
 }

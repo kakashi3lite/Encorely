@@ -10,6 +10,7 @@ import Foundation
 import AVFoundation
 import CoreML
 import Accelerate
+import AIMixtapes // Contains SharedTypes
 
 /// Real-time audio processor with FFT analysis and mood detection
 class AudioProcessor: ObservableObject {
@@ -19,9 +20,12 @@ class AudioProcessor: ObservableObject {
     private let fftProcessor: FFTProcessor
     
     // Buffers and processing
-    private let bufferSize: Int = 4096
-    private let sampleRate: Float = 44100.0
+    private var bufferSize: Int
+    private var sampleRate: Float
     private let processingQueue = DispatchQueue(label: "AudioProcessing", qos: .userInitiated)
+    
+    // Configuration
+    private var config: AudioProcessingConfiguration
     
     // Feature extraction and analysis
     @Published private(set) var currentFeatures: AudioFeatures?

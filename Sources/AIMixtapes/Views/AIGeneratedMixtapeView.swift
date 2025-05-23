@@ -26,6 +26,7 @@ struct AIGeneratedMixtapeView: View {
     @State private var mixtapeName = ""
     @State private var showingGenreSelector = false
     @State private var selectedGenres: Set<String> = []
+    @State private var showingAdvancedOptions = false
     
     private let haptics = UINotificationFeedbackGenerator()
     
@@ -48,13 +49,18 @@ struct AIGeneratedMixtapeView: View {
                 VStack(spacing: 24) {
                     // Header with mood and personality cards
                     moodPersonalityHeaderSection
+                        .accessibilityElement(children: .contain)
+                        .accessibilityLabel("Current settings")
                     
                     // Configuration and generation controls
                     if !isGenerating {
                         configurationSection
+                            .accessibilityElement(children: .contain)
+                            .accessibilityLabel("Mixtape configuration")
                         
                         if viewModel.currentMixtape == nil {
                             generateButtonSection
+                                .accessibilityHint("Create a new AI-generated mixtape with the selected settings")
                         }
                     }
                     
@@ -62,47 +68,38 @@ struct AIGeneratedMixtapeView: View {
                     Group {
                         if isGenerating {
                             progressSection
-                                .transition(.opacity)
+                                .accessibilityElement(children: .contain)
+                                .accessibilityLabel("Generation progress")
+                                .accessibilityValue("\(Int(viewModel.generationProgress * 100))% complete")
+                                .accessibilityAddTraits(.updatesFrequently)
                         } else if let error = errorMessage {
                             errorSection(message: error)
-                                .transition(.opacity)
+                                .accessibilityLabel("Generation error")
                         } else if let mixtape = viewModel.currentMixtape {
                             mixtapePreviewSection(mixtape: mixtape)
-                                .transition(.opacity)
+                                .accessibilityElement(children: .contain)
+                                .accessibilityLabel("Generated mixtape preview")
                         }
                     }
-                    .animation(.easeInOut, value: isGenerating)
-                    .animation(.easeInOut, value: errorMessage)
-                    .animation(.easeInOut, value: viewModel.currentMixtape)
                     
                     // Recent mixtapes section
                     if !viewModel.recentMixtapes.isEmpty && !isGenerating {
                         recentMixtapesSection
+                            .accessibilityElement(children: .contain)
+                            .accessibilityLabel("Recent AI mixtapes")
                     }
                 }
                 .padding(.vertical)
             }
             .navigationTitle("Create AI Mixtape")
-            .background(Color(.systemGroupedBackground))
         }
-        .overlay(
-            // Loading overlay
-            ZStack {
-                if isGenerating {
-                    Color.black.opacity(0.3)
-                        .edgesIgnoringSafeArea(.all)
-                        .transition(.opacity)
-                }
-            }
-            .animation(.easeInOut, value: isGenerating)
-        )
     }
     
     // MARK: - View Components
     
     private var moodPersonalityHeaderSection: some View {
-        HStack(spacing: 16) {
-            // Current mood card
+        VStack(spacing: 24) {
+            // Mood card
             Button(action: { showingMoodPicker = true }) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
@@ -127,7 +124,10 @@ struct AIGeneratedMixtapeView: View {
                         .shadow(color: moodEngine.currentMood.color.opacity(0.1), radius: 10)
                 )
             }
-            .buttonStyle(PlainButtonStyle())
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Current mood: \(moodEngine.currentMood.rawValue)")
+            .accessibilityHint("Double tap to change your mood")
+            .accessibilityAddTraits([.isButton])
             
             // Personality type card
             Button(action: { showingPersonalityView = true }) {
@@ -154,71 +154,86 @@ struct AIGeneratedMixtapeView: View {
                         .shadow(color: personalityEngine.currentPersonality.themeColor.opacity(0.1), radius: 10)
                 )
             }
-            .buttonStyle(PlainButtonStyle())
+            .accessibilityElement(children: .combine) 
+            .accessibilityLabel("Music personality: \(personalityEngine.currentPersonality.rawValue)")
+            .accessibilityHint("Double tap to change your music personality type")
+            .accessibilityAddTraits([.isButton])
         }
-        .padding(.horizontal)
     }
     
     private var configurationSection: some View {
-        VStack(spacing: 20) {
-            TextField("Mixtape Name", text: $mixtapeName)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-                .padding(.horizontal)
-            
-            // Song count and duration
-            HStack(spacing: 16) {
-                // Song count stepper
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Songs")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    Stepper(
-                        value: $viewModel.songCount,
-                        in: 5...20
-                    ) {
-                        Text("\(viewModel.songCount)")
-                            .font(.headline)
-                    }
-                }
+        VStack(spacing: 16) {
+            // Mixtape name
+            HStack {
+                TextField("Mixtape Name", text: $mixtapeName)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .accessibilityLabel("Mixtape name")
                 
-                Divider()
-                
-                // Duration picker
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Duration")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    Picker("Duration", selection: $viewModel.duration) {
-                        Text("30 min").tag(30)
-                        Text("45 min").tag(45)
-                        Text("60 min").tag(60)
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
+                Button(action: { showingNameSuggestions = true }) {
+                    Image(systemName: "wand.stars")
+                        .foregroundColor(moodEngine.currentMood.color)
                 }
+                .accessibilityLabel("Get name suggestions")
+                .accessibilityHint("Generate AI suggestions for mixtape names")
             }
-            .padding()
-            .background(Color(.systemBackground))
-            .cornerRadius(12)
             .padding(.horizontal)
+            
+            // Song count stepper
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Number of songs")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                Stepper(
+                    value: $viewModel.songCount,
+                    in: 5...20
+                ) {
+                    Text("\(viewModel.songCount)")
+                        .font(.headline)
+                }
+                .accessibilityLabel("Number of songs")
+                .accessibilityValue("\(viewModel.songCount) songs")
+                .accessibilityHint("Adjust the number of songs in the mixtape")
+            }
+            
+            Divider()
+            
+            // Duration picker
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Duration")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                Picker("Duration", selection: $viewModel.duration) {
+                    Text("30 min").tag(30)
+                    Text("45 min").tag(45)
+                    Text("60 min").tag(60)
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .accessibilityLabel("Mixtape duration")
+                .accessibilityValue("\(viewModel.duration) minutes")
+            }
         }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .padding(.horizontal)
     }
     
     private var generateButtonSection: some View {
         Button(action: generateMixtape) {
-            HStack {
-                Image(systemName: "wand.and.stars")
-                Text("Generate AI Mixtape")
-                    .fontWeight(.semibold)
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(mixtapeName.isEmpty ? Color.gray : moodEngine.currentMood.color)
-            .foregroundColor(.white)
-            .cornerRadius(12)
+            Text("Generate Mixtape")
+                .fontWeight(.semibold)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(moodEngine.currentMood.color)
+                )
         }
-        .disabled(mixtapeName.isEmpty)
+        .accessibilityLabel("Generate mixtape")
+        .accessibilityHint("Double tap to create a new mixtape with your selected preferences")
         .padding(.horizontal)
     }
     
@@ -238,65 +253,24 @@ struct AIGeneratedMixtapeView: View {
                     ))
                     .frame(width: 120, height: 120)
                     .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 0.2), value: viewModel.generationProgress)
                 
                 VStack {
                     Text("\(Int(viewModel.generationProgress * 100))%")
                         .font(.title2)
-                        .bold()
-                    Text(viewModel.currentGenerationStep ?? "")
+                        .fontWeight(.bold)
+                    
+                    Text(viewModel.currentGenerationStep ?? "Processing...")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
             }
-            
-            // Progress steps
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(Array(viewModel.generationSteps.enumerated()), id: \.offset) { index, step in
-                    HStack(spacing: 12) {
-                        // Step indicator
-                        Circle()
-                            .fill(index <= Int(viewModel.generationProgress * Float(viewModel.generationSteps.count)) ? 
-                                moodEngine.currentMood.color : Color.secondary.opacity(0.3))
-                            .frame(width: 8, height: 8)
-                        
-                        // Step text
-                        Text(step)
-                            .font(.subheadline)
-                            .foregroundColor(index <= Int(viewModel.generationProgress * Float(viewModel.generationSteps.count)) ? 
-                                .primary : .secondary)
-                        
-                        // Loading indicator for current step
-                        if index == Int(viewModel.generationProgress * Float(viewModel.generationSteps.count)) {
-                            Spacer()
-                            ProgressView()
-                                .scaleEffect(0.7)
-                        }
-                    }
-                }
-            }
-            .padding()
-            .background(Color(.systemBackground))
-            .cornerRadius(12)
-            
-            // Cancel button
-            Button("Cancel") {
-                withAnimation {
-                    isGenerating = false
-                    viewModel.generationProgress = 0
-                    viewModel.currentGenerationStep = nil
-                }
-            }
-            .foregroundColor(.secondary)
-            .padding(.top)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Generation progress")
+            .accessibilityValue("\(Int(viewModel.generationProgress * 100))% complete, \(viewModel.currentGenerationStep ?? "Processing...")")
+            .accessibilityAddTraits(.updatesFrequently)
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
-        .shadow(radius: 5)
-        .padding()
     }
     
     private func errorSection(message: String) -> some View {
@@ -393,6 +367,86 @@ struct AIGeneratedMixtapeView: View {
                 }
             }
         }
+    }
+    
+    private var advancedOptionsSection: some View {
+        VStack(spacing: 16) {
+            // Explicit content toggle
+            Toggle("Include explicit content", isOn: $viewModel.includeExplicitContent)
+                .toggleStyle(SwitchToggleStyle(tint: moodEngine.currentMood.color))
+                .accessibilityLabel("Include explicit content")
+                .accessibilityHint("Double tap to \(viewModel.includeExplicitContent ? "exclude" : "include") explicit content")
+                .padding(.horizontal)
+            
+            // Custom mood tag
+            HStack {
+                Text("Custom Mood Tag")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                TextField("e.g., Chill, Party", text: $viewModel.customMoodTag)
+                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                    .frame(width: 150)
+                    .accessibilityLabel("Custom mood tag")
+                    .accessibilityHint("Enter a custom tag to describe the mood of your mixtape")
+            }
+            .padding(.horizontal)
+            
+            // Save settings button
+            Button(action: viewModel.saveSettings) {
+                Text("Save Settings")
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(moodEngine.currentMood.color)
+                    .cornerRadius(12)
+            }
+            .accessibilityLabel("Save settings")
+            .accessibilityHint("Double tap to save your advanced settings")
+            .padding(.horizontal)
+        }
+        .padding(.vertical)
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(radius: 2)
+    }
+    
+    private var generationProgressSection: some View {
+        VStack(spacing: 16) {
+            // Progress indicator
+            CircularProgressView(progress: viewModel.generationProgress)
+                .frame(width: 100, height: 100)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Generation progress")
+                .accessibilityValue("\(Int(viewModel.generationProgress * 100))%")
+                .accessibilityAddTraits(.updatesFrequently)
+            
+            // Status text
+            Text(viewModel.generationPhase)
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+                .accessibilityLabel("Current phase")
+                .accessibilityValue(viewModel.generationPhase)
+            
+            // Cancel button
+            Button(action: cancelGeneration) {
+                Text("Cancel")
+                    .foregroundColor(.red)
+                    .padding()
+            }
+            .accessibilityLabel("Cancel generation")
+            .accessibilityHint("Double tap to stop generating the mixtape")
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(radius: 2)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Mixtape generation progress")
     }
     
     // MARK: - Actions
@@ -533,6 +587,8 @@ class AIGeneratedMixtapeViewModel: ObservableObject {
     @Published var progressMessage = ""
     @Published var showingError = false
     @Published var errorMessage: String?
+    @Published var includeExplicitContent = false
+    @Published var customMoodTag = ""
     
     private let moodEngine: MoodEngine
     private let personalityEngine: PersonalityEngine
@@ -683,6 +739,11 @@ class AIGeneratedMixtapeViewModel: ObservableObject {
         } catch {
             print("Failed to fetch recent mixtapes: \(error)")
         }
+    }
+    
+    func saveSettings() {
+        // Here you can add code to handle saving of advanced settings if needed
+        print("Settings saved: Include Explicit Content - \(includeExplicitContent), Custom Mood Tag - \(customMoodTag)")
     }
 }
 

@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import AIMixtapes // Contains SharedTypes
 
 /// Banner that displays personalized messages from the AI
 struct PersonalizedMessageBanner: View {
@@ -500,7 +501,7 @@ struct MoodCard: View {
 }
 
 struct PersonalityCard: View {
-    let personality: Personality
+    let personality: PersonalityType
     let isSelected: Bool
     
     var body: some View {
@@ -510,8 +511,8 @@ struct PersonalityCard: View {
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 Spacer()
-                Image(systemName: personality.icon)
-                    .foregroundColor(personality.themeColor)
+                Image(systemName: personalityIcon)
+                    .foregroundColor(themeColor)
             }
             
             Text(personality.rawValue)
@@ -524,8 +525,28 @@ struct PersonalityCard: View {
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color(.systemBackground))
-                .shadow(color: personality.themeColor.opacity(0.2), radius: 10)
+                .shadow(color: themeColor.opacity(0.2), radius: 10)
         )
+    }
+    
+    private var personalityIcon: String {
+        switch personality {
+        case .analyzer: return "waveform.path"
+        case .explorer: return "safari"
+        case .planner: return "calendar"
+        case .creative: return "paintbrush"
+        case .balanced: return "circle.grid.2x2"
+        }
+    }
+    
+    private var themeColor: Color {
+        switch personality {
+        case .analyzer: return .blue
+        case .explorer: return .purple
+        case .planner: return .orange
+        case .creative: return .pink
+        case .balanced: return .gray
+        }
     }
 }
 

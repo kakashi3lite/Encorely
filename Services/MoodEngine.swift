@@ -15,20 +15,11 @@ import Combine
 import AVFoundation
 import Intents
 import os.log
+import AIMixtapes // Contains SharedTypes
 
-/// Enum representing different mood states the app can detect and use
-enum Mood: String, CaseIterable {
-    case energetic = "Energetic"
-    case relaxed = "Relaxed"
-    case happy = "Happy"
-    case melancholic = "Melancholic"
-    case focused = "Focused"
-    case romantic = "Romantic"
-    case angry = "Angry"
-    case neutral = "Neutral"
-    
-    /// Returns a color associated with each mood
-    var color: Color {
+// Mood enum is now defined in SharedTypes.swift
+// Here we add domain-specific mood analysis capabilities
+extension Mood {
         switch self {
         case .energetic: return Color.orange
         case .relaxed: return Color.blue

@@ -10,10 +10,11 @@ import Foundation
 import SwiftUI
 import Combine
 import CoreData
-import AVKit
+import AVKit 
 import CoreML
 import NaturalLanguage
 import os.log
+import AIMixtapes // Contains SharedTypes
 
 /// Central service that coordinates all AI features of the Mixtapes app
 final class AIIntegrationService: ObservableObject {

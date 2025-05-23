@@ -16,22 +16,26 @@ struct PersonalityView: View {
         VStack(spacing: 24) {
             // Personality Title
             Text(personalityEngine.currentPersonality.rawValue)
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .personalityThemed(transitionManager)
+                .scalableText(style: .largeTitle, weight: .bold)
+                .accessibleColor(personalityEngine.currentPersonality.themeColor)
+                .accessibilityLabel("Current personality type")
+                .accessibilityValue(personalityEngine.currentPersonality.rawValue)
+                .accessibilityAddTraits(.isHeader)
             
             // Personality Description
             Text(personalityDescription)
-                .font(.body)
+                .scalableText(style: .body)
                 .multilineTextAlignment(.center)
                 .padding()
+                .accessibilityLabel("Personality description")
             
             // Personality Selection
-            ForEach(Asset.PersonalityColor.allCases, id: \.rawValue) { personality in
+            ForEach(PersonalityType.allCases, id: \.rawValue) { personality in
                 PersonalityCard(
                     personality: personality,
                     isSelected: personality == personalityEngine.currentPersonality
                 )
+                .accessibleTouchTarget(minSize: 80)
                 .onTapGesture {
                     selectPersonality(personality)
                 }
@@ -39,6 +43,9 @@ struct PersonalityView: View {
         }
         .onChange(of: personalityEngine.currentPersonality) { newPersonality in
             transitionManager.updatePersonality(newPersonality)
+            
+            // Haptic feedback
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
         }
         .animation(.easeInOut, value: personalityEngine.currentPersonality)
     }
@@ -67,13 +74,14 @@ struct PersonalityCard: View {
         HStack {
             VStack(alignment: .leading) {
                 Text(personality.rawValue)
-                    .font(.headline)
+                    .scalableText(style: .headline)
                 Text(personalityTraits)
-                    .font(.subheadline)
+                    .scalableText(style: .subheadline)
                     .opacity(0.8)
             }
             Spacer()
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .imageScale(.large)
         }
         .padding()
         .background(personality.color.opacity(0.1))
@@ -83,6 +91,11 @@ struct PersonalityCard: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .animation(.spring(), value: isSelected)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(personality.rawValue) personality type")
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityHint("Double tap to \(isSelected ? "change from" : "select") \(personality.rawValue) personality type")
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
     
     private var personalityTraits: String {

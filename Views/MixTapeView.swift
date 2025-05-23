@@ -9,6 +9,7 @@
 import SwiftUI
 import CoreData
 import AVKit
+import AIMixtapes // Contains SharedTypes
 
 /// Enhanced MixTapeView with AI features and error handling
 struct MixTapeView: View {
@@ -36,7 +37,7 @@ struct MixTapeView: View {
     @State private var showingSmartReorder = false
     @State private var showingSimilarMixtapes = false
     @State private var showingAIAnalysis = false
-    @State private var selectedMoodTags: [String] = []
+    @State private var selectedMoods: Set<Mood> = []
     @State private var isAnalyzing = false
     @State private var reorderInProgress = false
     @State private var retryAction: (() -> Void)?
@@ -48,8 +49,18 @@ struct MixTapeView: View {
     
     private let headerHeight: CGFloat = 200
     
-    enum ViewMode {
-        case list, grid, compact
+    enum ViewMode: String, CaseIterable {
+        case list = "List"
+        case grid = "Grid" 
+        case compact = "Compact"
+        
+        var icon: String {
+            switch self {
+            case .list: return "list.bullet"
+            case .grid: return "square.grid.2x2"
+            case .compact: return "list.dash"
+            }
+        }
     }
     
     // MARK: - Body

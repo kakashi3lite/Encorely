@@ -16,32 +16,44 @@ struct MoodView: View {
         VStack(spacing: 20) {
             // Mood Title with accessibility
             Text(moodEngine.currentMood.rawValue)
-                .font(.largeTitle)
-                .fontWeight(.bold)
-                .moodColored(colorTransitionManager, as: .foreground)
-                .accessibilityLabel("Current mood: \(moodEngine.currentMood.rawValue)")
+                .scalableText(style: .largeTitle, weight: .bold)
+                .accessibleColor(moodEngine.currentMood.color)
+                .accessibilityLabel("Current mood")
+                .accessibilityValue(moodEngine.currentMood.rawValue)
+                .accessibilityAddTraits(.isHeader)
             
             // Mood Intensity Indicator with accessibility
             CircularProgressView(progress: moodEngine.moodIntensity)
                 .frame(width: 150, height: 150)
-                .moodColored(colorTransitionManager, as: .accent)
-                .accessibilityLabel("Mood intensity: \(Int(moodEngine.moodIntensity * 100))%")
-                .accessibilityValue("\(moodEngine.moodIntensity)")
+                .accessibleColor(moodEngine.currentMood.color)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Mood intensity")
+                .accessibilityValue("\(Int(moodEngine.moodIntensity * 100))%")
+                .accessibilityHint("Shows how strongly the current mood is detected")
+                .accessibilityAddTraits(.updatesFrequently)
             
             // Mood Selection Grid with dynamic layout
-            LazyVGrid(columns: gridColumns, spacing: 16) {
-                ForEach(Asset.MoodColor.allCases, id: \.rawValue) { mood in
-                    MoodCard(
-                        mood: mood,
-                        isSelected: mood == moodEngine.currentMood,
-                        onSelect: { selectMood(mood) }
-                    )
-                    .moodColored(colorTransitionManager)
+            VStack(alignment: .leading) {
+                Text("Select Your Mood")
+                    .scalableText(style: .headline)
+                    .padding(.horizontal)
+                    .accessibilityHidden(true)
+                
+                LazyVGrid(columns: gridColumns, spacing: 16) {
+                    ForEach(Asset.MoodColor.allCases, id: \.rawValue) { mood in
+                        MoodCard(
+                            mood: mood,
+                            isSelected: mood == moodEngine.currentMood,
+                            onSelect: { selectMood(mood) }
+                        )
+                        .accessibleColor(moodEngine.currentMood.color)
+                    }
                 }
+                .padding()
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel("Mood options")
+                .accessibilityHint("Select the mood that best matches how you feel")
             }
-            .padding()
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Mood selection grid")
         }
         .animation(.easeInOut, value: moodEngine.currentMood)
         .onChange(of: moodEngine.currentMood) { newMood in
@@ -78,6 +90,7 @@ struct CircularProgressView: View {
             .stroke(style: StrokeStyle(lineWidth: 10, lineCap: .round))
             .rotationEffect(.degrees(-90))
             .animation(.easeInOut, value: progress)
+            .accessibilityHidden(true)
     }
 }
 
@@ -90,7 +103,7 @@ struct MoodCard: View {
         Button(action: onSelect) {
             VStack {
                 Text(mood.rawValue)
-                    .font(.headline)
+                    .scalableText(style: .headline)
                     .foregroundColor(.white)
                     .padding()
                     .frame(maxWidth: .infinity)
@@ -101,9 +114,11 @@ struct MoodCard: View {
             }
         }
         .buttonStyle(MoodButtonStyle())
+        .accessibleTouchTarget(minSize: 60)
         .accessibilityLabel("\(mood.rawValue) mood")
-        .accessibilityHint(isSelected ? "Currently selected" : "Double tap to select")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityHint("Double tap to \(isSelected ? "change from" : "select") \(mood.rawValue) mood")
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 }
 
