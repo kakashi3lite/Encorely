@@ -17,10 +17,17 @@ final class PerformanceMonitor {
     private var memoryWarningSubscriber: AnyCancellable?
     private var cpuUsageTimer: Timer?
     private var diskUsageTimer: Timer?
+    private var configurationObserver: AnyCancellable?
+    
+    // Connection to configuration system
+    private var configuration: AudioProcessingConfiguration {
+        return AudioProcessingConfiguration.shared
+    }
     
     private init() {
         setupMemoryWarningObserver()
         setupPeriodicMonitoring()
+        setupConfigurationObserver()
     }
     
     /// Starts tracking a performance metric
@@ -217,6 +224,7 @@ extension Notification.Name {
     static let performanceHighMemoryPressure = Notification.Name("PerformanceHighMemoryPressure")
     static let performanceHighCPUUsage = Notification.Name("PerformanceHighCPUUsage")
     static let performanceHighDiskUsage = Notification.Name("PerformanceHighDiskUsage")
+    static let audioProcessingValidationCompleted = Notification.Name("AudioProcessingValidationCompleted")
 }
 
 // MARK: - View Modifier
@@ -237,5 +245,66 @@ struct PerformanceTracking: ViewModifier {
 extension View {
     func trackPerformance(identifier: String) -> some View {
         modifier(PerformanceTracking(identifier: identifier))
+    }
+}
+
+// MARK: - Audio Processing Performance Validation
+
+extension PerformanceMonitor {
+    /// Run a comprehensive validation of the audio processing system
+    func validateAudioProcessingSystem() async -> ValidationResult {
+        logger.info("Starting audio processing system validation...")
+        
+        let validator = PerformanceValidator()
+        let results = await validator.validatePerformanceConstraints()
+        
+        // Log results summary
+        logger.info("Audio processing validation completed. Overall: \(results.overallPassed ? "PASSED" : "FAILED")")
+        logger.info("Latency: \(String(format: "%.1f", results.latencyResult.averageLatencyMs))ms - \(results.latencyResult.passed ? "PASSED" : "FAILED")")
+        logger.info("Memory: \(String(format: "%.1f", results.memoryResult.peakMemoryMB))MB - \(results.memoryResult.passed ? "PASSED" : "FAILED")")
+        logger.info("Accuracy: \(String(format: "%.1f", results.accuracyResult.accuracy * 100))% - \(results.accuracyResult.passed ? "PASSED" : "FAILED")")
+        
+        // Post notification with results
+        NotificationCenter.default.post(
+            name: .audioProcessingValidationCompleted,
+            object: nil,
+            userInfo: ["results": results]
+        )
+        
+        return results
+    }
+    
+    /// Setup configuration observer for AudioProcessingConfiguration
+    private func setupConfigurationObserver() {
+        // Observe configuration changes
+        configurationObserver = AudioProcessingConfiguration.shared.configurationChanged
+            .sink { [weak self] _ in
+                self?.applyConfigurationSettings()
+            }
+        
+        // Apply initial settings
+        applyConfigurationSettings()
+    }
+    
+    private func applyConfigurationSettings() {
+        let config = AudioProcessingConfiguration.shared
+        
+        // Update monitoring based on configuration
+        let enableMonitoring = config.enablePerformanceMonitoring
+        
+        // Adjust CPU usage timer
+        if enableMonitoring {
+            if cpuUsageTimer == nil {
+                cpuUsageTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+                    self?.reportCPUUsage()
+                }
+            }
+        } else {
+            cpuUsageTimer?.invalidate()
+            cpuUsageTimer = nil
+        }
+        
+        // Log configuration
+        logger.info("Applied performance settings: maxLatency=\(config.maxProcessingLatency)s, maxMemory=\(config.maxMemoryUsage/1024/1024)MB, FPS=\(config.targetFPS)")
     }
 }

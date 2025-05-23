@@ -47,6 +47,17 @@ struct PerformanceSettingsView: View {
                 }
                 .help("Remove all cached data to free up space")
             }
+            
+            Section(header: Text("Advanced Configuration")) {
+                NavigationLink(destination: AudioProcessingConfigView()) {
+                    HStack {
+                        Image(systemName: "waveform")
+                            .foregroundColor(.blue)
+                        Text("Audio Processing Configuration")
+                    }
+                }
+                .help("Configure detailed audio processing parameters")
+            }
         }
         .padding()
         .frame(width: 400)

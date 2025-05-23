@@ -13,8 +13,12 @@ import os.log
 class PerformanceValidator {
     
     // MARK: - Constraint Thresholds
-    private static let maxLatencyMs: Double = 100.0          // <100ms requirement
-    private static let maxMemoryMB: Double = 50.0            // <50MB requirement
+    private var maxLatencyMs: Double {
+        return AudioProcessingConfiguration.shared.maxProcessingLatency * 1000.0 // Convert to ms
+    }
+    private var maxMemoryMB: Double {
+        return Double(AudioProcessingConfiguration.shared.maxMemoryUsage) / (1024.0 * 1024.0) // Convert to MB
+    }
     private static let minMoodAccuracy: Double = 0.8         // >80% requirement
     
     // MARK: - Test Configuration
