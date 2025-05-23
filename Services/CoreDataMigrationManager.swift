@@ -3,7 +3,15 @@ import CoreData
 import os.log
 
 /// Manages CoreData migrations between versions
-class CoreDataMigrationManager {
+class CoreDataMigrationManager: NSObject {
+    /// Maximum time allowed for migration in seconds
+    private let migrationTimeout: TimeInterval = 5.0
+    
+    /// Error types specific to migration
+    enum MigrationError: Error {
+        case timeout
+        case migrationFailed(String)
+    }
     private let logger = Logger(subsystem: "com.mixtapes.ai", category: "CoreDataMigration")
     
     /// The URL for the persistent store
@@ -14,6 +22,13 @@ class CoreDataMigrationManager {
     
     init(storeURL: URL) {
         self.storeURL = storeURL
+    }
+    
+    override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
+        if keyPath == #keyPath(NSMigrationManager.migrationProgress),
+           let progress = change?[.newKey] as? Float {
+            logger.info("Migration progress: \(Int(progress * 100))%")
+        }
     }
     
     /// Performs required migrations to bring the persistent store up to the current model version
@@ -134,6 +149,10 @@ class CoreDataMigrationManager {
         
         // Create migration manager
         let manager = NSMigrationManager(sourceModel: sourceModel, destinationModel: destinationModel)
+        
+        // Add progress tracking
+        var migrationProgress: Float = 0
+        manager.addObserver(self, forKeyPath: #keyPath(NSMigrationManager.migrationProgress), options: [.new], context: nil)
         
         // Temporary destination URL
         let destinationURL = storeURL.deletingLastPathComponent()
