@@ -1,0 +1,178 @@
+{
+  "object": {
+    "pins": [
+      {
+        "package": "AudioKit",
+        "repositoryURL": "https://github.com/AudioKit/AudioKit",
+        "state": {
+          "branch": null,
+          "revision": "5b3fd238ef8ee95c9842ca4ea83ca58ee151e630",
+          "version": "5.6.5"
+        }
+      },
+      {
+        "package": "combine-schedulers",
+        "repositoryURL": "https://github.com/pointfreeco/combine-schedulers",
+        "state": {
+          "branch": null,
+          "revision": "5928286acce13def418ec36d05a001a9641086f2",
+          "version": "1.0.3"
+        }
+      },
+      {
+        "package": "swift-algorithms",
+        "repositoryURL": "https://github.com/apple/swift-algorithms",
+        "state": {
+          "branch": null,
+          "revision": "87e50f483c54e6efd60e885f7f5aa946cee68023",
+          "version": "1.2.1"
+        }
+      },
+      {
+        "package": "swift-case-paths",
+        "repositoryURL": "https://github.com/pointfreeco/swift-case-paths",
+        "state": {
+          "branch": null,
+          "revision": "41b89b8b68d8c56c622dbb7132258f1a3e638b25",
+          "version": "1.7.0"
+        }
+      },
+      {
+        "package": "swift-clocks",
+        "repositoryURL": "https://github.com/pointfreeco/swift-clocks",
+        "state": {
+          "branch": null,
+          "revision": "cc46202b53476d64e824e0b6612da09d84ffde8e",
+          "version": "1.0.6"
+        }
+      },
+      {
+        "package": "swift-collections",
+        "repositoryURL": "https://github.com/apple/swift-collections",
+        "state": {
+          "branch": null,
+          "revision": "c1805596154bb3a265fd91b8ac0c4433b4348fb0",
+          "version": "1.2.0"
+        }
+      },
+      {
+        "package": "swift-composable-architecture",
+        "repositoryURL": "https://github.com/pointfreeco/swift-composable-architecture",
+        "state": {
+          "branch": null,
+          "revision": "b1d27a82b498b8e697acabd8cc01b585d26aab19",
+          "version": "1.19.1"
+        }
+      },
+      {
+        "package": "swift-concurrency-extras",
+        "repositoryURL": "https://github.com/pointfreeco/swift-concurrency-extras",
+        "state": {
+          "branch": null,
+          "revision": "82a4ae7170d98d8538ec77238b7eb8e7199ef2e8",
+          "version": "1.3.1"
+        }
+      },
+      {
+        "package": "swift-custom-dump",
+        "repositoryURL": "https://github.com/pointfreeco/swift-custom-dump",
+        "state": {
+          "branch": null,
+          "revision": "82645ec760917961cfa08c9c0c7104a57a0fa4b1",
+          "version": "1.3.3"
+        }
+      },
+      {
+        "package": "swift-dependencies",
+        "repositoryURL": "https://github.com/pointfreeco/swift-dependencies",
+        "state": {
+          "branch": null,
+          "revision": "4c90d6b2b9bf0911af87b103bb40f41771891596",
+          "version": "1.9.2"
+        }
+      },
+      {
+        "package": "swift-identified-collections",
+        "repositoryURL": "https://github.com/pointfreeco/swift-identified-collections",
+        "state": {
+          "branch": null,
+          "revision": "322d9ffeeba85c9f7c4984b39422ec7cc3c56597",
+          "version": "1.1.1"
+        }
+      },
+      {
+        "package": "swift-navigation",
+        "repositoryURL": "https://github.com/pointfreeco/swift-navigation",
+        "state": {
+          "branch": null,
+          "revision": "db6bc9dbfed001f21e6728fd36413d9342c235b4",
+          "version": "2.3.0"
+        }
+      },
+      {
+        "package": "swift-numerics",
+        "repositoryURL": "https://github.com/apple/swift-numerics.git",
+        "state": {
+          "branch": null,
+          "revision": "e0ec0f5f3af6f3e4d5e7a19d2af26b481acb6ba8",
+          "version": "1.0.3"
+        }
+      },
+      {
+        "package": "swift-perception",
+        "repositoryURL": "https://github.com/pointfreeco/swift-perception",
+        "state": {
+          "branch": null,
+          "revision": "d924c62a70fca5f43872f286dbd7cef0957f1c01",
+          "version": "1.6.0"
+        }
+      },
+      {
+        "package": "swift-sharing",
+        "repositoryURL": "https://github.com/pointfreeco/swift-sharing",
+        "state": {
+          "branch": null,
+          "revision": "75e846ee3159dc75b3a29bfc24b6ce5a557ddca9",
+          "version": "2.5.2"
+        }
+      },
+      {
+        "package": "swift-snapshot-testing",
+        "repositoryURL": "https://github.com/pointfreeco/swift-snapshot-testing",
+        "state": {
+          "branch": null,
+          "revision": "37230a37e83f1b7023be08e1b1a2603fcb1567fb",
+          "version": "1.18.4"
+        }
+      },
+      {
+        "package": "swift-syntax",
+        "repositoryURL": "https://github.com/swiftlang/swift-syntax",
+        "state": {
+          "branch": null,
+          "revision": "f99ae8aa18f0cf0d53481901f88a0991dc3bd4a2",
+          "version": "601.0.1"
+        }
+      },
+      {
+        "package": "ViewInspector",
+        "repositoryURL": "https://github.com/nalexn/ViewInspector",
+        "state": {
+          "branch": null,
+          "revision": "788e7879d38a839c4e348ab0762dcc0364e646a2",
+          "version": "0.10.1"
+        }
+      },
+      {
+        "package": "xctest-dynamic-overlay",
+        "repositoryURL": "https://github.com/pointfreeco/xctest-dynamic-overlay",
+        "state": {
+          "branch": null,
+          "revision": "39de59b2d47f7ef3ca88a039dff3084688fe27f4",
+          "version": "1.5.2"
+        }
+      }
+    ]
+  },
+  "version": 1
+}
