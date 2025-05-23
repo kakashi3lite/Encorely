@@ -8,6 +8,8 @@ class FFTProcessor {
     private let sampleRate: Float
     private var window: [Float]
     private let magnitudeNormalizationFactor: Float
+    private var previousMagnitudes: [Float]?
+    private var tempBuffer: [Float]
     
     init(maxFrameSize: Int, sampleRate: Float = 44100.0) {
         self.maxFrameSize = maxFrameSize
@@ -21,6 +23,9 @@ class FFTProcessor {
         // Initialize Hanning window
         self.window = [Float](repeating: 0, count: maxFrameSize)
         vDSP_hann_window(&self.window, vDSP_Length(maxFrameSize), Int32(vDSP_HANN_NORM))
+        
+        // Initialize temp buffer
+        self.tempBuffer = [Float](repeating: 0, count: maxFrameSize)
         
         // Calculate normalization factor for magnitude spectrum
         self.magnitudeNormalizationFactor = 2.0 / Float(maxFrameSize)
@@ -41,8 +46,21 @@ class FFTProcessor {
         // Get magnitude spectrum
         let magnitudes = try? getMagnitudeSpectrum(from: channelData, frameCount: Int(buffer.frameLength))
         
+        // Calculate spectral flux if we have previous magnitudes
+        var spectralFlux: Float = 0
+        if let prevMags = previousMagnitudes, let mags = magnitudes {
+            spectralFlux = calculateSpectralFlux(current: mags, previous: prevMags)
+        }
+        
+        // Store current magnitudes for next frame
+        previousMagnitudes = magnitudes
+        
         // Extract spectral features
-        return magnitudes.map { extractSpectralFeatures(from: $0) }
+        return magnitudes.map { mags -> SpectralFeatures in
+            var features = extractSpectralFeatures(from: mags)
+            features.spectralFlux = spectralFlux
+            return features
+        }
     }
     
     private func getMagnitudeSpectrum(from samples: UnsafePointer<Float>, frameCount: Int) throws -> [Float] {
@@ -84,19 +102,15 @@ class FFTProcessor {
         // Calculate frequency bands
         let bandEnergies = calculateBandEnergies(magnitudes: magnitudes, frequencyResolution: frequencyResolution)
         
-        // Spectral centroid
+        // Spectral features
         let centroid = calculateSpectralCentroid(magnitudes: magnitudes, frequencyResolution: frequencyResolution)
-        
-        // Spectral flatness
         let flatness = calculateSpectralFlatness(magnitudes: magnitudes)
-        
-        // Spectral rolloff
         let rolloff = calculateSpectralRolloff(magnitudes: magnitudes, frequencyResolution: frequencyResolution)
-        
-        // Additional features
-        let brightness = bandEnergies.treble / (bandEnergies.bass + bandEnergies.mid + 1e-6)
-        let contrast = max(bandEnergies.bass, bandEnergies.treble) / (bandEnergies.mid + 1e-6)
+        let brightness = calculateBrightness(magnitudes: magnitudes, frequencyResolution: frequencyResolution)
+        let contrast = calculateSpectralContrast(bandEnergies: bandEnergies)
         let harmonicRatio = calculateHarmonicRatio(magnitudes: magnitudes, frequencyResolution: frequencyResolution)
+        let zeroCrossingRate = calculateZeroCrossingRate(magnitudes: magnitudes)
+        let crest = calculateSpectralCrest(magnitudes: magnitudes)
         
         return SpectralFeatures(
             bassEnergy: bandEnergies.bass,
@@ -107,7 +121,11 @@ class FFTProcessor {
             rolloff: rolloff,
             brightness: brightness,
             spectralContrast: contrast,
-            harmonicRatio: harmonicRatio
+            harmonicRatio: harmonicRatio,
+            zeroCrossingRate: zeroCrossingRate,
+            spectralCrest: crest,
+            dynamicRange: calculateDynamicRange(magnitudes: magnitudes),
+            spectralFlux: 0 // Will be set later
         )
     }
     
@@ -128,107 +146,67 @@ class FFTProcessor {
                                        frequencyRange: trebleRange,
                                        frequencyResolution: frequencyResolution)
         
-        return (bass, mid, treble)
+        // Normalize
+        let total = bass + mid + treble + Float.ulpOfOne
+        return (bass/total, mid/total, treble/total)
     }
     
-    private func calculateSpectralCentroid(magnitudes: [Float], frequencyResolution: Float) -> Float {
-        let frequencies = [Float](0..<Float(magnitudes.count)).map { $0 * frequencyResolution }
+    private func calculateBrightness(magnitudes: [Float], frequencyResolution: Float) -> Float {
+        let cutoffFreq: Float = 1000.0 // Typical brightness cutoff
+        let cutoffBin = Int(cutoffFreq / frequencyResolution)
         
-        var weightedSum: Float = 0
-        var sum: Float = 0
-        
-        vDSP_dotpr(magnitudes, 1, frequencies, 1, &weightedSum, vDSP_Length(magnitudes.count))
-        vDSP_sve(magnitudes, 1, &sum, vDSP_Length(magnitudes.count))
-        
-        return weightedSum / (sum + 1e-6)
-    }
-    
-    private func calculateSpectralFlatness(magnitudes: [Float]) -> Float {
-        var logMagnitudes = magnitudes
-        vvlogf(&logMagnitudes, magnitudes, [Int32(magnitudes.count)])
-        
-        var geometricMean: Float = 0
-        var arithmeticMean: Float = 0
-        
-        vDSP_meanv(logMagnitudes, 1, &geometricMean, vDSP_Length(magnitudes.count))
-        vDSP_meanv(magnitudes, 1, &arithmeticMean, vDSP_Length(magnitudes.count))
-        
-        return exp(geometricMean) / (arithmeticMean + 1e-6)
-    }
-    
-    private func calculateSpectralRolloff(magnitudes: [Float], frequencyResolution: Float) -> Float {
-        let rolloffRatio: Float = 0.85
+        var highFreqEnergy: Float = 0
         var totalEnergy: Float = 0
+        
+        vDSP_sve(magnitudes[cutoffBin...], 1, &highFreqEnergy, vDSP_Length(magnitudes.count - cutoffBin))
         vDSP_sve(magnitudes, 1, &totalEnergy, vDSP_Length(magnitudes.count))
         
-        let targetEnergy = totalEnergy * rolloffRatio
-        var cumulativeEnergy: Float = 0
-        
-        for (bin, magnitude) in magnitudes.enumerated() {
-            cumulativeEnergy += magnitude
-            if cumulativeEnergy >= targetEnergy {
-                return Float(bin) * frequencyResolution
-            }
-        }
-        
-        return 0
+        return highFreqEnergy / (totalEnergy + Float.ulpOfOne)
     }
     
-    private func calculateBandEnergy(magnitudes: [Float],
-                                   frequencyRange: (Float, Float),
-                                   frequencyResolution: Float) -> Float {
-        let startBin = Int(frequencyRange.0 / frequencyResolution)
-        let endBin = min(Int(frequencyRange.1 / frequencyResolution), magnitudes.count)
+    private func calculateSpectralFlux(current: [Float], previous: [Float]) -> Float {
+        vDSP_vsub(previous, 1, current, 1, &tempBuffer, 1, vDSP_Length(min(current.count, previous.count)))
+        vDSP_vabs(tempBuffer, 1, &tempBuffer, 1, vDSP_Length(min(current.count, previous.count)))
         
-        guard startBin < endBin && startBin >= 0 else { return 0 }
+        var flux: Float = 0
+        vDSP_sve(tempBuffer, 1, &flux, vDSP_Length(min(current.count, previous.count)))
         
-        var bandEnergy: Float = 0
-        vDSP_sve(magnitudes[startBin..<endBin], 1, &bandEnergy,
-                 vDSP_Length(endBin - startBin))
-        
-        return bandEnergy
+        return flux / Float(current.count)
     }
     
-    private func calculateHarmonicRatio(magnitudes: [Float],
-                                      frequencyResolution: Float) -> Float {
-        let fundamentalRange = (80.0, 1000.0) // Typical fundamental frequency range
-        let startBin = Int(fundamentalRange.0 / frequencyResolution)
-        let endBin = Int(fundamentalRange.1 / frequencyResolution)
+    private func calculateSpectralCrest(magnitudes: [Float]) -> Float {
+        var maxVal: Float = 0
+        var mean: Float = 0
         
-        guard startBin < endBin && startBin >= 0 && endBin < magnitudes.count else {
-            return 0
+        vDSP_maxv(magnitudes, 1, &maxVal, vDSP_Length(magnitudes.count))
+        vDSP_meanv(magnitudes, 1, &mean, vDSP_Length(magnitudes.count))
+        
+        return maxVal / (mean + Float.ulpOfOne)
+    }
+    
+    private func calculateDynamicRange(magnitudes: [Float]) -> Float {
+        var maxVal: Float = 0
+        var minVal: Float = 0
+        
+        vDSP_maxv(magnitudes, 1, &maxVal, vDSP_Length(magnitudes.count))
+        vDSP_minv(magnitudes, 1, &minVal, vDSP_Length(magnitudes.count))
+        
+        return maxVal - minVal
+    }
+    
+    private func calculateZeroCrossingRate(magnitudes: [Float]) -> Float {
+        var previousSign: Float = magnitudes[0] > 0 ? 1 : -1
+        var crossings: Float = 0
+        
+        for i in 1..<magnitudes.count {
+            let currentSign = magnitudes[i] > 0 ? 1 : -1
+            if currentSign != previousSign {
+                crossings += 1
+            }
+            previousSign = currentSign
         }
         
-        // Find potential fundamental frequency
-        var maxMagnitude: Float = 0
-        var fundamentalBin = 0
-        
-        vDSP_maxvi(magnitudes[startBin..<endBin], 1, &maxMagnitude,
-                   &fundamentalBin, vDSP_Length(endBin - startBin))
-        fundamentalBin += startBin
-        
-        // Calculate energy in harmonic bins
-        var harmonicEnergy: Float = 0
-        var nonHarmonicEnergy: Float = 0
-        
-        for bin in startBin..<min(magnitudes.count, endBin * 5) {
-            let frequency = Float(bin) * frequencyResolution
-            let fundamentalFreq = Float(fundamentalBin) * frequencyResolution
-            
-            // Check if this bin is close to a harmonic
-            let isHarmonic = (0...5).contains { harmonic in
-                let harmonicFreq = fundamentalFreq * Float(harmonic + 1)
-                return abs(frequency - harmonicFreq) < frequencyResolution * 2
-            }
-            
-            if isHarmonic {
-                harmonicEnergy += magnitudes[bin]
-            } else {
-                nonHarmonicEnergy += magnitudes[bin]
-            }
-        }
-        
-        return harmonicEnergy / (nonHarmonicEnergy + 1e-6)
+        return crossings / Float(magnitudes.count)
     }
 }
 
@@ -242,6 +220,10 @@ struct SpectralFeatures {
     let brightness: Float
     let spectralContrast: Float
     let harmonicRatio: Float
+    let zeroCrossingRate: Float
+    let spectralCrest: Float
+    let dynamicRange: Float
+    var spectralFlux: Float
 }
 
 // MARK: - Supporting Types

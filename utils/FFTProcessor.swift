@@ -112,123 +112,100 @@ class FFTProcessor {
     }
     
     private func calculateBandEnergies(magnitudes: [Float], frequencyResolution: Float) -> (bass: Float, mid: Float, treble: Float) {
-        let bassRange = (20.0, 250.0)
-        let midRange = (250.0, 4000.0)
-        let trebleRange = (4000.0, sampleRate/2)
+        // Define frequency bands (in Hz)
+        let bassRange = (20.0...250.0)
+        let midRange = (250.0...4000.0)
+        let trebleRange = (4000.0...20000.0)
         
-        let bass = calculateBandEnergy(magnitudes: magnitudes,
-                                     frequencyRange: bassRange,
-                                     frequencyResolution: frequencyResolution)
+        // Convert frequencies to bin indices
+        let bassIndices = (Int(bassRange.lowerBound / Float(frequencyResolution))...Int(bassRange.upperBound / Float(frequencyResolution)))
+        let midIndices = (Int(midRange.lowerBound / Float(frequencyResolution))...Int(midRange.upperBound / Float(frequencyResolution)))
+        let trebleIndices = (Int(trebleRange.lowerBound / Float(frequencyResolution))...Int(trebleRange.upperBound / Float(frequencyResolution)))
         
-        let mid = calculateBandEnergy(magnitudes: magnitudes,
-                                    frequencyRange: midRange,
-                                    frequencyResolution: frequencyResolution)
+        // Calculate energy in each band
+        var bassEnergy: Float = 0
+        var midEnergy: Float = 0
+        var trebleEnergy: Float = 0
         
-        let treble = calculateBandEnergy(magnitudes: magnitudes,
-                                       frequencyRange: trebleRange,
-                                       frequencyResolution: frequencyResolution)
+        for i in 0..<magnitudes.count {
+            if bassIndices.contains(i) {
+                bassEnergy += magnitudes[i]
+            } else if midIndices.contains(i) {
+                midEnergy += magnitudes[i]
+            } else if trebleIndices.contains(i) {
+                trebleEnergy += magnitudes[i]
+            }
+        }
         
-        return (bass, mid, treble)
+        // Normalize energies
+        let totalEnergy = bassEnergy + midEnergy + trebleEnergy + Float.ulpOfOne
+        return (
+            bass: bassEnergy / totalEnergy,
+            mid: midEnergy / totalEnergy,
+            treble: trebleEnergy / totalEnergy
+        )
     }
     
     private func calculateSpectralCentroid(magnitudes: [Float], frequencyResolution: Float) -> Float {
-        let frequencies = [Float](0..<Float(magnitudes.count)).map { $0 * frequencyResolution }
-        
         var weightedSum: Float = 0
-        var sum: Float = 0
+        var magnitudeSum: Float = 0
         
-        vDSP_dotpr(magnitudes, 1, frequencies, 1, &weightedSum, vDSP_Length(magnitudes.count))
-        vDSP_sve(magnitudes, 1, &sum, vDSP_Length(magnitudes.count))
+        for (i, magnitude) in magnitudes.enumerated() {
+            let frequency = Float(i) * frequencyResolution
+            weightedSum += frequency * magnitude
+            magnitudeSum += magnitude
+        }
         
-        return weightedSum / (sum + 1e-6)
+        return weightedSum / (magnitudeSum + Float.ulpOfOne)
     }
     
     private func calculateSpectralFlatness(magnitudes: [Float]) -> Float {
-        var logMagnitudes = magnitudes
-        vvlogf(&logMagnitudes, magnitudes, [Int32(magnitudes.count)])
+        let nonZeroMagnitudes = magnitudes.filter { $0 > Float.ulpOfOne }
+        guard !nonZeroMagnitudes.isEmpty else { return 0 }
         
-        var geometricMean: Float = 0
-        var arithmeticMean: Float = 0
+        let geometricMean = exp(nonZeroMagnitudes.map { log($0) }.reduce(0, +) / Float(nonZeroMagnitudes.count))
+        let arithmeticMean = nonZeroMagnitudes.reduce(0, +) / Float(nonZeroMagnitudes.count)
         
-        vDSP_meanv(logMagnitudes, 1, &geometricMean, vDSP_Length(magnitudes.count))
-        vDSP_meanv(magnitudes, 1, &arithmeticMean, vDSP_Length(magnitudes.count))
-        
-        return exp(geometricMean) / (arithmeticMean + 1e-6)
+        return geometricMean / (arithmeticMean + Float.ulpOfOne)
     }
     
-    private func calculateSpectralRolloff(magnitudes: [Float], frequencyResolution: Float) -> Float {
-        let rolloffRatio: Float = 0.85
-        var totalEnergy: Float = 0
-        vDSP_sve(magnitudes, 1, &totalEnergy, vDSP_Length(magnitudes.count))
+    private func calculateSpectralRolloff(magnitudes: [Float], frequencyResolution: Float, percentile: Float = 0.85) -> Float {
+        let totalEnergy = magnitudes.reduce(0, +)
+        let targetEnergy = totalEnergy * percentile
         
-        let targetEnergy = totalEnergy * rolloffRatio
         var cumulativeEnergy: Float = 0
-        
-        for (bin, magnitude) in magnitudes.enumerated() {
+        for (i, magnitude) in magnitudes.enumerated() {
             cumulativeEnergy += magnitude
             if cumulativeEnergy >= targetEnergy {
-                return Float(bin) * frequencyResolution
+                return Float(i) * frequencyResolution
             }
         }
         
-        return 0
+        return Float(magnitudes.count - 1) * frequencyResolution
     }
     
-    private func calculateBandEnergy(magnitudes: [Float],
-                                   frequencyRange: (Float, Float),
-                                   frequencyResolution: Float) -> Float {
-        let startBin = Int(frequencyRange.0 / frequencyResolution)
-        let endBin = min(Int(frequencyRange.1 / frequencyResolution), magnitudes.count)
+    private func calculateHarmonicRatio(magnitudes: [Float], frequencyResolution: Float) -> Float {
+        let fundamentalRange = 50.0...500.0 // Typical fundamental frequency range
+        let harmonicRatios = [2.0, 3.0, 4.0, 5.0] // Harmonic frequency ratios
         
-        guard startBin < endBin && startBin >= 0 else { return 0 }
+        var maxHarmonicEnergy: Float = 0
+        var totalEnergy: Float = magnitudes.reduce(0, +)
         
-        var bandEnergy: Float = 0
-        vDSP_sve(magnitudes[startBin..<endBin], 1, &bandEnergy,
-                 vDSP_Length(endBin - startBin))
-        
-        return bandEnergy
-    }
-    
-    private func calculateHarmonicRatio(magnitudes: [Float],
-                                      frequencyResolution: Float) -> Float {
-        let fundamentalRange = (80.0, 1000.0) // Typical fundamental frequency range
-        let startBin = Int(fundamentalRange.0 / frequencyResolution)
-        let endBin = Int(fundamentalRange.1 / frequencyResolution)
-        
-        guard startBin < endBin && startBin >= 0 && endBin < magnitudes.count else {
-            return 0
-        }
-        
-        // Find potential fundamental frequency
-        var maxMagnitude: Float = 0
-        var fundamentalBin = 0
-        
-        vDSP_maxvi(magnitudes[startBin..<endBin], 1, &maxMagnitude,
-                   &fundamentalBin, vDSP_Length(endBin - startBin))
-        fundamentalBin += startBin
-        
-        // Calculate energy in harmonic bins
-        var harmonicEnergy: Float = 0
-        var nonHarmonicEnergy: Float = 0
-        
-        for bin in startBin..<min(magnitudes.count, endBin * 5) {
-            let frequency = Float(bin) * frequencyResolution
-            let fundamentalFreq = Float(fundamentalBin) * frequencyResolution
+        for fundamental in stride(from: fundamentalRange.lowerBound, through: fundamentalRange.upperBound, by: frequencyResolution) {
+            let fundamentalBin = Int(fundamental / frequencyResolution)
+            var harmonicEnergy: Float = magnitudes[safe: fundamentalBin] ?? 0
             
-            // Check if this bin is close to a harmonic
-            let isHarmonic = (0...5).contains { harmonic in
-                let harmonicFreq = fundamentalFreq * Float(harmonic + 1)
-                return abs(frequency - harmonicFreq) < frequencyResolution * 2
+            for ratio in harmonicRatios {
+                let harmonicBin = Int(fundamental * ratio / frequencyResolution)
+                if harmonicBin < magnitudes.count {
+                    harmonicEnergy += magnitudes[harmonicBin]
+                }
             }
             
-            if isHarmonic {
-                harmonicEnergy += magnitudes[bin]
-            } else {
-                nonHarmonicEnergy += magnitudes[bin]
-            }
+            maxHarmonicEnergy = max(maxHarmonicEnergy, harmonicEnergy)
         }
         
-        return harmonicEnergy / (nonHarmonicEnergy + 1e-6)
+        return maxHarmonicEnergy / (totalEnergy + Float.ulpOfOne)
     }
 }
 

@@ -23,11 +23,6 @@ class AudioProcessor: ObservableObject {
     private let sampleRate: Float = 44100.0
     private let processingQueue = DispatchQueue(label: "AudioProcessing", qos: .userInitiated)
     
-    // Feature extraction and analysis
-    @Published private(set) var currentFeatures: AudioFeatures?
-    @Published private(set) var detectedMood: Mood = .neutral
-    @Published private(set) var isAnalyzing: Bool = false
-    
     // Buffer management
     private var activeBuffers: Set<AVAudioPCMBuffer> = []
     private var bufferPool: [AVAudioPCMBuffer] = []
@@ -44,6 +39,13 @@ class AudioProcessor: ObservableObject {
     private var totalProcessedFrames: Int = 0
     @Published private(set) var averageProcessingTime: TimeInterval = 0
     @Published private(set) var bufferProcessingLoad: Double = 0
+    @Published private(set) var memoryUsage: Int = 0
+    
+    // Analysis state
+    @Published private(set) var currentFeatures: AudioFeatures?
+    @Published private(set) var detectedMood: Mood = .neutral
+    @Published private(set) var isAnalyzing: Bool = false
+    private var onFeaturesUpdate: ((AudioFeatures) -> Void)?
     
     init() {
         self.inputNode = audioEngine.inputNode
@@ -53,14 +55,14 @@ class AudioProcessor: ObservableObject {
     }
     
     deinit {
-        stopRealTimeAnalysis()
-        cleanupBuffers()
         if let observer = memoryWarningObserver {
             NotificationCenter.default.removeObserver(observer)
         }
+        stopRealTimeAnalysis()
+        cleanupBuffers()
     }
     
-    // MARK: - Buffer Management
+    // MARK: - Memory Management
     
     private func setupMemoryWarningObserver() {
         memoryWarningObserver = NotificationCenter.default.addObserver(
@@ -73,50 +75,7 @@ class AudioProcessor: ObservableObject {
     }
     
     private func handleMemoryWarning() {
-        bufferLock.lock()
-        defer { bufferLock.unlock() }
-        
         cleanupBuffers()
-        bufferPool.removeAll()
-        totalMemoryUsage = 0
-    }
-    
-    private func trackBuffer(_ buffer: AVAudioPCMBuffer) {
-        bufferLock.lock()
-        defer { bufferLock.unlock() }
-        
-        let bufferSize = Int(buffer.frameLength * buffer.format.streamDescription.pointee.mBytesPerFrame)
-        if totalMemoryUsage + bufferSize > maxMemoryUsage {
-            handleMemoryPressure()
-        }
-        
-        activeBuffers.insert(buffer)
-        totalMemoryUsage += bufferSize
-    }
-    
-    private func untrackBuffer(_ buffer: AVAudioPCMBuffer) {
-        bufferLock.lock()
-        defer { bufferLock.unlock() }
-        
-        activeBuffers.remove(buffer)
-        
-        let bufferSize = Int(buffer.frameLength * buffer.format.streamDescription.pointee.mBytesPerFrame)
-        totalMemoryUsage -= bufferSize
-        
-        if bufferPool.count < maxPoolSize {
-            bufferPool.append(buffer) // Reuse buffer later
-        }
-    }
-    
-    private func handleMemoryPressure() {
-        // Remove oldest buffers until we're under the memory limit
-        while totalMemoryUsage > maxMemoryUsage * 3/4 && !activeBuffers.isEmpty {
-            if let oldestBuffer = activeBuffers.first {
-                untrackBuffer(oldestBuffer)
-            }
-        }
-        
-        // Clear buffer pool under memory pressure
         bufferPool.removeAll()
     }
     
@@ -125,23 +84,104 @@ class AudioProcessor: ObservableObject {
         defer { bufferLock.unlock() }
         
         activeBuffers.removeAll()
-        bufferPool.removeAll()
         totalMemoryUsage = 0
+        
+        DispatchQueue.main.async {
+            self.memoryUsage = 0
+        }
     }
     
-    private func getBufferFromPool(format: AVAudioFormat, frameCapacity: AVAudioFrameCount) -> AVAudioPCMBuffer? {
+    private func trackBuffer(_ buffer: AVAudioPCMBuffer) {
         bufferLock.lock()
         defer { bufferLock.unlock() }
         
-        // Try to reuse a buffer from the pool
-        if let index = bufferPool.firstIndex(where: { buffer in
-            buffer.format == format && buffer.frameCapacity >= frameCapacity
-        }) {
-            return bufferPool.remove(at: index)
+        let bufferSize = Int(buffer.frameLength * buffer.format.streamDescription.pointee.mBytesPerFrame)
+        
+        // Check if adding this buffer would exceed memory limit
+        if totalMemoryUsage + bufferSize > maxMemoryUsage {
+            handleMemoryPressure()
+            return
         }
         
-        // Create new buffer if none available in pool
-        return AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity)
+        activeBuffers.insert(buffer)
+        totalMemoryUsage += bufferSize
+        
+        DispatchQueue.main.async {
+            self.memoryUsage = self.totalMemoryUsage
+        }
+    }
+    
+    private func untrackBuffer(_ buffer: AVAudioPCMBuffer) {
+        bufferLock.lock()
+        defer { bufferLock.unlock() }
+        
+        if activeBuffers.remove(buffer) != nil {
+            let bufferSize = Int(buffer.frameLength * buffer.format.streamDescription.pointee.mBytesPerFrame)
+            totalMemoryUsage -= bufferSize
+            
+            // Return buffer to pool if space available
+            if bufferPool.count < maxPoolSize {
+                bufferPool.append(buffer)
+            }
+            
+            DispatchQueue.main.async {
+                self.memoryUsage = self.totalMemoryUsage
+            }
+        }
+    }
+    
+    private func handleMemoryPressure() {
+        // Remove oldest buffers until we're under the limit
+        while totalMemoryUsage > maxMemoryUsage * 3/4 && !activeBuffers.isEmpty {
+            if let oldestBuffer = activeBuffers.first {
+                untrackBuffer(oldestBuffer)
+            }
+        }
+        
+        // Clear buffer pool
+        bufferPool.removeAll()
+    }
+    
+    // MARK: - Performance Monitoring
+    
+    private func updatePerformanceMetrics(startTime: CFTimeInterval) {
+        let processingTime = CACurrentMediaTime() - startTime
+        
+        processingTimes.append(processingTime)
+        if processingTimes.count > maxProcessingTimes {
+            processingTimes.removeFirst()
+        }
+        
+        lastProcessingTime = processingTime
+        averageProcessingTime = processingTimes.reduce(0, +) / Double(processingTimes.count)
+        
+        // Calculate buffer processing load (percentage of buffer duration spent processing)
+        let bufferDuration = Double(bufferSize) / Double(sampleRate)
+        bufferProcessingLoad = (processingTime / bufferDuration) * 100
+        
+        // Log warning if processing is taking too long
+        if bufferProcessingLoad > 80 {
+            print("Warning: High processing load (\(String(format: "%.1f", bufferProcessingLoad))%)")
+            handleHighProcessingLoad()
+        }
+        
+        totalProcessedFrames += bufferSize
+    }
+    
+    private func handleHighProcessingLoad() {
+        // Implement adaptive processing
+        if bufferProcessingLoad > 90 {
+            // Critical load - take immediate action
+            cleanupBuffers()
+            bufferPool.removeAll()
+        } else {
+            // High load - clean up old buffers
+            while !activeBuffers.isEmpty && bufferProcessingLoad > 80 {
+                if let oldestBuffer = activeBuffers.first {
+                    untrackBuffer(oldestBuffer)
+                }
+            }
+        }
     }
     
     // MARK: - Audio Processing
@@ -210,45 +250,7 @@ class AudioProcessor: ObservableObject {
         }
     }
     
-    private func updatePerformanceMetrics(startTime: CFTimeInterval) {
-        let processingTime = CACurrentMediaTime() - startTime
-        
-        processingTimes.append(processingTime)
-        if processingTimes.count > maxProcessingTimes {
-            processingTimes.removeFirst()
-        }
-        
-        lastProcessingTime = processingTime
-        averageProcessingTime = processingTimes.reduce(0, +) / Double(processingTimes.count)
-        
-        // Calculate buffer processing load (percentage of buffer duration spent processing)
-        let bufferDuration = Double(bufferSize) / Double(sampleRate)
-        bufferProcessingLoad = (processingTime / bufferDuration) * 100
-        
-        // Log warning if processing is taking too long
-        if bufferProcessingLoad > 80 {
-            print("Warning: High processing load (\(String(format: "%.1f", bufferProcessingLoad))%)")
-            handleHighProcessingLoad()
-        }
-        
-        totalProcessedFrames += bufferSize
-    }
-    
-    private func handleHighProcessingLoad() {
-        // Implement adaptive processing
-        if bufferProcessingLoad > 90 {
-            // Critical load - take immediate action
-            cleanupBuffers()
-            bufferPool.removeAll()
-        } else {
-            // High load - clean up old buffers
-            while !activeBuffers.isEmpty && bufferProcessingLoad > 80 {
-                if let oldestBuffer = activeBuffers.first {
-                    untrackBuffer(oldestBuffer)
-                }
-            }
-        }
-    }
+    // MARK: - Feature Extraction and Analysis
     
     private func extractAudioFeatures(from spectral: SpectralFeatures) -> AudioFeatures {
         // Calculate mood features
