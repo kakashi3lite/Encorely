@@ -6,10 +6,14 @@ extension MixTape {
         return NSFetchRequest<MixTape>(entityName: "MixTape")
     }
 
-    @NSManaged public var id: UUID
     @NSManaged public var title: String
-    @NSManaged public var createdAt: Date?
-    @NSManaged public var moodLabel: String?
+    @NSManaged public var createdDate: Date?
+    @NSManaged public var lastPlayedDate: Date?
+    @NSManaged public var moodTags: String?
+    @NSManaged public var numberOfSongs: Int16
+    @NSManaged public var playCount: Int32
+    @NSManaged public var aiGenerated: Bool
+    @NSManaged public var urlData: Data?
     @NSManaged public var songs: Set<Song>
     @NSManaged public var songs: Set<Song>
     

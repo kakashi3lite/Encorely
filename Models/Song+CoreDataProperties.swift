@@ -6,12 +6,13 @@ extension Song {
         return NSFetchRequest<Song>(entityName: "Song")
     }
 
-    @NSManaged public var id: UUID
-    @NSManaged public var title: String
-    @NSManaged public var artist: String?
-    @NSManaged public var duration: Double
-    @NSManaged public var url: URL?
-    @NSManaged public var mixtape: MixTape?
+    @NSManaged public var name: String
+    @NSManaged public var moodTag: String?
+    @NSManaged public var playCount: Int32
+    @NSManaged public var positionInTape: Int16
+    @NSManaged public var urlData: Data?
+    @NSManaged public var audioFeatures: Data?
+    @NSManaged public var mixTape: MixTape?
     
     // Convenience computed properties
     public var wrappedTitle: String {
