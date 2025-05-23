@@ -14,6 +14,9 @@ import CoreData
 struct MainTabView: View {
     @Environment(\.managedObjectContext) var moc
     
+    // Initialize Core Data error monitor
+    @StateObject private var errorMonitor = CoreDataErrorMonitor()
+    
     // Player state
     let queuePlayer: AVQueuePlayer
     let playerItemObserver: PlayerItemObserver
@@ -28,7 +31,13 @@ struct MainTabView: View {
     @State private var navigationPath = NavigationPath()
     @State private var newlyCreatedMixtape: MixTape?
     @State private var shouldNavigateToMixtape = false
-      var body: some View {
+    @State private var showingFullPlayer = false
+    
+    // UI State
+    @State private var showMiniPlayer = false
+    @State private var lastSelectedTab = 0
+    
+    var body: some View {
         ZStack(alignment: .bottom) {
             TabView(selection: $selectedTab) {
                 // Library Tab with NavigationStack
@@ -46,8 +55,8 @@ struct MainTabView: View {
                         MixTapeView(
                             songs: mixtape.songsArray,
                             mixTape: mixtape,
-                            currentMixTapeName: .constant(""),
-                            currentMixTapeImage: .constant(URL(fileURLWithPath: "")),
+                            currentMixTapeName: $navigationPath,
+                            currentMixTapeImage: $navigationPath,
                             queuePlayer: queuePlayer,
                             currentStatusObserver: playerStatusObserver,
                             currentItemObserver: playerItemObserver,
@@ -57,6 +66,11 @@ struct MainTabView: View {
                             aiService: aiService
                         )
                     }
+                    // Handle Core Data errors with retry option
+                    .handleCoreDataError(
+                        $errorMonitor.currentError,
+                        retryAction: errorMonitor.retryDataLoad
+                    )
                 }
                 .environment(\.managedObjectContext, moc)
                 .tabItem {
@@ -100,14 +114,28 @@ struct MainTabView: View {
                     .tag(4)
             }
             .tint(aiService.moodEngine.currentMood.color)
+            .safeAreaInset(edge: .bottom) {
+                if showMiniPlayer && currentSongName.wrappedValue != nil {
+                    MiniPlayerView(
+                        queuePlayer: queuePlayer,
+                        currentSongName: currentSongName,
+                        isPlaying: isPlaying,
+                        showingFullPlayer: $showingFullPlayer
+                    )
+                    .transition(.move(edge: .bottom))
+                }
+            }
 
             // AI Suggestion Banner
-            AISuggestionBanner(
-                isVisible: .constant(true),
-                aiService: aiService,
-                tabSelection: $selectedTab
-            )
-            .padding(.bottom, 60)
+            if selectedTab != lastSelectedTab {
+                AISuggestionBanner(
+                    isVisible: .constant(true),
+                    aiService: aiService,
+                    tabSelection: $selectedTab
+                )
+                .padding(.bottom, showMiniPlayer ? 100 : 60)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .onChange(of: shouldNavigateToMixtape) { navigate in
             if navigate, let mixtape = newlyCreatedMixtape {
@@ -118,6 +146,31 @@ struct MainTabView: View {
                     newlyCreatedMixtape = nil
                 }
             }
+        }
+        .onChange(of: currentSongName.wrappedValue) { _ in
+            withAnimation {
+                showMiniPlayer = currentSongName.wrappedValue != nil
+            }
+        }
+        .onChange(of: selectedTab) { newValue in
+            withAnimation {
+                lastSelectedTab = selectedTab
+            }
+        }
+        .sheet(isPresented: $showingFullPlayer) {
+            PlayerView(
+                currentMixTapeName: .constant("Now Playing"),
+                currentMixTapeImage: .constant(URL(fileURLWithPath: "")),
+                queuePlayer: queuePlayer,
+                currentStatusObserver: playerStatusObserver,
+                currentItemObserver: playerItemObserver,
+                currentPlayerItems: currentPlayerItems,
+                currentSongName: currentSongName,
+                isPlaying: isPlaying,
+                aiService: aiService
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
     }
     
@@ -479,6 +532,27 @@ struct SettingsView: View {
                     }
                     .sheet(isPresented: $showSiriSettings) {
                         SiriShortcutsView(aiService: aiService)
+                    }
+                }
+                
+                // Performance section
+                Section(header: Text("Performance")) {
+                    NavigationLink(destination: PerformanceValidationView()) {
+                        HStack {
+                            Text("Audio Processing Performance")
+                            Spacer()
+                            Image(systemName: "waveform")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    NavigationLink(destination: PerformanceSettingsView()) {
+                        HStack {
+                            Text("Performance Settings")
+                            Spacer()
+                            Image(systemName: "gear")
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
                 

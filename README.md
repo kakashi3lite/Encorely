@@ -117,6 +117,47 @@ Run the performance test suite:
 xcodebuild -scheme AIMixtapes -destination "platform=macOS" test ONLY_TESTING=AIMixtapesTests/PerformanceTests
 ```
 
+### Performance Validation
+
+The AI-Mixtapes framework includes a robust performance validation system that ensures the audio processing components meet strict requirements:
+
+- **Latency Validation**: Ensures audio processing completes within 100ms
+- **Memory Usage Validation**: Verifies memory consumption stays under 50MB
+- **Mood Detection Accuracy**: Confirms >80% accuracy in mood detection
+
+You can validate the performance of the audio processing system programmatically:
+
+```swift
+// Get the performance monitor
+let monitor = PerformanceMonitor.shared
+
+// Run validation
+Task {
+    let results = await monitor.validateAudioProcessingSystem()
+    
+    if results.overallPassed {
+        print("✅ All performance requirements met!")
+    } else {
+        print("❌ Performance validation failed")
+        
+        // Check specific failures
+        if !results.latencyResult.passed {
+            print("- Latency: \(String(format: "%.1f", results.latencyResult.averageLatencyMs))ms (target: <100ms)")
+        }
+        
+        if !results.memoryResult.passed {
+            print("- Memory: \(String(format: "%.1f", results.memoryResult.peakMemoryMB))MB (target: <50MB)")
+        }
+        
+        if !results.accuracyResult.passed {
+            print("- Accuracy: \(String(format: "%.1f", results.accuracyResult.accuracy * 100))% (target: >80%)")
+        }
+    }
+}
+```
+
+The framework also provides a SwiftUI view (`PerformanceValidationView`) to display validation results visually.
+
 ## Contributing
 
 We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
