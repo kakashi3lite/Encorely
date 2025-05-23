@@ -13,6 +13,8 @@ import Accelerate
 
 /// Real-time audio processor with FFT analysis and mood detection
 class AudioProcessor: ObservableObject {
+    // MARK: - Properties
+    
     // Audio engine components
     private let audioEngine = AVAudioEngine()
     private let inputNode: AVAudioInputNode
@@ -40,18 +42,24 @@ class AudioProcessor: ObservableObject {
     @Published private(set) var averageProcessingTime: TimeInterval = 0
     @Published private(set) var bufferProcessingLoad: Double = 0
     @Published private(set) var memoryUsage: Int = 0
+    @Published private(set) var analysisStatistics: AnalysisStatistics?
     
     // Analysis state
     @Published private(set) var currentFeatures: AudioFeatures?
     @Published private(set) var detectedMood: Mood = .neutral
     @Published private(set) var isAnalyzing: Bool = false
+    private var featureHistory: [AudioFeatures] = []
+    private let maxHistorySize = 10
     private var onFeaturesUpdate: ((AudioFeatures) -> Void)?
+    
+    // MARK: - Initialization
     
     init() {
         self.inputNode = audioEngine.inputNode
-        self.fftProcessor = FFTProcessor(bufferSize: bufferSize, sampleRate: sampleRate)
+        self.fftProcessor = FFTProcessor(maxFrameSize: bufferSize, sampleRate: sampleRate)
         setupAudioSession()
         setupMemoryWarningObserver()
+        updateAnalysisStatistics()
     }
     
     deinit {
@@ -65,6 +73,7 @@ class AudioProcessor: ObservableObject {
     // MARK: - Memory Management
     
     private func setupMemoryWarningObserver() {
+        #if os(iOS)
         memoryWarningObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification,
             object: nil,
@@ -72,6 +81,17 @@ class AudioProcessor: ObservableObject {
         ) { [weak self] _ in
             self?.handleMemoryWarning()
         }
+        #else
+        // For macOS - alternative memory pressure observation could be implemented here
+        memoryWarningObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, // Using as placeholder
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            // On macOS we could use Memory pressure API or just regular cleanup
+            self?.handleMemoryWarning()
+        }
+        #endif
     }
     
     private func handleMemoryWarning() {
@@ -88,8 +108,11 @@ class AudioProcessor: ObservableObject {
         
         DispatchQueue.main.async {
             self.memoryUsage = 0
+            self.updateAnalysisStatistics()
         }
     }
+    
+    // MARK: - Buffer Management
     
     private func trackBuffer(_ buffer: AVAudioPCMBuffer) {
         bufferLock.lock()
@@ -108,6 +131,7 @@ class AudioProcessor: ObservableObject {
         
         DispatchQueue.main.async {
             self.memoryUsage = self.totalMemoryUsage
+            self.updateAnalysisStatistics()
         }
     }
     
@@ -126,6 +150,7 @@ class AudioProcessor: ObservableObject {
             
             DispatchQueue.main.async {
                 self.memoryUsage = self.totalMemoryUsage
+                self.updateAnalysisStatistics()
             }
         }
     }
@@ -153,11 +178,16 @@ class AudioProcessor: ObservableObject {
         }
         
         lastProcessingTime = processingTime
-        averageProcessingTime = processingTimes.reduce(0, +) / Double(processingTimes.count)
         
-        // Calculate buffer processing load (percentage of buffer duration spent processing)
-        let bufferDuration = Double(bufferSize) / Double(sampleRate)
-        bufferProcessingLoad = (processingTime / bufferDuration) * 100
+        DispatchQueue.main.async {
+            self.averageProcessingTime = self.processingTimes.reduce(0, +) / Double(self.processingTimes.count)
+            
+            // Calculate buffer processing load (percentage of buffer duration spent processing)
+            let bufferDuration = Double(self.bufferSize) / Double(self.sampleRate)
+            self.bufferProcessingLoad = (processingTime / bufferDuration) * 100
+            
+            self.updateAnalysisStatistics()
+        }
         
         // Log warning if processing is taking too long
         if bufferProcessingLoad > 80 {
@@ -184,66 +214,35 @@ class AudioProcessor: ObservableObject {
         }
     }
     
+    private func updateAnalysisStatistics() {
+        analysisStatistics = getAnalysisStatistics()
+    }
+    
     // MARK: - Audio Processing
     
-    func startRealTimeAnalysis(onFeaturesUpdate: @escaping (AudioFeatures) -> Void) {
-        self.onFeaturesUpdate = onFeaturesUpdate
-        
-        guard !audioEngine.isRunning else {
-            print("AudioProcessor - Already analyzing")
-            return
-        }
-        
-        let inputFormat = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: AVAudioFrameCount(bufferSize), format: inputFormat) { [weak self] buffer, time in
-            self?.trackBuffer(buffer)
-            self?.processAudioBuffer(buffer)
-        }
-        
-        do {
-            try audioEngine.start()
-            DispatchQueue.main.async {
-                self.isAnalyzing = true
-            }
-        } catch {
-            print("AudioProcessor - Failed to start audio engine: \(error)")
-        }
-    }
-    
-    func stopRealTimeAnalysis() {
-        guard audioEngine.isRunning else { return }
-        
-        inputNode.removeTap(onBus: 0)
-        audioEngine.stop()
-        cleanupBuffers()
-        
-        DispatchQueue.main.async {
-            self.isAnalyzing = false
-        }
-    }
-    
     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
-        let processStartTime = CACurrentMediaTime()
+        let startTime = CFAbsoluteTimeGetCurrent()
         
         processingQueue.async { [weak self] in
             guard let self = self else { return }
             
-            autoreleasepool {
-                defer {
-                    self.untrackBuffer(buffer)
-                    self.updatePerformanceMetrics(startTime: processStartTime)
-                }
-                
-                guard let spectralFeatures = try? self.fftProcessor.processBuffer(buffer) else {
-                    return
-                }
-                
-                let audioFeatures = self.extractAudioFeatures(from: spectralFeatures)
+            defer { 
+                self.untrackBuffer(buffer)
+                self.updatePerformanceMetrics(startTime: startTime)
+            }
+            
+            guard let spectralFeatures = self.fftProcessor.processBuffer(buffer) else {
+                return
+            }
+            
+            // Extract features from spectral analysis
+            if let audioFeatures = self.extractAudioFeatures(from: spectralFeatures) {
                 self.updateFeatureHistory(audioFeatures)
                 
                 DispatchQueue.main.async {
                     self.currentFeatures = audioFeatures
                     self.detectedMood = self.determineCurrentMood(from: audioFeatures)
+                    self.updateAnalysisStatistics()
                     self.onFeaturesUpdate?(audioFeatures)
                 }
             }
@@ -252,57 +251,81 @@ class AudioProcessor: ObservableObject {
     
     // MARK: - Feature Extraction and Analysis
     
-    private func extractAudioFeatures(from spectral: SpectralFeatures) -> AudioFeatures {
-        // Calculate mood features
+    private func extractAudioFeatures(from spectral: SpectralFeatures) -> AudioFeatures? {
+        // Calculate core features
         let energy = calculateEnergy(
             bassEnergy: spectral.bassEnergy,
             midEnergy: spectral.midEnergy,
-            trebleEnergy: spectral.trebleEnergy
+            trebleEnergy: spectral.trebleEnergy,
+            brightness: spectral.brightness
         )
         
         let valence = calculateValence(
             brightness: spectral.brightness,
             harmonicRatio: spectral.harmonicRatio,
-            spectralContrast: spectral.spectralContrast
+            spectralContrast: spectral.spectralContrast,
+            bassEnergy: spectral.bassEnergy,
+            midEnergy: spectral.midEnergy,
+            trebleEnergy: spectral.trebleEnergy
         )
         
-        let intensity = calculateIntensity(
-            energy: energy,
-            spectralFlatness: spectral.flatness,
-            spectralCentroid: spectral.centroid
+        // Calculate danceability
+        let danceability = calculateDanceability(
+            tempo: spectral.estimatedTempo,
+            beatStrength: spectral.beatStrength
+        )
+        
+        // Calculate acousticness
+        let acousticness = 1.0 - (spectral.bassEnergy + spectral.trebleEnergy) / 2.0
+        
+        // Calculate instrumentalness 
+        let instrumentalness = calculateInstrumentalness(
+            spectralContrast: spectral.spectralContrast,
+            harmonicRatio: spectral.harmonicRatio
+        )
+        
+        // Calculate speechiness
+        let speechiness = calculateSpeechiness(
+            zeroCrossingRate: spectral.zeroCrossingRate,
+            spectralFlatness: spectral.spectralFlatness
+        )
+        
+        // Calculate liveness
+        let liveness = calculateLiveness(
+            dynamicRange: spectral.dynamicRange,
+            spectralFlux: spectral.spectralFlux
         )
         
         return AudioFeatures(
+            tempo: spectral.estimatedTempo,
             energy: energy,
             valence: valence,
-            intensity: intensity,
-            complexity: spectral.spectralContrast,
-            brightness: spectral.brightness,
-            warmth: spectral.bassEnergy / (spectral.trebleEnergy + 1e-6)
+            danceability: danceability,
+            acousticness: acousticness,
+            instrumentalness: instrumentalness,
+            speechiness: speechiness,
+            liveness: liveness
         )
     }
     
-    private func calculateEnergy(bassEnergy: Float, midEnergy: Float, trebleEnergy: Float) -> Float {
-        // Weight the frequency bands based on perceptual importance
-        return bassEnergy * 0.4 + midEnergy * 0.4 + trebleEnergy * 0.2
+    private func calculateEnergy(bassEnergy: Float, midEnergy: Float, trebleEnergy: Float, brightness: Float) -> Float {
+        // Higher energy: More bass and treble energy, higher brightness
+        let weightedEnergy = (bassEnergy * 0.4 + midEnergy * 0.3 + trebleEnergy * 0.3)
+        let brightnessContribution = min(1.0, brightness * 1.2)
+        return min(1.0, weightedEnergy * 0.7 + brightnessContribution * 0.3)
     }
     
-    private func calculateValence(brightness: Float, harmonicRatio: Float, spectralContrast: Float) -> Float {
+    private func calculateValence(brightness: Float, harmonicRatio: Float, spectralContrast: Float, 
+                                bassEnergy: Float, midEnergy: Float, trebleEnergy: Float) -> Float {
         // Positive valence correlates with brightness and harmonic content
-        let harmonicContribution = harmonicRatio * 0.4
-        let brightnessContribution = brightness * 0.4
-        let contrastContribution = (1.0 - spectralContrast) * 0.2  // Less contrast often indicates more positive mood
+        let harmonicContribution = harmonicRatio * 0.3
+        let brightnessContribution = brightness * 0.3
         
-        return harmonicContribution + brightnessContribution + contrastContribution
-    }
-    
-    private func calculateIntensity(energy: Float, spectralFlatness: Float, spectralCentroid: Float) -> Float {
-        // Intensity combines energy with spectral characteristics
-        let energyContribution = energy * 0.5
-        let flatnessContribution = (1.0 - spectralFlatness) * 0.3  // Less flat usually means more intense
-        let centroidContribution = (spectralCentroid / 10000.0) * 0.2  // Higher frequencies can indicate intensity
+        // Energy balance is also important for valence
+        let energyBalance = (midEnergy + trebleEnergy) / (bassEnergy + 1.0)
+        let energyContribution = min(1.0, energyBalance) * 0.4
         
-        return energyContribution + flatnessContribution + centroidContribution
+        return min(1.0, harmonicContribution + brightnessContribution + energyContribution)
     }
     
     private func calculateInstrumentalness(spectralContrast: Float, harmonicRatio: Float) -> Float {
@@ -326,13 +349,6 @@ class AudioProcessor: ObservableObject {
         return (range * 0.6 + flux * 0.4)
     }
     
-    private func calculateValence(bassEnergy: Float, midEnergy: Float, trebleEnergy: Float, brightness: Float) -> Float {
-        // Higher valence: More treble and mid energy, moderate brightness
-        let energyBalance = (midEnergy + trebleEnergy) / (bassEnergy + 1.0)
-        let brightnessContribution = abs(brightness - 0.6) // Optimal brightness around 0.6
-        return min(1.0, (energyBalance * 0.7 + (1.0 - brightnessContribution) * 0.3))
-    }
-    
     private func calculateDanceability(tempo: Float, beatStrength: Float) -> Float {
         // Higher danceability: Strong beats and tempo between 90-130 BPM
         let tempoFactor = 1.0 - abs((tempo - 110.0) / 50.0) // Peak at 110 BPM
@@ -343,6 +359,8 @@ class AudioProcessor: ObservableObject {
         // Higher liveness: More dynamic range and spectral flux
         return min(1.0, (spectral.dynamicRange * 0.5 + spectral.spectralFlux * 0.5) / 20.0)
     }
+    
+    // MARK: - Mood Detection
     
     private func determineCurrentMood(from features: AudioFeatures) -> Mood {
         // Enhanced mood detection using multiple features
@@ -360,14 +378,10 @@ class AudioProcessor: ObservableObject {
         return .neutral
     }
     
-    private func updateFeatureHistory(_ features: AudioFeatures) {
-        featureHistory.append(features)
-        if featureHistory.count > maxHistorySize {
-            featureHistory.removeFirst()
-        }
-    }
+    // MARK: - Audio Session Setup
     
     private func setupAudioSession() {
+        #if os(iOS)
         let audioSession = AVAudioSession.sharedInstance()
         do {
             try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
@@ -375,17 +389,22 @@ class AudioProcessor: ObservableObject {
         } catch {
             print("AudioProcessor - Failed to setup audio session: \(error)")
         }
+        #endif
     }
 }
 
 // MARK: - Supporting Structures
 
-struct AnalysisStatistics {
+/// Statistics about the current audio analysis process
+struct AnalysisStatistics: Codable {
     let isActive: Bool
     let sampleRate: Float
     let bufferSize: Int
     let featuresInHistory: Int
     let currentMood: Mood
+    let averageProcessingTime: Double
+    let memoryUsage: Int
+    let bufferLoad: Double
 }
 
 /// Extended audio features structure with all Spotify-like features

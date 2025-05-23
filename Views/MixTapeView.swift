@@ -12,7 +12,8 @@ import AVKit
 
 /// Enhanced MixTapeView with AI features and error handling
 struct MixTapeView: View {
-    // Core properties
+    // MARK: - Properties
+    
     @Environment(\.managedObjectContext) var moc
     @State var songs: [Song]
     @State var mixTape: MixTape
@@ -30,7 +31,7 @@ struct MixTapeView: View {
     // AI service
     var aiService: AIIntegrationService
     
-    // State
+    // Enhanced state
     @State private var showingDocsPicker = false
     @State private var showingSmartReorder = false
     @State private var showingSimilarMixtapes = false
@@ -40,116 +41,123 @@ struct MixTapeView: View {
     @State private var reorderInProgress = false
     @State private var retryAction: (() -> Void)?
     @State private var currentError: AppError?
+    @State private var selectedSongId: String?
+    @State private var showingVisualization = false
+    @State private var scrollOffset: CGFloat = 0
+    @State private var viewMode: ViewMode = .list
+    
+    private let headerHeight: CGFloat = 200
+    
+    enum ViewMode {
+        case list, grid, compact
+    }
+    
+    // MARK: - Body
     
     var body: some View {
-        VStack(spacing: 0) {
-            // Error banner if needed
-            if let error = currentError {
-                ErrorBanner(error: error) {
-                    retryAction?()
-                }
-            }
-            
-            // Main content
+        ZStack(alignment: .bottom) {
             ScrollView {
-                VStack(spacing: 24) {
-                    // Mood tag badges
-                    if !getMoodTags().isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(getMoodTags(), id: \.self) { tag in
-                                    if let mood = Mood(rawValue: tag) {
-                                        MoodBadge(mood: mood) {
-                                            selectedMoodTags.contains(tag) ?
-                                                selectedMoodTags.removeAll { $0 == tag } :
-                                                selectedMoodTags.append(tag)
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(.horizontal)
+                VStack(spacing: 0) {
+                    // Parallax header
+                    GeometryReader { geometry in
+                        let minY = geometry.frame(in: .global).minY
+                        let progress = max(0, min(1, -minY / headerHeight))
+                        
+                        headerView
+                            .frame(height: max(headerHeight - minY, headerHeight/2))
+                            .blur(radius: progress * 10)
+                            .opacity(1 - progress)
+                    }
+                    .frame(height: headerHeight)
+                    
+                    // Error banner if needed
+                    if let error = currentError {
+                        ErrorBanner(error: error) {
+                            retryAction?()
                         }
                     }
                     
-                    // Action buttons
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 20) {
-                            // Smart Reorder
-                            ActionButton(
-                                icon: "wand.and.stars",
-                                title: "Smart Reorder",
-                                action: { showingSmartReorder = true }
-                            )
-                            
-                            // Find Similar
-                            ActionButton(
-                                icon: "rectangle.stack.person.crop",
-                                title: "Find Similar",
-                                action: {
-                                    showingSimilarMixtapes = true
-                                    aiService.trackInteraction(type: "find_similar", mixtape: mixTape)
-                                }
-                            )
-                            
-                            // Add Songs
-                            ActionButton(
-                                icon: "plus.circle",
-                                title: "Add Songs",
-                                action: {
-                                    showingDocsPicker = true
-                                    aiService.trackInteraction(type: "add_songs", mixtape: mixTape)
-                                }
-                            )
-                            
-                            // AI Analysis
-                            ActionButton(
-                                icon: "chart.bar.xaxis",
-                                title: "AI Analysis",
-                                action: {
-                                    showingAIAnalysis = true
-                                    aiService.trackInteraction(type: "view_analysis", mixtape: mixTape)
-                                }
-                            )
+                    VStack(spacing: 24) {
+                        // Mood tags section
+                        moodTagsSection
+                            .horizontalSlideTransition(isVisible: !getMoodTags().isEmpty)
+                        
+                        // Action buttons
+                        actionButtonsSection
+                        
+                        // Songs list with view mode toggle
+                        songListHeader
+                        
+                        switch viewMode {
+                        case .list:
+                            listView
+                        case .grid:
+                            gridView
+                        case .compact:
+                            compactView
                         }
-                        .padding(.horizontal)
                     }
-                    
-                    // Songs list
-                    VStack(spacing: 2) {
-                        ForEach(songs) { song in
-                            SongRowView(
-                                song: song,
-                                isPlaying: currentSongName.wrappedValue == song.title,
-                                onTap: { playSong(song) }
-                            )
-                            .contextMenu {
-                                songContextMenu(for: song)
-                            }
-                        }
-                        .onDelete(perform: deleteSongs)
-                    }
-                    .background(Color(.systemBackground))
-                    .cornerRadius(12)
-                    .padding(.horizontal)
+                    .padding(.top)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color(.systemBackground))
+                            .shadow(color: Color.black.opacity(0.1), radius: 10, y: -5)
+                            .edgesIgnoringSafeArea(.bottom)
+                    )
+                    .offset(y: -20)
                 }
-                .padding(.vertical)
             }
+            .edgesIgnoringSafeArea(.top)
             
-            // Playback controls
+            // Bottom player bar
             if let currentSong = songs.first(where: { $0.title == currentSongName.wrappedValue }) {
-                PlaybackControlsView(
-                    song: currentSong,
-                    isPlaying: isPlaying,
-                    onPlayPause: togglePlayback,
-                    onNext: playNextSong,
-                    onPrevious: playPreviousSong
-                )
+                VStack(spacing: 0) {
+                    // Progress bar
+                    GeometryReader { geometry in
+                        Rectangle()
+                            .fill(aiService.moodEngine.currentMood.color)
+                            .frame(width: geometry.size.width * 0.4) // Replace with actual progress
+                            .animation(.linear, value: currentSong.title)
+                    }
+                    .frame(height: 2)
+                    
+                    PlaybackControlsView(
+                        song: currentSong,
+                        isPlaying: isPlaying,
+                        onPlayPause: togglePlayback,
+                        onNext: playNextSong,
+                        onPrevious: playPreviousSong
+                    )
+                }
                 .transition(.move(edge: .bottom))
             }
         }
-        .navigationBarTitle(mixTape.wrappedTitle)
-        .navigationBarItems(trailing: EditButton())
-        .background(Color(.systemGroupedBackground))
+        .navigationBarTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    Button(action: { viewMode = .list }) {
+                        Label("List View", systemImage: "list.bullet")
+                    }
+                    Button(action: { viewMode = .grid }) {
+                        Label("Grid View", systemImage: "square.grid.2x2")
+                    }
+                    Button(action: { viewMode = .compact }) {
+                        Label("Compact View", systemImage: "list.dash")
+                    }
+                    
+                    Divider()
+                    
+                    Button(action: { showingAIAnalysis = true }) {
+                        Label("AI Analysis", systemImage: "chart.bar.xaxis")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .imageScale(.large)
+                }
+            }
+        }
         .sheet(isPresented: $showingSmartReorder) {
             SmartReorderView(mixTape: mixTape, aiService: aiService)
         }
@@ -162,150 +170,197 @@ struct MixTapeView: View {
         .sheet(isPresented: $showingAIAnalysis) {
             MixtapeAnalysisView(mixTape: mixTape, aiService: aiService)
         }
-    }
-    
-    // MARK: - Supporting Views
-    
-    struct SongRowView: View {
-        let song: Song
-        let isPlaying: Bool
-        let onTap: () -> Void
-        
-        var body: some View {
-            Button(action: onTap) {
-                HStack(spacing: 12) {
-                    // Play indicator or song number
-                    if isPlaying {
-                        Image(systemName: "music.note")
-                            .foregroundColor(.accentColor)
-                    }
-                    
-                    // Song info
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(song.wrappedTitle)
-                            .fontWeight(.medium)
-                            .foregroundColor(.primary)
-                        
-                        Text(song.wrappedArtist)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    // Duration and mood
-                    HStack(spacing: 8) {
-                        if let mood = song.mood {
-                            Circle()
-                                .fill(Mood(rawValue: mood)?.color ?? .gray)
-                                .frame(width: 8, height: 8)
-                        }
-                        
-                        Text(song.durationString)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding()
-                .background(isPlaying ? Color.accentColor.opacity(0.1) : Color.clear)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(PlainButtonStyle())
+        .sheet(isPresented: $showingVisualization) {
+            AudioVisualizationView(
+                queuePlayer: queuePlayer,
+                aiService: aiService,
+                currentSongName: currentSongName
+            )
         }
     }
     
-    struct ActionButton: View {
-        let icon: String
-        let title: String
-        let action: () -> Void
-        
-        var body: some View {
-            Button(action: action) {
-                VStack(spacing: 8) {
-                    Image(systemName: icon)
-                        .font(.system(size: 22))
-                    Text(title)
-                        .font(.caption)
-                }
-                .frame(minWidth: 80)
-            }
-        }
-    }
+    // MARK: - Components
     
-    struct MoodBadge: View {
-        let mood: Mood
-        let action: () -> Void
-        
-        var body: some View {
-            Button(action: action) {
-                HStack(spacing: 4) {
-                    Image(systemName: mood.systemIcon)
-                        .font(.caption)
-                    Text(mood.rawValue)
-                        .font(.caption)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(mood.color.opacity(0.2)))
-                .foregroundColor(mood.color)
-            }
-        }
-    }
-    
-    struct PlaybackControlsView: View {
-        let song: Song
-        let isPlaying: Bool
-        let onPlayPause: () -> Void
-        let onNext: () -> Void
-        let onPrevious: () -> Void
-        
-        var body: some View {
-            VStack(spacing: 0) {
-                Divider()
+    private var headerView: some View {
+        ZStack {
+            // Background gradient
+            LinearGradient(
+                colors: [
+                    aiService.moodEngine.currentMood.color.opacity(0.8),
+                    aiService.personalityEngine.currentPersonality.themeColor.opacity(0.8)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            
+            // Content
+            VStack(spacing: 16) {
+                Text(mixTape.wrappedTitle)
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
                 
-                HStack(spacing: 20) {
-                    // Song info
-                    VStack(alignment: .leading) {
-                        Text(song.wrappedTitle)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Text(song.wrappedArtist)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    // Playback controls
-                    HStack(spacing: 24) {
-                        Button(action: onPrevious) {
-                            Image(systemName: "backward.fill")
-                                .font(.title3)
-                        }
-                        
-                        Button(action: onPlayPause) {
-                            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                                .font(.title2)
-                        }
-                        
-                        Button(action: onNext) {
-                            Image(systemName: "forward.fill")
-                                .font(.title3)
-                        }
-                    }
-                    .foregroundColor(.primary)
+                HStack(spacing: 16) {
+                    Label("\(songs.count) songs", systemImage: "music.note")
+                    Label(formatDuration(songs.reduce(0) { $0 + ($1.duration ?? 0) }), systemImage: "clock")
                 }
-                .padding()
-                .background(
-                    Rectangle()
-                        .fill(Color(.systemBackground))
-                        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: -3)
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.8))
+            }
+            .shadow(radius: 5)
+        }
+    }
+    
+    private var moodTagsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Mood Tags")
+                .font(.headline)
+                .padding(.horizontal)
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(getMoodTags(), id: \.self) { tag in
+                        if let mood = Mood(rawValue: tag) {
+                            MoodBadge(mood: mood) {
+                                withAnimation {
+                                    selectedMoodTags.contains(tag) ?
+                                        selectedMoodTags.removeAll { $0 == tag } :
+                                        selectedMoodTags.append(tag)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+    
+    private var actionButtonsSection: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 20) {
+                ActionButton(
+                    icon: "wand.and.stars",
+                    title: "Smart Reorder",
+                    action: { showingSmartReorder = true }
+                )
+                
+                ActionButton(
+                    icon: "rectangle.stack.person.crop",
+                    title: "Find Similar",
+                    action: {
+                        showingSimilarMixtapes = true
+                        aiService.trackInteraction(type: "find_similar", mixtape: mixTape)
+                    }
+                )
+                
+                ActionButton(
+                    icon: "plus.circle",
+                    title: "Add Songs",
+                    action: {
+                        showingDocsPicker = true
+                        aiService.trackInteraction(type: "add_songs", mixtape: mixTape)
+                    }
+                )
+                
+                ActionButton(
+                    icon: "waveform.path",
+                    title: "Visualize",
+                    action: { showingVisualization = true }
                 )
             }
+            .padding(.horizontal)
         }
+    }
+    
+    private var songListHeader: some View {
+        HStack {
+            Text("Songs")
+                .font(.headline)
+            
+            Spacer()
+            
+            Picker("View Mode", selection: $viewMode) {
+                Image(systemName: "list.bullet").tag(ViewMode.list)
+                Image(systemName: "square.grid.2x2").tag(ViewMode.grid)
+                Image(systemName: "list.dash").tag(ViewMode.compact)
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .frame(width: 120)
+        }
+        .padding(.horizontal)
+    }
+    
+    private var listView: some View {
+        VStack(spacing: 2) {
+            ForEach(songs) { song in
+                SongRowView(
+                    song: song,
+                    isPlaying: currentSongName.wrappedValue == song.title,
+                    isSelected: selectedSongId == song.id,
+                    onTap: { playSong(song) }
+                )
+                .contextMenu {
+                    songContextMenu(for: song)
+                }
+                .onTapGesture {
+                    withAnimation {
+                        selectedSongId = song.id
+                    }
+                }
+            }
+            .onDelete(perform: deleteSongs)
+        }
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .padding(.horizontal)
+    }
+    
+    private var gridView: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+            ForEach(songs) { song in
+                SongGridCell(
+                    song: song,
+                    isPlaying: currentSongName.wrappedValue == song.title,
+                    onTap: { playSong(song) }
+                )
+                .contextMenu {
+                    songContextMenu(for: song)
+                }
+            }
+        }
+        .padding(.horizontal)
+    }
+    
+    private var compactView: some View {
+        VStack(spacing: 1) {
+            ForEach(songs) { song in
+                CompactSongRow(
+                    song: song,
+                    isPlaying: currentSongName.wrappedValue == song.title,
+                    onTap: { playSong(song) }
+                )
+                .contextMenu {
+                    songContextMenu(for: song)
+                }
+            }
+            .onDelete(perform: deleteSongs)
+        }
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .padding(.horizontal)
     }
     
     // MARK: - Helper Functions
+    
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        let minutes = Int(seconds / 60)
+        return "\(minutes) min"
+    }
+    
+    private func getMoodTags() -> [String] {
+        return mixTape.moodTagsArray
+    }
     
     /// Action sheet for smart reordering options
     private func smartReorderActionSheet() -> ActionSheet {
@@ -419,89 +474,29 @@ struct MixTapeView: View {
         }
     }
     
-    /// Move songs within the mixtape
-    func move(from source: IndexSet, to destination: Int) {
-        // Standard reordering code
-        self.songs.move(fromOffsets: source, toOffset: destination)
-        
-        // Update song's positionInTape property
-        var counter: Int16 = 0
-        for song in self.songs {
-            if song.positionInTape != counter {
-                 song.positionInTape = counter
+    private func songContextMenu(for song: Song) -> some View {
+        Group {
+            Button(action: {
+                showingAIAnalysis = true
+                aiService.trackInteraction(type: "analyze_song", mixtape: mixTape)
+            }) {
+                Label("Analyze with AI", systemImage: "waveform.path")
             }
-            counter += 1
-        }
-        
-        // Notify mixtape of changes to songs
-        self.mixTape.willChangeValue(forKey: "songs")
-        
-        // Save changes
-        do {
-            try self.moc.save()
-            aiService.trackInteraction(type: "manual_reorder", mixtape: mixTape)
-        } catch {
-            currentError = AppError.saveFailure(error)
-            retryAction = { move(from: source, to: destination) }
-        }
-    }
-    
-    /// Delete a song from the mixtape
-    func deleteSong(offsets: IndexSet) {
-        for index in offsets {
-            let song = self.songs[index]
-            moc.delete(song)
-            self.songs.remove(at: index)
             
-            // Track interaction
-            aiService.trackInteraction(type: "delete_song", mixtape: mixTape)
-        }
-        
-        self.mixTape.numberOfSongs = Int16(self.songs.count)
-        
-        // Update song's positionInTape property
-        var counter: Int16 = 0
-        for song in self.songs {
-            if song.positionInTape != counter {
-                   song.positionInTape = counter
+            Button(action: {
+                // Add to another mixtape
+            }) {
+                Label("Add to Mixtape", systemImage: "plus.rectangle.on.rectangle")
             }
-            counter += 1
-        }
-        
-        // Notify mixtape of changes to songs
-        self.mixTape.willChangeValue(forKey: "songs")
-        
-        do {
-            try moc.save()
-        } catch {
-            currentError = AppError.deletionFailure(error)
-            // No retry for deletion as it would be confusing
-        }
-    }
-    
-    /// Get mood tags from the mixtape
-    private func getMoodTags() -> [String] {
-        return mixTape.moodTagsArray
-    }
-    
-    /// Load mood tags from mixtape
-    private func loadMoodTags() {
-        selectedMoodTags = getMoodTags()
-    }
-    
-    /// Create a mood badge view
-    private func moodBadge(mood: Mood) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: mood.systemIcon)
-                .font(.system(size: 12))
             
-            Text(mood.rawValue)
-                .font(.caption)
+            Divider()
+            
+            Button(role: .destructive, action: {
+                deleteSongs(indexSet: IndexSet([songs.firstIndex(of: song)!]))
+            }) {
+                Label("Delete", systemImage: "trash")
+            }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(mood.color.opacity(0.2)))
-        .foregroundColor(mood.color)
     }
 }
 

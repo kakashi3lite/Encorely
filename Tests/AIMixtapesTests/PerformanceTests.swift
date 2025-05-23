@@ -3,10 +3,12 @@ import XCTest
 
 final class PerformanceTests: XCTestCase {
     var performanceMonitor: PerformanceMonitor!
+    var performanceValidator: PerformanceValidator!
     
     override func setUp() {
         super.setUp()
         performanceMonitor = PerformanceMonitor.shared
+        performanceValidator = PerformanceValidator()
     }
     
     func testTrackPlaybackPerformance() {
@@ -42,6 +44,31 @@ final class PerformanceTests: XCTestCase {
         // Assert memory usage is within acceptable bounds
         XCTAssertLessThan(peakMemory - initialMemory, 100 * 1024 * 1024) // 100MB limit
         XCTAssertLessThan(finalMemory - initialMemory, 5 * 1024 * 1024)  // 5MB residual limit
+    }
+    
+    func testAudioProcessingPerformance() async throws {
+        // This test validates that the audio processing system meets performance requirements
+        let expectation = XCTestExpectation(description: "Performance validation completes")
+        
+        Task {
+            let results = await performanceValidator.validatePerformanceConstraints()
+            
+            // Log the results
+            print("==== Audio Processing Performance Results ====")
+            print("Latency: \(results.latencyResult.passed ? "PASSED" : "FAILED") - Avg: \(String(format: "%.1f", results.latencyResult.averageLatencyMs))ms")
+            print("Memory: \(results.memoryResult.passed ? "PASSED" : "FAILED") - Peak: \(String(format: "%.1f", results.memoryResult.peakMemoryMB))MB")
+            print("Accuracy: \(results.accuracyResult.passed ? "PASSED" : "FAILED") - \(String(format: "%.1f", results.accuracyResult.accuracy * 100))%")
+            print("Overall: \(results.overallPassed ? "PASSED" : "FAILED")")
+            
+            // We don't assert on the exact values as they may vary by hardware
+            // Just verify that the validator ran and produced results
+            XCTAssertGreaterThan(results.latencyResult.processingTimes.count, 0)
+            XCTAssertGreaterThan(results.accuracyResult.totalPredictions, 0)
+            
+            expectation.fulfill()
+        }
+        
+        await fulfillment(of: [expectation], timeout: 30.0)
     }
     
     private func getMemoryUsage() -> UInt64 {

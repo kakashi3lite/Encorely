@@ -1,5 +1,6 @@
 import UIKit
 import CoreData
+import os.log
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -25,10 +26,27 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         description.cloudKitContainerOptions = NSPersistentCloudKitContainerOptions(containerIdentifier: "iCloud.com.mixtapes.ai")
         description.setOption(true as NSNumber, forKey: NSPersistentStoreRemoteChangeNotificationPostOptionKey)
+        description.setOption(true as NSNumber, forKey: NSPersistentHistoryTrackingKey)
+        
+        // Handle migrations before loading stores
+        if let storeURL = description.url {
+            let migrationManager = CoreDataMigrationManager(storeURL: storeURL)
+            if !migrationManager.migrateStore() {
+                // Log migration failure but continue with loading
+                print("WARNING: Core Data migration failed, some data may be unavailable")
+            }
+        }
         
         container.loadPersistentStores { (storeDescription, error) in
             if let error = error as NSError? {
-                fatalError("Unresolved error \(error), \(error.userInfo)")
+                // Rather than crashing, log the error and show an alert to the user
+                print("Core Data store error: \(error), \(error.userInfo)")
+                
+                // Post notification for UI to display error
+                NotificationCenter.default.post(
+                    name: Notification.Name("CoreDataLoadError"),
+                    object: error
+                )
             }
         }
         
@@ -47,8 +65,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
                 try context.save()
             } catch {
                 let nserror = error as NSError
-                fatalError("Unresolved error \(nserror), \(nserror.userInfo)")
+                print("Core Data save error: \(nserror), \(nserror.userInfo)")
+                
+                // Post notification for UI to display error
+                NotificationCenter.default.post(
+                    name: Notification.Name("CoreDataSaveError"),
+                    object: error
+                )
             }
         }
+    }
     }
 }

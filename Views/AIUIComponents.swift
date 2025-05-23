@@ -466,3 +466,388 @@ struct OnboardingView: View {
         }
     }
 }
+
+// MARK: - Mixtape Generation Components
+
+struct MoodCard: View {
+    let mood: Mood
+    let isSelected: Bool
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Current Mood")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Image(systemName: mood.systemIcon)
+                    .foregroundColor(mood.color)
+            }
+            
+            Text(mood.rawValue)
+                .font(.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.systemBackground))
+                .shadow(color: mood.color.opacity(0.2), radius: 10)
+        )
+    }
+}
+
+struct PersonalityCard: View {
+    let personality: Personality
+    let isSelected: Bool
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Music Personality")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Image(systemName: personality.icon)
+                    .foregroundColor(personality.themeColor)
+            }
+            
+            Text(personality.rawValue)
+                .font(.title3)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.systemBackground))
+                .shadow(color: personality.themeColor.opacity(0.2), radius: 10)
+        )
+    }
+}
+
+struct ControlCard<Content: View>: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    let content: Content
+    
+    init(
+        title: String,
+        value: String,
+        icon: String,
+        color: Color,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.value = value
+        self.icon = icon
+        self.color = color
+        self.content = content()
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: icon)
+                    .foregroundColor(color)
+                Text(title)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            
+            Text(value)
+                .font(.headline)
+            
+            content
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(.systemBackground))
+        )
+    }
+}
+
+struct SpringButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Supporting Views
+
+struct GenreSelectorView: View {
+    @Environment(\.presentationMode) var presentationMode
+    @Binding var selectedGenres: Set<String>
+    
+    private let genres = [
+        "Pop", "Rock", "Hip-Hop", "R&B", "Jazz", "Classical",
+        "Electronic", "Folk", "Country", "Metal", "Blues", "Latin"
+    ]
+    
+    var body: some View {
+        NavigationView {
+            List(genres, id: \.self) { genre in
+                Button(action: { toggleGenre(genre) }) {
+                    HStack {
+                        Text(genre)
+                        Spacer()
+                        if selectedGenres.contains(genre) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Select Genres")
+            .navigationBarItems(trailing: Button("Done") {
+                presentationMode.wrappedValue.dismiss()
+            })
+        }
+    }
+    
+    private func toggleGenre(_ genre: String) {
+        if selectedGenres.contains(genre) {
+            selectedGenres.remove(genre)
+        } else {
+            selectedGenres.insert(genre)
+        }
+    }
+}
+
+struct NameSuggestionsView: View {
+    @Environment(\.presentationMode) var presentationMode
+    @Binding var mixtapeName: String
+    let mood: Mood
+    let personality: Personality
+    
+    @State private var suggestions: [String] = []
+    
+    var body: some View {
+        NavigationView {
+            List {
+                Section(header: Text("AI Generated Names")) {
+                    ForEach(suggestions, id: \.self) { name in
+                        Button(action: { selectName(name) }) {
+                            Text(name)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Name Suggestions")
+            .navigationBarItems(trailing: Button("Done") {
+                presentationMode.wrappedValue.dismiss()
+            })
+            .onAppear {
+                generateSuggestions()
+            }
+        }
+    }
+    
+    private func selectName(_ name: String) {
+        mixtapeName = name
+        presentationMode.wrappedValue.dismiss()
+    }
+    
+    private func generateSuggestions() {
+        // In a real app, this would use AI to generate names based on mood and personality
+        suggestions = [
+            "\(mood.rawValue) Vibes",
+            "\(personality.rawValue) Mix",
+            "The \(mood.rawValue) Collection",
+            "\(personality.rawValue) Journey",
+            "Mood: \(mood.rawValue)",
+            "\(mood.rawValue) \(personality.rawValue) Series"
+        ]
+    }
+}
+
+// MARK: - Accessibility Extensions
+
+/// Extension to add accessibility features to UI components
+extension View {
+    /// Adds detailed accessibility labels and hints
+    func accessibleMoodCard(mood: Mood, isSelected: Bool) -> some View {
+        self.accessibilityLabel("Mood: \(mood.rawValue)")
+            .accessibilityValue(isSelected ? "Selected" : "Not selected")
+            .accessibilityHint("Double tap to change mood")
+            .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+    }
+    
+    /// Adds accessibility for personality cards
+    func accessiblePersonalityCard(personality: PersonalityType, isSelected: Bool) -> some View {
+        self.accessibilityLabel("Personality: \(personality.rawValue)")
+            .accessibilityValue(isSelected ? "Selected" : "Not selected")
+            .accessibilityHint("Double tap to change personality type")
+            .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+    }
+    
+    /// Adds accessibility for control cards
+    func accessibleControlCard(label: String, value: String, iconName: String) -> some View {
+        self.accessibilityLabel("\(label): \(value)")
+            .accessibilityHint("Double tap to adjust")
+            .accessibilityAddTraits(.isButton)
+    }
+    
+    /// Makes playlist items accessible
+    func accessiblePlaylistItem(title: String, artist: String, isPlaying: Bool) -> some View {
+        self.accessibilityLabel("\(title) by \(artist)")
+            .accessibilityValue(isPlaying ? "Now playing" : "")
+            .accessibilityHint("Double tap to play")
+            .accessibilityAddTraits(isPlaying ? [.isSelected, .startsMediaSession] : .isButton)
+    }
+    
+    /// Enhances generation progress accessibility
+    func accessibleGenerationProgress(phase: String, progress: Double) -> some View {
+        self.accessibilityLabel("Generating mixtape")
+            .accessibilityValue("\(phase): \(Int(progress * 100))% complete")
+            .accessibilityAddTraits(.updatesFrequently)
+    }
+    
+    /// Enhances player controls accessibility
+    func accessiblePlayerControls(isPlaying: Bool) -> some View {
+        self.accessibilityLabel(isPlaying ? "Pause" : "Play")
+            .accessibilityHint(isPlaying ? "Double tap to pause" : "Double tap to play")
+            .accessibilityAddTraits(.isButton)
+    }
+}
+
+// MARK: - Dynamic Type Support
+
+/// Extension to add dynamic type support to text elements
+extension Text {
+    /// Makes text scalable with dynamic type settings while maintaining design
+    func scalableText(style: Font.TextStyle, weight: Font.Weight = .regular) -> some View {
+        self.font(.system(style))
+            .fontWeight(weight)
+            .lineLimit(nil) // Allow text to wrap as needed
+            .fixedSize(horizontal: false, vertical: true) // Allow vertical growth
+    }
+}
+
+// MARK: - High Contrast Support
+
+/// Extension to add high contrast modes support
+extension Color {
+    /// Returns a color that works well in both regular and high contrast modes
+    static func adaptiveColor(light: Color, dark: Color, highContrastLight: Color? = nil, highContrastDark: Color? = nil) -> Color {
+        return Color(uiColor: UIColor { traitCollection in
+            let isDarkMode = traitCollection.userInterfaceStyle == .dark
+            let isHighContrast = traitCollection.accessibilityContrast == .high
+            
+            if isDarkMode {
+                return isHighContrast && highContrastDark != nil
+                    ? UIColor(highContrastDark!)
+                    : UIColor(dark)
+            } else {
+                return isHighContrast && highContrastLight != nil
+                    ? UIColor(highContrastLight!)
+                    : UIColor(light)
+            }
+        })
+    }
+}
+
+// MARK: - Accessible UI Components
+
+/// Card that displays mood information with full accessibility support
+struct AccessibleMoodCard: View {
+    let mood: Mood
+    let isSelected: Bool
+    
+    var body: some View {
+        MoodCard(mood: mood, isSelected: isSelected)
+            .accessibleMoodCard(mood: mood, isSelected: isSelected)
+    }
+}
+
+/// Card that displays personality information with full accessibility support
+struct AccessiblePersonalityCard: View {
+    let personality: PersonalityType
+    let isSelected: Bool
+    
+    var body: some View {
+        PersonalityCard(personality: personality, isSelected: isSelected)
+            .accessiblePersonalityCard(personality: personality, isSelected: isSelected)
+    }
+}
+
+/// Progress indicator with enhanced accessibility
+struct AccessibleProgressView: View {
+    let title: String
+    let subtitle: String
+    let progress: Double
+    let iconName: String
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: iconName)
+                .font(.system(size: 28))
+                .foregroundColor(.accentColor)
+            
+            Text(title)
+                .scalableText(style: .headline, weight: .semibold)
+            
+            Text(subtitle)
+                .scalableText(style: .subheadline)
+                .foregroundColor(.secondary)
+            
+            ProgressView(value: progress)
+                .progressViewStyle(LinearProgressViewStyle())
+                .padding(.top, 4)
+        }
+        .padding()
+        .background(Color(.secondarySystemBackground))
+        .cornerRadius(12)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(subtitle)")
+        .accessibilityValue("\(Int(progress * 100))% complete")
+        .accessibilityAddTraits(.updatesFrequently)
+    }
+}
+
+/// Enhanced player controls with accessibility
+struct AccessiblePlayerControls: View {
+    let queuePlayer: AVQueuePlayer
+    @Binding var isPlaying: Bool
+    
+    var body: some View {
+        HStack(spacing: 24) {
+            Button(action: {
+                queuePlayer.seek(to: CMTime(seconds: max(0, queuePlayer.currentTime().seconds - 15), preferredTimescale: 600))
+            }) {
+                Image(systemName: "gobackward.15")
+                    .font(.system(size: 24))
+            }
+            .accessibilityLabel("Rewind 15 seconds")
+            
+            Button(action: {
+                if isPlaying {
+                    queuePlayer.pause()
+                } else {
+                    queuePlayer.play()
+                }
+                isPlaying.toggle()
+            }) {
+                Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 44))
+            }
+            .accessiblePlayerControls(isPlaying: isPlaying)
+            
+            Button(action: {
+                queuePlayer.seek(to: CMTime(seconds: queuePlayer.currentTime().seconds + 15, preferredTimescale: 600))
+            }) {
+                Image(systemName: "goforward.15")
+                    .font(.system(size: 24))
+            }
+            .accessibilityLabel("Forward 15 seconds")
+        }
+    }
+}
