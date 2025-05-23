@@ -2,10 +2,13 @@
 .env
 
 # Xcode
-*.xcodeproj/
-*.xcworkspace/
 xcuserdata/
 *.xcuserstate
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcworkspace/contents.xcworkspacedata
+**/xcshareddata/WorkspaceSettings.xcsettings
 
 # Build artifacts
 build/

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "1500"
+   LastUpgradeVersion = "1620"
    version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "88F2A67C2B3D7C0100E11D98"
+               BlueprintIdentifier = "B8C754387E6BC6707B719957"
                BuildableName = "AI-Mixtapes.app"
                BlueprintName = "AI-Mixtapes"
                ReferencedContainer = "container:AI-Mixtapes.xcodeproj">
@@ -56,7 +56,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "88F2A67C2B3D7C0100E11D98"
+            BlueprintIdentifier = "B8C754387E6BC6707B719957"
             BuildableName = "AI-Mixtapes.app"
             BlueprintName = "AI-Mixtapes"
             ReferencedContainer = "container:AI-Mixtapes.xcodeproj">
@@ -73,7 +73,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "88F2A67C2B3D7C0100E11D98"
+            BlueprintIdentifier = "B8C754387E6BC6707B719957"
             BuildableName = "AI-Mixtapes.app"
             BlueprintName = "AI-Mixtapes"
             ReferencedContainer = "container:AI-Mixtapes.xcodeproj">
