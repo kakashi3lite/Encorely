@@ -9,6 +9,7 @@
 import Foundation
 import SwiftUI
 import CoreML
+import Domain
 import Vision
 import CoreData
 import Combine

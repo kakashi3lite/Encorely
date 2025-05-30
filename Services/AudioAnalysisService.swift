@@ -12,6 +12,7 @@ import Accelerate
 import CoreML
 import Combine
 import os.log
+import Domain
 import SwiftUI
 
 /// Custom errors for audio analysis operations

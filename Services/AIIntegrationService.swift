@@ -14,7 +14,7 @@ import AVKit
 import CoreML
 import NaturalLanguage
 import os.log
-import AIMixtapes // Contains SharedTypes
+import Domain
 
 /// Central service that coordinates all AI features of the Mixtapes app
 final class AIIntegrationService: ObservableObject {
