@@ -9,6 +9,7 @@
 import Foundation
 import CoreData
 import UIKit
+import Domain
 
 /// Extension for MixTape that adds AI-related functionality
 class MixTape: NSManagedObject {
@@ -208,12 +209,14 @@ class Song: NSManagedObject {
     
     // Store audio features for this song
     func setAudioFeatures(tempo: Float, energy: Float, valence: Float) {
-        // In a real implementation, we would store more detailed features
-        // and use proper serialization/deserialization
+        // Create AudioFeatures with basic required fields and defaults
+        let features = AudioFeatures(
+            tempo: tempo,
+            energy: energy,
+            valence: valence
+        )
         
-        let features = AudioFeatures(tempo: tempo, energy: energy, valence: valence)
         let encoder = JSONEncoder()
-        
         do {
             let data = try encoder.encode(features)
             audioFeatures = data
@@ -235,7 +238,7 @@ class Song: NSManagedObject {
         }
     }
     
-    // Determine dominant mood based on audio features
+    // Determine dominant mood based on audio features 
     func getDominantMood() -> Mood {
         // If we have a mood tag already, use it
         if let tag = moodTag, let mood = Mood(rawValue: tag) {
@@ -244,7 +247,7 @@ class Song: NSManagedObject {
         
         // If we have audio features, use them to determine mood
         if let features = getAudioFeatures() {
-            return determineMoodFromFeatures(features)
+            return features.estimatedMood.toMood()
         }
         
         // Fall back to checking song name for mood keywords
@@ -259,51 +262,19 @@ class Song: NSManagedObject {
         
         return .neutral
     }
-    
-    // Determine mood from audio features
-    private func determineMoodFromFeatures(_ features: AudioFeatures) -> Mood {
-        // Simple mood determination logic based on standard audio features
-        
-        if features.tempo > 120 {
-            if features.energy > 0.7 {
-                return features.valence > 0.6 ? .energetic : .angry
-            } else {
-                return features.valence > 0.6 ? .happy : .focused
-            }
-        } else {
-            if features.energy < 0.4 {
-                return features.valence > 0.5 ? .relaxed : .melancholic
-            } else {
-                return features.valence > 0.7 ? .romantic : .neutral
-            }
-        }
-    }
 }
 
-/// Model for audio features with all Spotify-like characteristics
-struct AudioFeatures: Codable {
-    let tempo: Float              // Beats per minute
-    let energy: Float            // 0.0 to 1.0, intensity and activity level
-    let valence: Float           // 0.0 to 1.0, musical positiveness
-    let danceability: Float      // 0.0 to 1.0, suitability for dancing
-    let acousticness: Float      // 0.0 to 1.0, acoustic vs electronic
-    let instrumentalness: Float  // 0.0 to 1.0, vocal content prediction
-    let speechiness: Float       // 0.0 to 1.0, spoken word presence
-    let liveness: Float          // 0.0 to 1.0, audience presence
-    
-    // Computed property for overall energy score
-    var overallEnergy: Float {
-        return (energy + danceability + (tempo / 180.0)) / 3.0
-    }
-    
-    // Computed property for mood score
-    var moodScore: Float {
-        return (valence + energy) / 2.0
-    }
-    
-    // Computed property for focus score
-    var focusScore: Float {
-        return instrumentalness * (1.0 - speechiness)
+// Convert between EstimatedMood and Mood
+private extension EstimatedMood {
+    func toMood() -> Mood {
+        switch self {
+        case .energetic: return .energetic
+        case .relaxed: return .relaxed  
+        case .happy: return .happy
+        case .melancholic: return .melancholic
+        case .focused: return .focused
+        case .neutral: return .neutral
+        }
     }
 }
 

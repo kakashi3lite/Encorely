@@ -8,6 +8,7 @@
 
 import Foundation
 import CoreData
+import Domain
 import UIKit
 
 /// Extension for MixTape that adds AI-related functionality
@@ -195,12 +196,19 @@ extension Song {
     
     // Store audio features for this song
     func setAudioFeatures(tempo: Float, energy: Float, valence: Float) {
-        // In a real implementation, we would store more detailed features
-        // and use proper serialization/deserialization
+        // Create AudioFeatures with basic required fields and defaults
+        let features = AudioFeatures(
+            tempo: tempo,
+            energy: energy,
+            valence: valence,
+            danceability: 0.5,
+            acousticness: 0.5,
+            instrumentalness: 0.5,
+            speechiness: 0.1,
+            liveness: 0.1
+        )
         
-        let features = AudioFeatures(tempo: tempo, energy: energy, valence: valence)
         let encoder = JSONEncoder()
-        
         do {
             let data = try encoder.encode(features)
             audioFeatures = data
