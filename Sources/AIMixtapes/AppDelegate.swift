@@ -38,6 +38,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             }
         }
         
+        // Request MusicKit authorization
+        Task {
+            let musicService = MusicKitService.shared
+            if await musicService.requestAuthorization() {
+                // Access granted, request library access
+                try? await musicService.requestLibraryAccess()
+            }
+        }
+        
         // Register default UserDefaults
         registerDefaults()
         
