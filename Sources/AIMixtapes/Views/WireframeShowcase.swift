@@ -1,19 +1,159 @@
 import SwiftUI
 
-struct WireframeShowcase: View {
+// MARK: - Content Integration
+
+struct IntegratedWireframeShowcase: View {
+    @StateObject var wireframeManager: WireframeManager
     @State private var selectedTab = 0
+    @State private var selectedWireframe: String?
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+    
+    init(moodEngine: MoodEngine, personalityEngine: PersonalityEngine) {
+        _wireframeManager = StateObject(wrappedValue: WireframeManager(
+            moodEngine: moodEngine,
+            personalityEngine: personalityEngine
+        ))
+    }
     
     var body: some View {
         ScrollView {
-            VStack(spacing: 40) {
+            VStack(spacing: DesignSystem.Spacing.extraLarge) {
+                // Navigation tabs
+                adaptiveTabBar
+                    .wireframeThemed(wireframeManager)
+                
+                // Content based on selected tab
+                TabView(selection: $selectedTab) {
+                    navigationFlowSection
+                        .tag(0)
+                    
+                    playerFlowSection
+                        .tag(1)
+                    
+                    contentFlowSection
+                        .tag(2)
+                }
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+            }
+            .animation(.easeInOut, value: selectedTab)
+        }
+    }
+    
+    private var adaptiveTabBar: some View {
+        let navigationStyle = wireframeManager.preferredNavigationStyle
+        
+        return Group {
+            switch navigationStyle {
+            case .hierarchical:
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(tabTitle)
+                        .font(.title.bold())
+                    
+                    HStack(spacing: 16) {
+                        ForEach(0..<3) { index in
+                            TabButton(title: tabTitles[index], isSelected: selectedTab == index) {
+                                selectedTab = index
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                
+            case .tabbed:
+                Picker("Section", selection: $selectedTab) {
+                    ForEach(0..<3) { index in
+                        Text(tabTitles[index]).tag(index)
+                    }
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .padding(.horizontal)
+                
+            case .contextual:
+                HStack {
+                    ForEach(0..<3) { index in
+                        Button(action: { selectedTab = index }) {
+                            VStack(spacing: 4) {
+                                Image(systemName: tabIcons[index])
+                                    .font(.system(size: 22))
+                                Text(tabTitles[index])
+                                    .font(.caption)
+                            }
+                            .foregroundColor(selectedTab == index ? wireframeManager.dynamicColor(for: .primary) : .secondary)
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+    
+    private var tabTitles: [String] {
+        ["Navigation", "Player", "Content"]
+    }
+    
+    private var tabIcons: [String] {
+        ["rectangle.stack", "play.circle", "folder"]
+    }
+    
+    private var tabTitle: String {
+        switch selectedTab {
+        case 0:
+            return "Navigation Flow"
+        case 1:
+            return "Player Flow"
+        case 2:
+            return "Content Flow"
+        default:
+            return ""
+        }
+    }
+}
+
+// MARK: - Supporting Components
+
+struct TabButton: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.subheadline.weight(isSelected ? .semibold : .regular))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule()
+                        .fill(isSelected ? Color.accentColor.opacity(0.1) : Color.clear)
+                )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+struct WireframeShowcase: View {
+    @State private var selectedTab = 0
+    @State private var selectedWireframe: String?
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: DesignSystem.Spacing.extraLarge) {
                 // Navigation tabs
                 Picker("Section", selection: $selectedTab) {
                     Text("Navigation").tag(0)
                     Text("Player").tag(1)
-                    Text("Profile").tag(2)
+                    Text("Content").tag(2)
                 }
                 .pickerStyle(SegmentedPickerStyle())
                 .padding(.horizontal)
+                
+                // Section title
+                Text(tabTitle)
+                    .font(.system(size: horizontalSizeClass == .regular ? DesignSystem.FontSize.largeTitle : DesignSystem.FontSize.title, weight: .bold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
                 
                 // Content based on selected tab
                 Group {
@@ -23,105 +163,128 @@ struct WireframeShowcase: View {
                     case 1:
                         playerFlowSection
                     case 2:
-                        profileFlowSection
+                        contentFlowSection
                     default:
                         EmptyView()
                     }
                 }
-                
-                // Main Navigation Flow
-                Text(tabTitle)
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                    
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 30) {
-                            // Onboarding
-                            WireframePhone {
-                                OnboardingWireframe()
-                            }
-                            
-                            // Home Tab
-                            WireframePhone {
-                                HomeWireframe()
-                            }
-                            
-                            // Mood Selection
-                            WireframePhone {
-                                MoodSelectionWireframe()
-                            }
-                            
-                            // Mixtape Generation
-                            WireframePhone {
-                                MixtapeGenerationWireframe()
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-                }
-                
-                // Player and Controls Flow
-                Group {
-                    Text("Player and Controls Flow")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal)
-                    
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 30) {
-                            // Mini Player
-                            WireframePhone {
-                                MiniPlayerWireframe()
-                            }
-                            
-                            // Full Player
-                            WireframePhone {
-                                FullPlayerWireframe()
-                            }
-                            
-                            // Queue View
-                            WireframePhone {
-                                QueueWireframe()
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-                }
-                
-                // Settings and Profile Flow
-                Group {
-                    Text("Settings and Profile Flow")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal)
-                    
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 30) {
-                            // Profile
-                            WireframePhone {
-                                ProfileWireframe()
-                            }
-                            
-                            // Personality Settings
-                            WireframePhone {
-                                PersonalitySettingsWireframe()
-                            }
-                            
-                            // App Settings
-                            WireframePhone {
-                                SettingsWireframe()
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-                }
+                .transition(.opacity.combined(with: .move(edge: .trailing)))
             }
-            .padding(.vertical, 40)
+            .padding(.vertical, DesignSystem.Spacing.extraLarge)
         }
+        .animation(.easeInOut(duration: AnimationConstants.defaultDuration), value: selectedTab)
+    }
+    
+    // MARK: - Layout Sections
+    
+    private var navigationFlowSection: some View {
+        VStack(spacing: DesignSystem.Spacing.large) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: DesignSystem.Spacing.large) {
+                    FocusableWireframePhone("Onboarding") {
+                        OnboardingWireframe()
+                    }
+                    
+                    FocusableWireframePhone("Home") {
+                        HomeWireframe()
+                    }
+                    
+                    FocusableWireframePhone("Mood") {
+                        MoodSelectionWireframe()
+                    }
+                    
+                    FocusableWireframePhone("Generate") {
+                        MixtapeGenerationWireframe()
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+    
+    private var playerFlowSection: some View {
+        VStack(spacing: DesignSystem.Spacing.large) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: DesignSystem.Spacing.large) {
+                    // Mini Player
+                    WireframePhone {
+                        WireframeContainer("Now Playing") {
+                            MiniPlayerWireframe()
+                        }
+                    }
+                    
+                    // Full Player
+                    WireframePhone {
+                        WireframeContainer("Player") {
+                            FullPlayerWireframe()
+                        }
+                    }
+                    
+                    // Queue
+                    WireframePhone {
+                        WireframeContainer("Queue") {
+                            QueueWireframe()
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+    
+    private var contentFlowSection: some View {
+        VStack(spacing: DesignSystem.Spacing.large) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: DesignSystem.Spacing.large) {
+                    // Playlist Detail
+                    WireframePhone {
+                        WireframeContainer("Playlist") {
+                            PlaylistDetailWireframe()
+                        }
+                    }
+                    .onTapGesture {
+                        withAnimation {
+                            selectedWireframe = "playlist"
+                        }
+                    }
+                    
+                    // More wireframes can be added here...
+                }
+                .padding(.horizontal)
+            }
+        }
+    }
+}
+
+// MARK: - Focusable Wireframe Phone
+
+struct FocusableWireframePhone<Content: View>: View {
+    let title: String
+    let content: Content
+    @State private var isSelected = false
+    
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+    
+    var body: some View {
+        WireframeContainer(title) {
+            content
+                .frame(width: 350, height: 700)
+        }
+        .scaleEffect(isSelected ? 1.02 : 1.0)
+        .shadow(color: isSelected ? DesignSystem.Shadow.large : DesignSystem.Shadow.medium, radius: isSelected ? 20 : 10)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+        .onTapGesture {
+            withAnimation {
+                isSelected.toggle()
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title) wireframe")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Double tap to expand")
     }
 }
 
@@ -143,7 +306,8 @@ struct WireframePhone<Content: View>: View {
     }
 }
 
-// Individual Wireframe Views
+// MARK: - Individual Wireframe Views
+
 struct OnboardingWireframe: View {
     var body: some View {
         VStack(spacing: 24) {
@@ -893,25 +1057,5 @@ private var profileFlowSection: some View {
             }
             .padding(.horizontal)
         }
-    }
-}
-
-private var tabTitle: String {
-    switch selectedTab {
-    case 0:
-        return "Navigation Flow"
-    case 1:
-        return "Player Flow"
-    case 2:
-        return "Profile Flow"
-    default:
-        return ""
-    }
-}
-
-// Preview
-struct WireframeShowcase_Previews: PreviewProvider {
-    static var previews: some View {
-        WireframeShowcase()
     }
 }

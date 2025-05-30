@@ -1,46 +1,157 @@
 import Foundation
 import Accelerate
+import SwiftUI
 
-public struct AudioFeatures {
+public struct AudioFeatures: Codable {
     // Core emotional features
-    public let energy: Float      // Overall energy/intensity of the audio (0-1)
-    public let valence: Float     // Musical positiveness/mood (0-1)
+    public let energy: Float      // Overall energy/intensity (0-1)
+    public let valence: Float     // Musical positiveness (0-1) 
     public let intensity: Float   // Dynamic intensity/arousal (0-1)
     
+    // Musical features
+    public let tempo: Float?      // BPM
+    public let key: Int?         // Musical key (-1 to 11)
+    public let mode: Float?      // Major (1) vs Minor (0)
+    public let danceability: Float? // Dance-ability (0-1)
+    
     // Timbral features
-    public let complexity: Float  // Spectral complexity/richness (0-1)
+    public let complexity: Float  // Spectral complexity (0-1)
     public let brightness: Float  // High frequency content (0-1)
-    public let warmth: Float     // Bass/treble ratio, indicates warmth (0-1)
+    public let warmth: Float      // Bass/treble ratio (0-1)
     
     public init(
         energy: Float,
         valence: Float,
         intensity: Float,
+        tempo: Float? = nil,
+        key: Int? = nil,
+        mode: Float? = nil,
+        danceability: Float? = nil,
         complexity: Float,
         brightness: Float,
         warmth: Float
     ) {
         self.energy = energy
-        self.valence = valence
+        self.valence = valence 
         self.intensity = intensity
+        self.tempo = tempo
+        self.key = key
+        self.mode = mode
+        self.danceability = danceability
         self.complexity = complexity
         self.brightness = brightness
         self.warmth = warmth
     }
     
-    // Default initialization with neutral values
+    // Default neutral features
     public static var neutral: AudioFeatures {
         AudioFeatures(
             energy: 0.5,
             valence: 0.5,
             intensity: 0.5,
+            tempo: 120,
+            mode: 0.5,
+            danceability: 0.5,
             complexity: 0.5,
             brightness: 0.5,
             warmth: 0.5
         )
     }
+
+    // Factory methods for different moods
+    public static func forMood(_ mood: Asset.MoodColor) -> AudioFeatures {
+        switch mood {
+        case .energetic:
+            return AudioFeatures(
+                energy: 0.9,
+                valence: 0.8,
+                intensity: 0.9,
+                tempo: 140,
+                mode: 1,
+                danceability: 0.9,
+                complexity: 0.7,
+                brightness: 0.8,
+                warmth: 0.6
+            )
+        case .relaxed:
+            return AudioFeatures(
+                energy: 0.3,
+                valence: 0.6,
+                intensity: 0.2,
+                tempo: 80,
+                mode: 1,
+                danceability: 0.3,
+                complexity: 0.4,
+                brightness: 0.4,
+                warmth: 0.8
+            )
+        case .happy:
+            return AudioFeatures(
+                energy: 0.7,
+                valence: 0.9,
+                intensity: 0.6,
+                tempo: 120,
+                mode: 1,
+                danceability: 0.8,
+                complexity: 0.6,
+                brightness: 0.7,
+                warmth: 0.6
+            )
+        case .melancholic:
+            return AudioFeatures(
+                energy: 0.4,
+                valence: 0.2,
+                intensity: 0.3,
+                tempo: 85,
+                mode: 0,
+                danceability: 0.3,
+                complexity: 0.7,
+                brightness: 0.3,
+                warmth: 0.7
+            )
+        case .focused:
+            return AudioFeatures(
+                energy: 0.5,
+                valence: 0.5,
+                intensity: 0.4,
+                tempo: 100,
+                mode: 0.5,
+                danceability: 0.4,
+                complexity: 0.6,
+                brightness: 0.6,
+                warmth: 0.5
+            )
+        case .romantic:
+            return AudioFeatures(
+                energy: 0.4,
+                valence: 0.7,
+                intensity: 0.3,
+                tempo: 90,
+                mode: 1,
+                danceability: 0.5,
+                complexity: 0.5,
+                brightness: 0.4,
+                warmth: 0.8
+            )
+        case .angry:
+            return AudioFeatures(
+                energy: 0.9,
+                valence: 0.2,
+                intensity: 1.0,
+                tempo: 150,
+                mode: 0,
+                danceability: 0.6,
+                complexity: 0.8,
+                brightness: 0.9,
+                warmth: 0.3
+            )
+        default:
+            return .neutral
+        }
+    }
     
-    // Utilities for mood detection
+    // MARK: - Mood Detection Utilities
+    
     public var moodVector: [Float] {
         [energy, valence, intensity]
     }
@@ -58,7 +169,19 @@ public struct AudioFeatures {
         return result
     }
     
-    // Analysis helpers
+    public func predictMood() -> (mood: Asset.MoodColor, confidence: Float) {
+        var moodConfidences: [(mood: Asset.MoodColor, confidence: Float)] = Asset.MoodColor.allCases.map { mood in
+            let targetFeatures = AudioFeatures.forMood(mood)
+            let similarity = 1.0 - min(distance(to: targetFeatures) / 2.0, 1.0)
+            return (mood, similarity)
+        }
+        
+        moodConfidences.sort { $0.confidence > $1.confidence }
+        return moodConfidences[0]
+    }
+    
+    // MARK: - Analysis Helpers
+    
     public var isEnergetic: Bool { energy > 0.7 }
     public var isCalm: Bool { energy < 0.3 }
     public var isPositive: Bool { valence > 0.7 }
@@ -67,18 +190,48 @@ public struct AudioFeatures {
     public var isComplex: Bool { complexity > 0.7 }
     public var isBright: Bool { brightness > 0.7 }
     public var isWarm: Bool { warmth > 0.7 }
+    
+    public var dominantFeature: String {
+        let features = [
+            ("Energy", energy),
+            ("Valence", valence),
+            ("Intensity", intensity),
+            ("Complexity", complexity),
+            ("Brightness", brightness),
+            ("Warmth", warmth)
+        ]
+        
+        return features.max(by: { $0.1 < $1.1 })?.0 ?? "Balanced"
+    }
 }
 
 extension AudioFeatures: CustomStringConvertible {
     public var description: String {
-        """
-        AudioFeatures:
-         - Energy: \(String(format: "%.2f", energy))
-         - Valence: \(String(format: "%.2f", valence))
-         - Intensity: \(String(format: "%.2f", intensity))
-         - Complexity: \(String(format: "%.2f", complexity))
-         - Brightness: \(String(format: "%.2f", brightness))
-         - Warmth: \(String(format: "%.2f", warmth))
-        """
+        var desc = [
+            "AudioFeatures:",
+            " - Energy: \(String(format: "%.2f", energy))",
+            " - Valence: \(String(format: "%.2f", valence))",
+            " - Intensity: \(String(format: "%.2f", intensity))"
+        ]
+        
+        if let tempo = tempo {
+            desc.append(" - Tempo: \(String(format: "%.1f", tempo)) BPM")
+        }
+        
+        if let key = key {
+            desc.append(" - Key: \(key)")
+        }
+        
+        if let mode = mode {
+            desc.append(" - Mode: \(mode > 0.5 ? "Major" : "Minor")")
+        }
+        
+        desc.append(contentsOf: [
+            " - Complexity: \(String(format: "%.2f", complexity))",
+            " - Brightness: \(String(format: "%.2f", brightness))",
+            " - Warmth: \(String(format: "%.2f", warmth))"
+        ])
+        
+        return desc.joined(separator: "\n")
     }
 }

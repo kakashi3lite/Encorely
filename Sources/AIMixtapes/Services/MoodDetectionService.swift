@@ -2,10 +2,11 @@ import Foundation
 import CoreML
 import AVFoundation
 import Combine
+import os
 
 class MoodDetectionService: ObservableObject {
     // MARK: - Published Properties
-    @Published private(set) var currentMood: Mood = .neutral
+    @Published private(set) var currentMood: Asset.MoodColor = .neutral
     @Published private(set) var moodConfidence: Float = 0.0
     @Published private(set) var moodHistory: [MoodSnapshot] = []
     
@@ -13,18 +14,19 @@ class MoodDetectionService: ObservableObject {
     private let audioAnalysis: AudioAnalysisService
     private let aiLogger = AILogger.shared
     private let moodEngine = MLConfig.loadMoodModel()
+    private let logger = Logger(subsystem: "com.aimixtapes", category: "MoodDetection")
     
     private var moodSubscriptions = Set<AnyCancellable>()
     private var analysisTimer: Timer?
-    private let analysisInterval: TimeInterval = 5.0
+    private let analysisInterval: TimeInterval = MLConfig.Analysis.moodUpdateInterval
     
     private var audioFeatures: AudioFeatures?
-    private var recentMoods: [Mood] = []
-    private let moodBufferSize = 5
+    private var recentMoods: [Asset.MoodColor] = []
+    private let moodBufferSize = MLConfig.Analysis.moodHistorySize
     
     // Mood transition thresholds
-    private let confidenceThreshold: Float = 0.7
-    private let transitionThreshold: Float = 0.3
+    private let confidenceThreshold: Float = MLConfig.Analysis.confidenceThreshold
+    private let moodStabilityFactor: Float = MLConfig.Analysis.moodStabilityFactor
     
     // MARK: - Initialization
     
@@ -38,7 +40,10 @@ class MoodDetectionService: ObservableObject {
     
     func startAnalysis() {
         analysisTimer?.invalidate()
-        analysisTimer = Timer.scheduledTimer(withTimeInterval: analysisInterval, repeats: true) { [weak self] _ in
+        analysisTimer = Timer.scheduledTimer(
+            withTimeInterval: analysisInterval,
+            repeats: true
+        ) { [weak self] _ in
             self?.analyzeMood()
         }
     }
@@ -48,7 +53,7 @@ class MoodDetectionService: ObservableObject {
         analysisTimer = nil
     }
     
-    func getMoodTransitionProbability(to targetMood: Mood) -> Float {
+    func getMoodTransitionProbability(to targetMood: Asset.MoodColor) -> Float {
         guard let lastMood = moodHistory.last?.mood else { return 0.5 }
         
         // Calculate based on historical transitions
@@ -61,127 +66,135 @@ class MoodDetectionService: ObservableObject {
         return Float(targetTransitions.count) / Float(transitions.count)
     }
     
-    func getMoodDuration() -> TimeInterval? {
-        guard let lastTransition = moodHistory.last?.timestamp else { return nil }
-        return Date().timeIntervalSince(lastTransition)
-    }
-    
     // MARK: - Private Methods
     
     private func setupAudioAnalysis() {
+        // Subscribe to audio features updates
         audioAnalysis.audioFeaturesPublisher
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] features in
                 self?.audioFeatures = features
                 self?.analyzeMood()
             }
             .store(in: &moodSubscriptions)
+            
+        // Subscribe to mood changes
+        audioAnalysis.moodPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] mood in
+                self?.handleMoodUpdate(mood)
+            }
+            .store(in: &moodSubscriptions)
     }
     
     private func startMoodTracking() {
-        // Track significant mood changes
-        $currentMood
-            .dropFirst()
-            .sink { [weak self] newMood in
-                guard let self = self else { return }
-                
-                let snapshot = MoodSnapshot(mood: newMood,
-                                         confidence: self.moodConfidence,
-                                         timestamp: Date())
-                self.moodHistory.append(snapshot)
-                
-                // Keep history manageable
-                if self.moodHistory.count > 100 {
-                    self.moodHistory.removeFirst()
-                }
-                
-                // Log mood change
-                self.aiLogger.logMoodTransition(from: self.currentMood,
-                                              to: newMood,
-                                              confidence: self.moodConfidence)
-                
-                // Notify observers
-                NotificationCenter.default.post(
-                    name: .moodDidChange,
-                    object: newMood,
-                    userInfo: ["confidence": self.moodConfidence]
-                )
-            }
-            .store(in: &moodSubscriptions)
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            self?.updateMoodStatistics()
+        }
     }
     
     private func analyzeMood() {
         guard let features = audioFeatures else { return }
         
-        // Prepare input for mood model
-        let input = prepareMoodModelInput(from: features)
-        
         // Get mood prediction
-        do {
-            let prediction = try moodEngine.prediction(input: input)
-            let predictedMood = Mood(rawValue: prediction.mood) ?? .neutral
-            let confidence = prediction.confidence[prediction.mood] ?? 0.0
-            
-            // Update mood buffer
-            recentMoods.append(predictedMood)
-            if recentMoods.count > moodBufferSize {
-                recentMoods.removeFirst()
-            }
-            
-            // Only update mood if we have stable detection
-            if shouldUpdateMood(to: predictedMood, withConfidence: confidence) {
-                updateMood(to: predictedMood, withConfidence: confidence)
-            }
-            
-        } catch {
-            aiLogger.logError(error, context: "Mood detection failed")
+        let (predictedMood, confidence) = features.predictMood()
+        
+        // Update mood buffer
+        recentMoods.append(predictedMood)
+        if recentMoods.count > moodBufferSize {
+            recentMoods.removeFirst()
+        }
+        
+        // Only update mood if we have stable detection
+        if shouldUpdateMood(to: predictedMood, withConfidence: confidence) {
+            updateMood(to: predictedMood, withConfidence: confidence)
         }
     }
     
-    private func prepareMoodModelInput(from features: AudioFeatures) -> MoodModelInput {
-        // Normalize and prepare audio features
-        let normalizedEnergy = normalize(features.energy, min: 0, max: 100)
-        let normalizedTempo = normalize(features.tempo, min: 60, max: 180)
-        let normalizedValence = features.valence
+    private func shouldUpdateMood(
+        to newMood: Asset.MoodColor,
+        withConfidence confidence: Float
+    ) -> Bool {
+        // Require higher confidence for mood changes
+        let requiredConfidence = newMood == currentMood ?
+            confidenceThreshold :
+            confidenceThreshold * 1.2
         
-        return MoodModelInput(
-            energy: normalizedEnergy,
-            tempo: normalizedTempo,
-            valence: normalizedValence,
-            spectralCentroid: features.spectralCentroid,
-            spectralRolloff: features.spectralRolloff,
-            zeroCrossingRate: features.zeroCrossingRate
+        // Check if mood is stable
+        let moodStability = Float(recentMoods.filter { $0 == newMood }.count) /
+            Float(recentMoods.count)
+        
+        return confidence >= requiredConfidence &&
+               moodStability >= moodStabilityFactor
+    }
+    
+    private func updateMood(
+        to newMood: Asset.MoodColor,
+        withConfidence confidence: Float
+    ) {
+        let oldMood = currentMood
+        currentMood = newMood
+        moodConfidence = confidence
+        
+        // Add to history
+        let snapshot = MoodSnapshot(
+            mood: newMood,
+            confidence: confidence,
+            timestamp: Date()
+        )
+        moodHistory.append(snapshot)
+        
+        // Maintain history size
+        if moodHistory.count > MLConfig.Analysis.moodHistorySize {
+            moodHistory.removeFirst()
+        }
+        
+        // Log mood change
+        aiLogger.logMoodTransition(
+            from: oldMood,
+            to: newMood,
+            confidence: confidence
+        )
+        
+        logger.info("Mood updated: \(oldMood) -> \(newMood) (confidence: \(confidence))")
+        
+        // Notify observers
+        NotificationCenter.default.post(
+            name: .moodDidChange,
+            object: newMood,
+            userInfo: ["confidence": confidence]
         )
     }
     
-    private func shouldUpdateMood(to newMood: Mood, withConfidence confidence: Float) -> Bool {
-        // Check if the new mood is stable
-        let dominantMood = recentMoods.mostFrequent()
+    private func updateMoodStatistics() {
+        guard !moodHistory.isEmpty else { return }
         
-        // Require high confidence for mood changes
-        if newMood != currentMood {
-            return confidence >= confidenceThreshold && newMood == dominantMood
+        // Calculate mood distribution
+        var distribution: [Asset.MoodColor: Int] = [:]
+        moodHistory.forEach { snapshot in
+            distribution[snapshot.mood, default: 0] += 1
         }
         
-        // Allow mood to persist with lower confidence
-        return confidence >= transitionThreshold
-    }
-    
-    private func updateMood(to newMood: Mood, withConfidence confidence: Float) {
-        if newMood != currentMood || abs(confidence - moodConfidence) > 0.2 {
-            currentMood = newMood
-            moodConfidence = confidence
+        // Log statistics
+        let total = Float(moodHistory.count)
+        distribution.forEach { mood, count in
+            let percentage = (Float(count) / total) * 100
+            logger.info("Mood distribution - \(mood): \(String(format: "%.1f%%", percentage))")
         }
     }
     
-    private func normalize(_ value: Double, min: Double, max: Double) -> Double {
-        return (value - min) / (max - min)
+    private func handleMoodUpdate(_ mood: Asset.MoodColor) {
+        // Additional processing or validation can be added here
+        if currentMood != mood {
+            logger.info("External mood update received: \(mood)")
+        }
     }
 }
 
 // MARK: - Supporting Types
 
 struct MoodSnapshot {
-    let mood: Mood
+    let mood: Asset.MoodColor
     let confidence: Float
     let timestamp: Date
 }
