@@ -1,16 +1,40 @@
 import SwiftUI
 
 struct WireframeShowcase: View {
+    @State private var selectedTab = 0
+    
     var body: some View {
         ScrollView {
             VStack(spacing: 40) {
-                // Main Navigation Flow
+                // Navigation tabs
+                Picker("Section", selection: $selectedTab) {
+                    Text("Navigation").tag(0)
+                    Text("Player").tag(1)
+                    Text("Profile").tag(2)
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .padding(.horizontal)
+                
+                // Content based on selected tab
                 Group {
-                    Text("Main Navigation Flow")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal)
+                    switch selectedTab {
+                    case 0:
+                        navigationFlowSection
+                    case 1:
+                        playerFlowSection
+                    case 2:
+                        profileFlowSection
+                    default:
+                        EmptyView()
+                    }
+                }
+                
+                // Main Navigation Flow
+                Text(tabTitle)
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
                     
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 30) {
@@ -122,39 +146,45 @@ struct WireframePhone<Content: View>: View {
 // Individual Wireframe Views
 struct OnboardingWireframe: View {
     var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            Circle()
-                .strokeBorder(Color.accentColor, lineWidth: 2)
-                .frame(width: 80, height: 80)
-                .overlay(
-                    Image(systemName: "music.note")
-                        .font(.system(size: 40))
-                        .foregroundColor(.accentColor)
-                )
-            
-            Text("Welcome to AI Mixtapes")
-                .font(.title)
-                .fontWeight(.bold)
-            
-            Text("Your smart music companion that adapts to your personality and mood")
-                .font(.body)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            
+        VStack(spacing: 24) {
             Spacer()
             
-            Button(action: {}) {
-                Text("Get Started")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.accentColor)
-                    .cornerRadius(12)
+            // App icon
+            ZStack {
+                Circle()
+                    .fill(Color.accentColor.opacity(0.1))
+                    .frame(width: 120, height: 120)
+                
+                Circle()
+                    .strokeBorder(Color.accentColor, lineWidth: 2)
+                    .frame(width: 100, height: 100)
+                
+                Image(systemName: "music.note.list")
+                    .font(.system(size: 40))
+                    .foregroundColor(.accentColor)
             }
-            .padding(.horizontal)
-            .padding(.bottom)
+            
+            VStack(spacing: 16) {
+                Text("Welcome to AI Mixtapes")
+                    .font(.system(size: 28, weight: .bold))
+                    .multilineTextAlignment(.center)
+                
+                Text("Your smart music companion that adapts to your personality and mood")
+                    .font(.system(size: 17))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+            
+            Spacer()
+            
+            VStack(spacing: 16) {
+                WireframeButton("Get Started", icon: "arrow.right")
+                    
+                WireframeButton("Sign in with Apple", icon: "apple.logo", style: .secondary)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 32)
         }
     }
 }
@@ -162,149 +192,170 @@ struct OnboardingWireframe: View {
 struct HomeWireframe: View {
     var body: some View {
         VStack(spacing: 0) {
-            // Navigation Bar
-            HStack {
-                Text("Home")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                Spacer()
-                Circle()
-                    .stroke(Color.secondary, lineWidth: 1)
-                    .frame(width: 32, height: 32)
-            }
-            .padding()
+            // Navigation bar
+            WireframeNavigationBar(
+                title: "Home",
+                trailingItem: .init(icon: "person.crop.circle", action: {})
+            )
             
             ScrollView {
-                VStack(spacing: 20) {
-                    // Current Mood Card
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
-                        .frame(height: 100)
-                        .overlay(
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text("Current Mood")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                    Text("Energetic")
-                                        .font(.title3)
-                                        .fontWeight(.semibold)
-                                }
-                                .padding()
-                                Spacer()
+                VStack(spacing: 24) {
+                    // Current mood card
+                    WireframeCard {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Current Mood")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                Text("Energetic")
+                                    .font(.title3)
+                                    .fontWeight(.semibold)
                             }
-                        )
+                            
+                            Spacer()
+                            
+                            Circle()
+                                .fill(Color.yellow.opacity(0.2))
+                                .frame(width: 48, height: 48)
+                                .overlay(
+                                    Image(systemName: "bolt.fill")
+                                        .foregroundColor(.yellow)
+                                )
+                        }
+                    }
+                    .padding(.horizontal)
                     
-                    // Recent Mixtapes
-                    VStack(alignment: .leading) {
-                        Text("Recent Mixtapes")
-                            .font(.headline)
+                    // Recent mixtapes
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack {
+                            Text("Recent Mixtapes")
+                                .font(.title3)
+                                .fontWeight(.semibold)
+                            
+                            Spacer()
+                            
+                            Button(action: {}) {
+                                Text("See All")
+                                    .font(.subheadline)
+                                    .foregroundColor(.accentColor)
+                            }
+                        }
                         
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 15) {
-                                ForEach(0..<3) { _ in
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color.secondary.opacity(0.1))
-                                        .frame(width: 160, height: 200)
+                            HStack(spacing: 16) {
+                                ForEach(0..<3) { i in
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color.secondary.opacity(0.1))
+                                            .frame(width: 160, height: 160)
+                                            .overlay(
+                                                Image(systemName: "music.note")
+                                                    .font(.system(size: 40))
+                                                    .foregroundColor(.secondary)
+                                            )
+                                        
+                                        Text("Mixtape \(i + 1)")
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                        
+                                        Text("\(Int.random(in: 8...15)) songs")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .frame(width: 160)
                                 }
                             }
                         }
                     }
+                    .padding(.horizontal)
                     
-                    // Recommendations
-                    VStack(alignment: .leading) {
-                        Text("For You")
-                            .font(.headline)
+                    // Mood-based recommendations
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("For Your Mood")
+                            .font(.title3)
+                            .fontWeight(.semibold)
                         
-                        ForEach(0..<3) { _ in
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.secondary.opacity(0.1))
-                                .frame(height: 70)
+                        ForEach(0..<3) { i in
+                            WireframeListItem(
+                                title: "Recommended Mixtape \(i + 1)",
+                                subtitle: "\(Int.random(in: 8...15)) songs",
+                                leadingIcon: "music.note",
+                                trailingIcon: "play.fill"
+                            )
                         }
                     }
+                    .padding(.horizontal)
                 }
-                .padding()
+                .padding(.vertical)
             }
             
-            // Tab Bar
-            HStack {
-                ForEach(0..<4) { i in
-                    Circle()
-                        .fill(i == 0 ? Color.accentColor : Color.secondary.opacity(0.3))
-                        .frame(width: 6, height: 6)
-                }
-            }
-            .padding()
+            // Tab bar
+            WireframeTabBar(
+                items: [
+                    ("house", "Home"),
+                    ("waveform", "Library"),
+                    ("plus.circle", "Create"),
+                    ("heart", "For You")
+                ],
+                selectedIndex: 0
+            )
         }
     }
 }
 
 struct MoodSelectionWireframe: View {
+    private let moods: [(name: String, icon: String, color: Color)] = [
+        ("Energetic", "bolt.fill", .yellow),
+        ("Chill", "leaf.fill", .green),
+        ("Focused", "brain.fill", .blue),
+        ("Happy", "sun.max.fill", .orange),
+        ("Melancholic", "cloud.rain.fill", .purple),
+        ("Romantic", "heart.fill", .pink)
+    ]
+    
     var body: some View {
-        VStack(spacing: 20) {
-            Text("How are you feeling?")
-                .font(.title)
-                .fontWeight(.bold)
-            
-            Circle()
-                .stroke(Color.accentColor, lineWidth: 2)
-                .frame(width: 150, height: 150)
-                .overlay(
-                    Circle()
-                        .trim(from: 0, to: 0.7)
-                        .stroke(Color.accentColor, lineWidth: 4)
-                        .rotationEffect(.degrees(-90))
-                )
-            
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 16) {
-                ForEach(0..<6) { _ in
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.secondary.opacity(0.5), lineWidth: 1)
-                        .frame(height: 100)
-                }
+        VStack(spacing: 24) {
+            // Header
+            VStack(spacing: 8) {
+                Text("How are you feeling?")
+                    .font(.system(size: 28, weight: .bold))
+                    .multilineTextAlignment(.center)
+                
+                Text("Select your current mood to get personalized mixtapes")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
             }
-            .padding()
+            .padding(.top)
             
-            Spacer()
-        }
-        .padding(.top, 40)
-    }
-}
-
-struct MixtapeGenerationWireframe: View {
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Generating Your Mixtape")
-                .font(.title2)
-                .fontWeight(.bold)
-            
-            ProgressView()
-                .scaleEffect(1.5)
-                .padding()
-            
-            VStack(alignment: .leading, spacing: 20) {
-                ForEach(0..<4) { i in
-                    HStack(spacing: 15) {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.secondary.opacity(0.1))
-                            .frame(width: 50, height: 50)
-                        
-                        VStack(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.secondary.opacity(0.3))
-                                .frame(width: 120, height: 16)
+            // Mood grid
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: 2),
+                spacing: 16
+            ) {
+                ForEach(moods, id: \.name) { mood in
+                    Button(action: {}) {
+                        VStack(spacing: 16) {
+                            Circle()
+                                .fill(mood.color.opacity(0.1))
+                                .frame(width: 64, height: 64)
+                                .overlay(
+                                    Image(systemName: mood.icon)
+                                        .font(.system(size: 24))
+                                        .foregroundColor(mood.color)
+                                )
                             
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(Color.secondary.opacity(0.2))
-                                .frame(width: 80, height: 14)
+                            Text(mood.name)
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundColor(.primary)
                         }
-                        
-                        Spacer()
-                        
-                        if i < 2 {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color(.systemBackground))
+                        .cornerRadius(16)
+                        .shadow(color: Color.black.opacity(0.05), radius: 8)
                     }
                 }
             }
@@ -312,13 +363,94 @@ struct MixtapeGenerationWireframe: View {
             
             Spacer()
             
+            // Continue button
+            WireframeButton("Continue", icon: "arrow.right")
+                .padding(.horizontal, 24)
+                .padding(.bottom, 32)
+        }
+    }
+}
+
+struct MixtapeGenerationWireframe: View {
+    var body: some View {
+        VStack(spacing: 24) {
+            // Header
+            VStack(spacing: 8) {
+                Text("Creating Your Mixtape")
+                    .font(.system(size: 24, weight: .bold))
+                    .multilineTextAlignment(.center)
+                
+                Text("AI is curating the perfect playlist for your mood")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.top)
+            
+            // Generation progress
+            VStack(spacing: 32) {
+                // Progress circle
+                ZStack {
+                    Circle()
+                        .stroke(Color.secondary.opacity(0.2), lineWidth: 8)
+                        .frame(width: 120, height: 120)
+                    
+                    Circle()
+                        .trim(from: 0, to: 0.7)
+                        .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                        .frame(width: 120, height: 120)
+                        .rotationEffect(.degrees(-90))
+                    
+                    VStack {
+                        Text("70%")
+                            .font(.system(size: 24, weight: .bold))
+                        Text("Complete")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                // Status steps
+                VStack(spacing: 24) {
+                    ForEach(0..<4) { i in
+                        HStack(spacing: 16) {
+                            Image(systemName: i < 3 ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 24))
+                                .foregroundColor(i < 3 ? .green : .secondary)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text([
+                                    "Analyzing your mood",
+                                    "Finding matching songs",
+                                    "Optimizing sequence",
+                                    "Finalizing mixtape"
+                                ][i])
+                                .font(.system(size: 17))
+                                
+                                if i == 2 {
+                                    Text("12 songs selected")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            
+                            Spacer()
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
+            
+            Spacer()
+            
+            // Cancel button
             Button(action: {}) {
                 Text("Cancel")
+                    .font(.system(size: 17))
                     .foregroundColor(.secondary)
             }
-            .padding(.bottom)
+            .padding(.bottom, 32)
         }
-        .padding(.top, 40)
     }
 }
 
@@ -327,68 +459,101 @@ struct MiniPlayerWireframe: View {
         VStack {
             Spacer()
             
-            HStack(spacing: 15) {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.secondary.opacity(0.1))
-                    .frame(width: 40, height: 40)
+            // Mini player bar
+            VStack(spacing: 0) {
+                // Progress bar
+                Rectangle()
+                    .fill(Color.accentColor)
+                    .frame(width: 200, height: 2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 
-                VStack(alignment: .leading) {
-                    Text("Song Title")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                    Text("Artist")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                HStack(spacing: 16) {
+                    // Album art
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.secondary.opacity(0.1))
+                        .frame(width: 48, height: 48)
+                        .overlay(
+                            Image(systemName: "music.note")
+                                .font(.system(size: 20))
+                                .foregroundColor(.secondary)
+                        )
+                    
+                    // Song info
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Song Title")
+                            .font(.system(size: 16, weight: .medium))
+                        Text("Artist Name")
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    // Controls
+                    HStack(spacing: 20) {
+                        Button(action: {}) {
+                            Image(systemName: "play.fill")
+                                .font(.system(size: 22))
+                                .foregroundColor(.primary)
+                        }
+                        
+                        Button(action: {}) {
+                            Image(systemName: "forward.fill")
+                                .font(.system(size: 22))
+                                .foregroundColor(.primary)
+                        }
+                    }
                 }
-                
-                Spacer()
-                
-                Button(action: {}) {
-                    Image(systemName: "play.fill")
-                        .font(.title3)
-                }
-                
-                Button(action: {}) {
-                    Image(systemName: "forward.fill")
-                        .font(.title3)
-                }
+                .padding()
+                .background(Color(.systemBackground))
             }
-            .padding()
-            .background(Color(.systemBackground))
         }
     }
 }
 
 struct FullPlayerWireframe: View {
     var body: some View {
-        VStack(spacing: 30) {
-            // Album Art
-            RoundedRectangle(cornerRadius: 20)
+        VStack(spacing: 32) {
+            // Album art
+            RoundedRectangle(cornerRadius: 24)
                 .fill(Color.secondary.opacity(0.1))
                 .frame(width: 280, height: 280)
+                .overlay(
+                    Image(systemName: "music.note")
+                        .font(.system(size: 60))
+                        .foregroundColor(.secondary)
+                )
+                .shadow(color: Color.black.opacity(0.1), radius: 20)
             
-            // Song Info
+            // Song info
             VStack(spacing: 8) {
                 Text("Song Title")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                Text("Artist")
-                    .font(.title3)
+                    .font(.system(size: 24, weight: .bold))
+                
+                Text("Artist Name")
+                    .font(.system(size: 17))
                     .foregroundColor(.secondary)
             }
             
-            // Progress Bar
+            // Progress bar
             VStack(spacing: 8) {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.secondary.opacity(0.3))
-                    .frame(height: 4)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 2)
+                // Bar
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        // Background
+                        Capsule()
+                            .fill(Color.secondary.opacity(0.2))
+                            .frame(height: 4)
+                        
+                        // Progress
+                        Capsule()
                             .fill(Color.accentColor)
-                            .frame(width: 120, height: 4),
-                        alignment: .leading
-                    )
+                            .frame(width: geometry.size.width * 0.4, height: 4)
+                    }
+                }
+                .frame(height: 4)
                 
+                // Time labels
                 HStack {
                     Text("2:15")
                         .font(.caption)
@@ -405,7 +570,7 @@ struct FullPlayerWireframe: View {
             HStack(spacing: 40) {
                 Button(action: {}) {
                     Image(systemName: "backward.fill")
-                        .font(.title)
+                        .font(.system(size: 24))
                 }
                 
                 Button(action: {}) {
@@ -415,16 +580,17 @@ struct FullPlayerWireframe: View {
                 
                 Button(action: {}) {
                     Image(systemName: "forward.fill")
-                        .font(.title)
+                        .font(.system(size: 24))
                 }
             }
+            .foregroundColor(.primary)
             
-            // Additional Controls
-            HStack(spacing: 30) {
+            // Additional controls
+            HStack(spacing: 48) {
                 ForEach(["shuffle", "repeat", "list.bullet", "speaker.wave.2"], id: \.self) { icon in
                     Button(action: {}) {
                         Image(systemName: icon)
-                            .font(.title3)
+                            .font(.system(size: 20))
                             .foregroundColor(.secondary)
                     }
                 }
@@ -432,62 +598,36 @@ struct FullPlayerWireframe: View {
             
             Spacer()
         }
-        .padding(.top, 60)
+        .padding(.top, 48)
     }
 }
 
 struct QueueWireframe: View {
     var body: some View {
-        VStack {
+        VStack(spacing: 0) {
             // Header
-            HStack {
-                Button(action: {}) {
-                    Image(systemName: "chevron.down")
-                        .font(.title3)
-                }
-                
-                Spacer()
-                
-                Text("Up Next")
-                    .font(.title3)
-                    .fontWeight(.bold)
-                
-                Spacer()
-                
-                Button(action: {}) {
-                    Text("Clear")
-                        .font(.subheadline)
-                        .foregroundColor(.accentColor)
-                }
-            }
-            .padding()
+            WireframeNavigationBar(
+                title: "Up Next",
+                leadingItem: .init(icon: "chevron.down", action: {})
+            )
             
+            // Queue list
             ScrollView {
-                VStack(spacing: 20) {
-                    ForEach(0..<8) { i in
-                        HStack(spacing: 15) {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.secondary.opacity(0.1))
-                                .frame(width: 50, height: 50)
-                            
-                            VStack(alignment: .leading) {
-                                Text("Song Title")
-                                    .font(.subheadline)
-                                Text("Artist")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Spacer()
-                            
-                            Button(action: {}) {
-                                Image(systemName: "line.3.horizontal")
-                                    .foregroundColor(.secondary)
-                            }
+                LazyVStack(spacing: 0) {
+                    ForEach(0..<10) { i in
+                        WireframeListItem(
+                            title: "Song \(i + 1)",
+                            subtitle: "Artist Name",
+                            leadingIcon: i == 0 ? "music.note" : nil,
+                            trailingIcon: "line.3.horizontal"
+                        )
+                        
+                        if i < 9 {
+                            WireframeDivider()
                         }
                     }
                 }
-                .padding()
+                .padding(.vertical)
             }
         }
     }
@@ -496,147 +636,276 @@ struct QueueWireframe: View {
 struct ProfileWireframe: View {
     var body: some View {
         ScrollView {
-            VStack(spacing: 30) {
-                // Profile Header
-                VStack(spacing: 15) {
+            VStack(spacing: 32) {
+                // Profile header
+                VStack(spacing: 16) {
                     Circle()
                         .fill(Color.secondary.opacity(0.1))
                         .frame(width: 100, height: 100)
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 40))
+                                .foregroundColor(.secondary)
+                        )
                     
-                    Text("Username")
-                        .font(.title2)
-                        .fontWeight(.bold)
+                    Text("User Name")
+                        .font(.system(size: 24, weight: .bold))
                 }
                 
                 // Stats
-                HStack(spacing: 30) {
+                HStack(spacing: 40) {
                     ForEach(["Mixtapes", "Following", "Followers"], id: \.self) { stat in
-                        VStack {
+                        VStack(spacing: 4) {
                             Text("42")
-                                .font(.title3)
-                                .fontWeight(.bold)
+                                .font(.system(size: 20, weight: .bold))
                             Text(stat)
-                                .font(.caption)
+                                .font(.system(size: 14))
                                 .foregroundColor(.secondary)
                         }
                     }
                 }
                 
-                // Recent Activity
-                VStack(alignment: .leading, spacing: 15) {
+                // Recent activity
+                VStack(alignment: .leading, spacing: 16) {
                     Text("Recent Activity")
-                        .font(.headline)
+                        .font(.system(size: 20, weight: .bold))
                     
-                    ForEach(0..<4) { _ in
-                        HStack(spacing: 15) {
-                            Circle()
-                                .fill(Color.secondary.opacity(0.1))
-                                .frame(width: 40, height: 40)
-                            
-                            VStack(alignment: .leading) {
-                                Text("Created a new mixtape")
-                                    .font(.subheadline)
-                                Text("2 hours ago")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Spacer()
-                        }
+                    ForEach(0..<4) { i in
+                        WireframeListItem(
+                            title: ["Created a new mixtape", "Liked a song", "Added to playlist", "Followed artist"][i],
+                            subtitle: "\(Int.random(in: 1...24))h ago",
+                            leadingIcon: ["plus.circle.fill", "heart.fill", "plus.square.fill", "person.fill"][i]
+                        )
                     }
                 }
-                .padding()
             }
-            .padding(.top, 40)
+            .padding()
         }
     }
 }
 
 struct PersonalitySettingsWireframe: View {
+    private let personalities = [
+        ("Explorer", "Always discovering new music", "compass.fill"),
+        ("Curator", "Creating perfect playlists", "star.fill"),
+        ("Enthusiast", "Deep diving into genres", "heart.fill")
+    ]
+    
     var body: some View {
-        VStack(spacing: 30) {
-            Text("Your Music Personality")
-                .font(.title2)
-                .fontWeight(.bold)
-            
-            // Personality Description
-            Text("Select the personality that best matches your music listening style")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            
-            // Personality Options
-            VStack(spacing: 20) {
-                ForEach(0..<3) { i in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text(["Explorer", "Curator", "Enthusiast"][i])
-                                .font(.headline)
-                            Text("Description goes here")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Spacer()
-                        
-                        Circle()
-                            .stroke(i == 0 ? Color.accentColor : Color.secondary, lineWidth: 2)
-                            .frame(width: 24, height: 24)
-                            .overlay(
-                                Circle()
-                                    .fill(i == 0 ? Color.accentColor : Color.clear)
-                                    .frame(width: 16, height: 16)
-                            )
-                    }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(i == 0 ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: 1)
-                    )
+        ScrollView {
+            VStack(spacing: 32) {
+                // Header
+                VStack(spacing: 8) {
+                    Text("Your Music Personality")
+                        .font(.system(size: 24, weight: .bold))
+                        .multilineTextAlignment(.center)
+                    
+                    Text("Select the personality that best matches your music listening style")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
                 }
+                
+                // Personality options
+                VStack(spacing: 16) {
+                    ForEach(personalities, id: \.0) { personality in
+                        Button(action: {}) {
+                            HStack(spacing: 16) {
+                                Circle()
+                                    .fill(Color.accentColor.opacity(0.1))
+                                    .frame(width: 48, height: 48)
+                                    .overlay(
+                                        Image(systemName: personality.2)
+                                            .font(.system(size: 20))
+                                            .foregroundColor(.accentColor)
+                                    )
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(personality.0)
+                                        .font(.system(size: 17, weight: .semibold))
+                                    
+                                    Text(personality.1)
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                Spacer()
+                                
+                                Circle()
+                                    .stroke(Color.accentColor, lineWidth: 2)
+                                    .frame(width: 24, height: 24)
+                            }
+                            .padding()
+                            .background(Color(.systemBackground))
+                            .cornerRadius(12)
+                            .shadow(color: Color.black.opacity(0.05), radius: 8)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                
+                Spacer()
+                
+                // Save button
+                WireframeButton("Save Changes")
+                    .padding(.horizontal)
+                    .padding(.bottom)
             }
-            .padding()
-            
-            Spacer()
+            .padding(.vertical)
         }
-        .padding(.top, 40)
     }
 }
 
 struct SettingsWireframe: View {
     var body: some View {
         ScrollView {
-            VStack(spacing: 30) {
-                Text("Settings")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                
-                VStack(spacing: 20) {
-                    ForEach(["Playback", "Notifications", "Privacy", "Storage", "About"], id: \.self) { section in
-                        VStack(alignment: .leading, spacing: 15) {
-                            Text(section)
-                                .font(.headline)
-                            
-                            ForEach(0..<2) { _ in
-                                HStack {
-                                    Text("Setting Option")
-                                        .font(.subheadline)
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
+            VStack(spacing: 32) {
+                ForEach([
+                    (title: "Playback", items: ["Audio Quality", "Download Settings"]),
+                    (title: "Notifications", items: ["Push Notifications", "Email Updates"]),
+                    (title: "Privacy", items: ["Data Usage", "Connected Services"]),
+                    (title: "Storage", items: ["Clear Cache", "Offline Content"]),
+                    (title: "About", items: ["Version", "Legal"])
+                ], id: \.title) { section in
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text(section.title)
+                            .font(.system(size: 20, weight: .bold))
+                            .padding(.horizontal)
+                        
+                        VStack(spacing: 0) {
+                            ForEach(section.items, id: \.self) { item in
+                                WireframeListItem(
+                                    title: item,
+                                    subtitle: nil,
+                                    leadingIcon: nil
+                                )
+                                
+                                if item != section.items.last {
+                                    WireframeDivider()
                                 }
-                                .padding(.vertical, 8)
                             }
                         }
-                        Divider()
+                        .background(Color(.systemBackground))
+                        .cornerRadius(12)
+                        .padding(.horizontal)
                     }
                 }
             }
-            .padding()
+            .padding(.vertical)
         }
+    }
+}
+
+// MARK: - Section Views
+
+private var navigationFlowSection: some View {
+    VStack(spacing: 30) {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 30) {
+                // Onboarding
+                WireframePhone {
+                    WireframeContainer("Onboarding") {
+                        OnboardingWireframe()
+                    }
+                }
+                
+                // Home
+                WireframePhone {
+                    WireframeContainer("Home") {
+                        HomeWireframe()
+                    }
+                }
+                
+                // Mood Selection
+                WireframePhone {
+                    WireframeContainer("Mood") {
+                        MoodSelectionWireframe()
+                    }
+                }
+                
+                // Mixtape Generation
+                WireframePhone {
+                    WireframeContainer("Generate") {
+                        MixtapeGenerationWireframe()
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+}
+
+private var playerFlowSection: some View {
+    VStack(spacing: 30) {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 30) {
+                // Mini Player
+                WireframePhone {
+                    WireframeContainer("Now Playing") {
+                        MiniPlayerWireframe()
+                    }
+                }
+                
+                // Full Player
+                WireframePhone {
+                    WireframeContainer("Player") {
+                        FullPlayerWireframe()
+                    }
+                }
+                
+                // Queue
+                WireframePhone {
+                    WireframeContainer("Queue") {
+                        QueueWireframe()
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+}
+
+private var profileFlowSection: some View {
+    VStack(spacing: 30) {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 30) {
+                // Profile
+                WireframePhone {
+                    WireframeContainer("Profile") {
+                        ProfileWireframe()
+                    }
+                }
+                
+                // Personality Settings
+                WireframePhone {
+                    WireframeContainer("Personality") {
+                        PersonalitySettingsWireframe()
+                    }
+                }
+                
+                // Settings
+                WireframePhone {
+                    WireframeContainer("Settings") {
+                        SettingsWireframe()
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+}
+
+private var tabTitle: String {
+    switch selectedTab {
+    case 0:
+        return "Navigation Flow"
+    case 1:
+        return "Player Flow"
+    case 2:
+        return "Profile Flow"
+    default:
+        return ""
     }
 }
 

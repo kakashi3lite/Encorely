@@ -20,62 +20,113 @@ struct NowPlayingButtonView: View {
     // AI service
     var aiService: AIIntegrationService
     
-    var body: some View {
-        moodAwareBody
-    }
+    // Animation state
+    @State private var isAnimating = false
+    @State private var showVolumeSlider = false
     
-    // Mood-aware body
-    var moodAwareBody: some View {
-        HStack {
-            Button(action: {
-                self.showingNowPlayingSheet.toggle()
-                aiService.trackInteraction(type: "open_player")
-            }) {
-                HStack() {
+    var body: some View {
+        VStack(spacing: 0) {
+            // Main now playing bar
+            HStack {
+                // Album art / mood indicator
+                ZStack {
+                    Circle()
+                        .fill(aiService.moodEngine.currentMood.color.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                    
+                    Image(systemName: aiService.moodEngine.currentMood.systemIcon)
+                        .font(.system(size: 16))
+                        .foregroundColor(aiService.moodEngine.currentMood.color)
+                        .rotationEffect(.degrees(isAnimating ? 360 : 0))
+                        .animation(
+                            isPlaying.value ? 
+                                Animation.linear(duration: 4).repeatForever(autoreverses: false) : 
+                                .default,
+                            value: isAnimating
+                        )
+                }
+                .onAppear {
+                    isAnimating = isPlaying.value
+                }
+                .onChange(of: isPlaying.value) { newValue in
+                    isAnimating = newValue
+                }
+                
+                // Song info - tappable to expand player
+                Button(action: {
+                    showingNowPlayingSheet.toggle()
+                    aiService.trackInteraction(type: "open_player")
+                }) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(currentSongName.wrappedValue)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+                        
+                        Text("Now Playing")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Spacer()
+                
+                // Playback controls
+                HStack(spacing: 16) {
+                    // Play/Pause
                     Button(action: {
-                        if self.isPlaying.value {
-                            self.queuePlayer.pause()
+                        if isPlaying.value {
+                            queuePlayer.pause()
                             aiService.trackInteraction(type: "pause")
                         } else {
-                            self.queuePlayer.play()
+                            queuePlayer.play()
                             aiService.trackInteraction(type: "play")
                         }
                     }) {
-                        Image(systemName: self.isPlaying.value ? "pause.fill" : "play.fill").imageScale(.large)
+                        Image(systemName: isPlaying.value ? "pause.fill" : "play.fill")
+                            .font(.system(size: 22))
+                            .foregroundColor(aiService.personalityEngine.currentPersonality.themeColor)
                     }
                     
-                    Spacer()
-                    
-                    // Add mood indicator
-                    HStack {
-                        Text(self.currentSongName.name)
-                            .onReceive(currentItemObserver.$currentItem) { item in
-                                self.currentSongName.name = getItemName(playerItem: item)
-                        }
-                        
-                        if self.currentSongName.name != "Not Playing" {
-                            Circle()
-                                .fill(aiService.moodEngine.currentMood.color)
-                                .frame(width: 12, height: 12)
-                        }
+                    // Skip forward
+                    Button(action: {
+                        queuePlayer.advanceToNextItem()
+                        aiService.trackInteraction(type: "next_track")
+                    }) {
+                        Image(systemName: "forward.fill")
+                            .font(.system(size: 20))
+                            .foregroundColor(.secondary)
                     }
-               }
-               .padding()
-               .background(
-                   LinearGradient(
-                       gradient: Gradient(
-                           colors: [
-                               aiService.personalityEngine.currentPersonality.themeColor.opacity(0.8),
-                               aiService.moodEngine.currentMood.color.opacity(0.6)
-                           ]
-                       ),
-                       startPoint: .leading,
-                       endPoint: .trailing
-                   )
-               )
-               .foregroundColor(Color.white)
-               .cornerRadius(12)
-           }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(
+                ZStack {
+                    // Frosted glass effect
+                    Color(.systemBackground)
+                        .opacity(0.95)
+                    
+                    // Subtle gradient based on mood
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            aiService.moodEngine.currentMood.color.opacity(0.05),
+                            aiService.personalityEngine.currentPersonality.themeColor.opacity(0.05)
+                        ]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                }
+            )
+            .overlay(
+                Rectangle()
+                    .frame(height: 0.5)
+                    .foregroundColor(Color(.separator)),
+                alignment: .top
+            )
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Now playing control bar")
+        .accessibilityAddTraits(.updatesFrequently)
     }
 }

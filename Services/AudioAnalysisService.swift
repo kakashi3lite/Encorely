@@ -2,8 +2,8 @@
 //  AudioAnalysisService.swift
 //  Mixtapes
 //
-//  Created by Claude AI on 05/16/25.
-//  Copyright © 2025 Swanand Tanavade. All rights reserved.
+//  Enhanced with proper memory management for audio buffers
+//  Fixes ISSUE-005: Memory Management in Audio Buffers
 //
 
 import Foundation
@@ -162,7 +162,7 @@ enum AIError: Error, LocalizedError {
     }
 }
 
-/// Enhanced service for analyzing audio files with comprehensive error handling
+/// Enhanced audio analysis service with proper memory management
 class AudioAnalysisService: ObservableObject {
     // MARK: - Properties
     
@@ -179,21 +179,38 @@ class AudioAnalysisService: ObservableObject {
     private var analysisCancel: AnyCancellable?
     private let logger = Logger(subsystem: "com.aimixtapes", category: "AudioAnalysis")
     
-    // FFT processing
-    private lazy var fftProcessor = FFTProcessor(maxFrameSize: analysisBufferSize)
+    // MARK: - Audio Engine Components
+    private let audioPlayerNode = AVAudioPlayerNode()
+    private var audioTap: AVAudioNodeTap?
     
-    // Buffer management
-    private var bufferPool: [AVAudioPCMBuffer] = []
-    private let maxBufferPoolSize = 5
+    // MARK: - Buffer Management
+    private var audioBufferPool: AudioBufferPool
+    private let bufferQueue = DispatchQueue(label: "audio.buffer.queue", qos: .userInteractive)
+    private let analysisQueue = DispatchQueue(label: "audio.analysis.queue", qos: .utility)
     
-    // Retry configuration
-    private let maxRetries = 3
-    private let retryDelay: TimeInterval = 1.0
+    // MARK: - Memory Management
+    private var isProcessing = false
     
-    // Performance monitoring
-    private var performanceMetrics = PerformanceMetrics()
-    private var processStartTime: Date?
-    private var memorySamples: [Int] = []
+    // MARK: - Configuration
+    private let sampleRate: Double = 44100.0
+    private let bufferSize: UInt32 = 1024
+    private let maxBuffersInPool: Int = 10
+    
+    // MARK: - Publishers
+    private let featuresSubject = PassthroughSubject<AudioFeatures, Never>()
+    var featuresPublisher: AnyPublisher<AudioFeatures, Never> {
+        featuresSubject.eraseToAnyPublisher()
+    }
+    
+    // MARK: - Initialization
+    init() {
+        self.audioBufferPool = AudioBufferPool(maxBuffers: maxBuffersInPool, bufferSize: bufferSize)
+        setupAudioEngine()
+    }
+    
+    deinit {
+        cleanup()
+    }
     
     // MARK: - Public Interface
     
@@ -218,7 +235,6 @@ class AudioAnalysisService: ObservableObject {
         .handleEvents(
             receiveSubscription: { [weak self] _ in
                 self?.isAnalyzing = true
-                self?.processStartTime = Date()
                 self?.progress = 0
             },
             receiveCompletion: { [weak self] _ in
@@ -264,6 +280,70 @@ class AudioAnalysisService: ObservableObject {
     /// Returns performance statistics
     func getPerformanceStatistics() -> String {
         return performanceMetrics.generateReport()
+    }
+    
+    /// Start real-time audio analysis with proper buffer management
+    /// - Parameter completion: Closure to receive analyzed audio features
+    /// - Throws: AudioAnalysisError if analysis cannot be started
+    func startRealTimeAnalysis(completion: @escaping (AudioFeatures) -> Void) throws {
+        guard !isAnalyzing else {
+            throw AudioAnalysisError.serviceUnavailable
+        }
+        
+        isAnalyzing = true
+        isProcessing = true
+        
+        // Setup audio tap with managed buffers
+        try setupAudioTap { [weak self] features in
+            DispatchQueue.main.async {
+                self?.currentFeatures = features
+                self?.featuresSubject.send(features)
+                completion(features)
+            }
+        }
+        
+        // Start audio engine
+        try audioEngine.start()
+        audioPlayerNode.play()
+    }
+    
+    /// Stop real-time analysis and cleanup resources
+    func stopRealTimeAnalysis() {
+        isAnalyzing = false
+        isProcessing = false
+        
+        // Stop audio engine
+        audioPlayerNode.stop()
+        audioEngine.stop()
+        
+        // Remove audio tap and cleanup buffers
+        removeAudioTap()
+        
+        // Clean up buffer pool
+        audioBufferPool.releaseAllBuffers()
+    }
+    
+    /// Analyze a specific audio file with memory-safe processing
+    /// - Parameter url: URL of the audio file
+    /// - Returns: Extracted audio features
+    /// - Throws: AudioAnalysisError if analysis fails
+    func analyzeAudioFile(_ url: URL) async throws -> AudioFeatures {
+        return try await withCheckedThrowingContinuation { continuation in
+            analysisQueue.async { [weak self] in
+                guard let self = self else {
+                    continuation.resume(throwing: AudioAnalysisError.serviceUnavailable)
+                    return
+                }
+                
+                do {
+                    let audioFile = try AVAudioFile(forReading: url)
+                    let features = try self.extractFeaturesFromFile(audioFile)
+                    continuation.resume(returning: features)
+                } catch {
+                    continuation.resume(throwing: AudioAnalysisError.unknown(error))
+                }
+            }
+        }
     }
     
     // MARK: - Private Implementation
@@ -603,6 +683,167 @@ class AudioAnalysisService: ObservableObject {
         } catch {
             logger.error("Failed to deactivate audio session: \(error.localizedDescription)")
         }
+    }
+    
+    // MARK: - Audio Engine Setup
+    
+    private func setupAudioEngine() {
+        // Configure audio session
+        let audioSession = AVAudioSession.sharedInstance()
+        do {
+            try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try audioSession.setActive(true)
+        } catch {
+            logger.error("Failed to setup audio session: \(error.localizedDescription)")
+        }
+        
+        // Attach nodes
+        audioEngine.attach(audioPlayerNode)
+        
+        // Connect nodes
+        let mainMixerNode = audioEngine.mainMixerNode
+        audioEngine.connect(audioPlayerNode, to: mainMixerNode, format: nil)
+        
+        // Prepare engine
+        audioEngine.prepare()
+    }
+    
+    private func setupAudioTap(completion: @escaping (AudioFeatures) -> Void) throws {
+        let inputFormat = audioEngine.mainMixerNode.outputFormat(forBus: 0)
+        
+        // Remove existing tap
+        removeAudioTap()
+        
+        // Install new tap with buffer management
+        audioTap = audioEngine.mainMixerNode.installTap(
+            onBus: 0,
+            bufferSize: bufferSize,
+            format: inputFormat
+        ) { [weak self] (buffer, time) in
+            self?.processAudioBuffer(buffer, time: time, completion: completion)
+        }
+    }
+    
+    private func removeAudioTap() {
+        if audioTap != nil {
+            audioEngine.mainMixerNode.removeTap(onBus: 0)
+            audioTap = nil
+        }
+    }
+    
+    private func processAudioBuffer(_ buffer: AVAudioPCMBuffer, time: AVAudioTime, completion: @escaping (AudioFeatures) -> Void) {
+        guard isAnalyzing else { return }
+        
+        // Get a managed buffer from pool
+        guard let managedBuffer = audioBufferPool.getBuffer() else {
+            logger.warning("No available buffers in pool")
+            return
+        }
+        
+        // Copy buffer data safely
+        managedBuffer.copyFrom(buffer)
+        
+        // Process on background queue
+        analysisQueue.async { [weak self] in
+            guard let self = self else {
+                self?.audioBufferPool.returnBuffer(managedBuffer)
+                return
+            }
+            
+            let features = self.extractFeaturesFromBuffer(managedBuffer.buffer)
+            
+            // Return buffer to pool
+            self.audioBufferPool.returnBuffer(managedBuffer)
+            
+            // Deliver results on main queue
+            DispatchQueue.main.async {
+                completion(features)
+            }
+        }
+    }
+    
+    private func extractFeaturesFromFile(_ audioFile: AVAudioFile) throws -> AudioFeatures {
+        // Configure and allocate buffers
+        let format = audioFile.processingFormat
+        let channelCount = format.channelCount
+        
+        // Configure buffer
+        let bufferSize = AVAudioFrameCount(analysisBufferSize)
+        let buffer = getOrCreateBuffer(with: format, frameCapacity: bufferSize)
+        
+        var totalFrames: AVAudioFrameCount = 0
+        let frameCount = audioFile.length
+        
+        // Initialize result containers
+        var allSpectralFeatures: [SpectralFeatures] = []
+        var energyValues: [Float] = []
+        var peakValues: [Float] = []
+        
+        // Check if we have enough audio to analyze
+        if frameCount < bufferSize {
+            throw AudioAnalysisError.insufficientAudioData
+        }
+        
+        // Process audio in chunks
+        while totalFrames < frameCount {
+            try autoreleasepool {
+                // Reset buffer
+                buffer.frameLength = 0
+                
+                // Read chunk
+                do {
+                    try audioFile.read(into: buffer)
+                } catch {
+                    throw AudioAnalysisError.bufferProcessingFailed("Failed to read audio chunk: \(error.localizedDescription)")
+                }
+                
+                // Process spectral features
+                if let features = fftProcessor.analyzeSpectralFeatures(buffer) {
+                    allSpectralFeatures.append(features)
+                }
+                
+                // Process energy features
+                if let channelData = buffer.floatChannelData {
+                    let rms = processAudioRMS(channelData, channelCount: channelCount, frameLength: buffer.frameLength)
+                    energyValues.append(rms)
+                    
+                    // Find peak value
+                    var peak: Float = 0
+                    vDSP_maxv(channelData[0], 1, &peak, vDSP_Length(buffer.frameLength))
+                    peakValues.append(peak)
+                }
+                
+                // Track memory usage
+                sampleMemoryUsage()
+                
+                // Update progress
+                totalFrames += buffer.frameLength
+                updateProgress(Double(totalFrames) / Double(frameCount))
+            }
+        }
+        
+        // Return buffer to pool
+        returnBufferToPool(buffer)
+        
+        // Combine all features into final result
+        return createFinalFeatures(
+            spectralFeatures: allSpectralFeatures,
+            energyValues: energyValues,
+            peakValues: peakValues,
+            tempo: nil // Tempo analysis not performed in file analysis
+        )
+    }
+    
+    private func extractFeaturesFromBuffer(_ buffer: AVAudioPCMBuffer) -> AudioFeatures {
+        // Process with FFT
+        guard let spectralFeatures = fftProcessor.analyzeSpectralFeatures(buffer) else {
+            return AudioFeatures()
+        }
+        
+        // Create audio features from spectral features
+        let features = AudioFeatures.from(spectralFeatures: spectralFeatures)
+        
+        return features
     }
     
     // MARK: - Buffer Management

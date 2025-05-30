@@ -3,10 +3,16 @@ import AVFoundation
 import Combine
 @testable import AIMixtapes
 
-/// Tests for the enhanced AudioAnalysisService
+/// Tests for the enhanced AudioAnalysisService with focus on memory management and buffer handling
 class AudioAnalysisServiceTests: XCTestCase {
+    // Audio analysis service instance
     var audioAnalysisService: AudioAnalysisService!
     var cancellables = Set<AnyCancellable>()
+    
+    // Test configuration
+    private let testSampleRate: Double = 44100.0
+    private let testBufferSize: UInt32 = 4096
+    private let maxMemoryLimit = 50 * 1024 * 1024 // 50MB limit
     
     override func setUp() {
         super.setUp()
@@ -103,5 +109,153 @@ class AudioAnalysisServiceTests: XCTestCase {
         // Similarity is the inverse of distance
         let similarity1to2 = featureSet1.similarity(to: featureSet2)
         XCTAssertGreaterThan(similarity1to2, 0.7)
+    }
+    
+    /// Tests memory usage stability during analysis
+    func testMemoryUsageDuringAnalysis() {
+        let buffer = createTestBuffer(duration: 5.0) // 5 seconds of audio
+        let initialMemory = getMemoryUsage()
+        
+        // Perform multiple analyses to stress test memory management
+        for _ in 0..<10 {
+            autoreleasepool {
+                _ = audioAnalysisService.analyzeAudioBuffer(buffer)
+            }
+        }
+        
+        let finalMemory = getMemoryUsage()
+        let memoryIncrease = finalMemory - initialMemory
+        
+        XCTAssertLessThan(memoryIncrease, maxMemoryLimit / 2, "Memory usage increased beyond acceptable limits")
+    }
+    
+    /// Tests buffer pool management and reuse
+    func testBufferPoolManagement() {
+        let expectation = XCTestExpectation(description: "Buffer pool management")
+        let analysisCount = 5
+        var completedAnalyses = 0
+        
+        // Perform concurrent analyses to stress test buffer pool
+        for _ in 0..<analysisCount {
+            DispatchQueue.global().async {
+                autoreleasepool {
+                    let buffer = self.createTestBuffer(duration: 1.0)
+                    let features = self.audioAnalysisService.analyzeAudioBuffer(buffer)
+                    XCTAssertNotNil(features, "Analysis should complete successfully")
+                    
+                    DispatchQueue.main.async {
+                        completedAnalyses += 1
+                        if completedAnalyses == analysisCount {
+                            expectation.fulfill()
+                        }
+                    }
+                }
+            }
+        }
+        
+        wait(for: [expectation], timeout: 10.0)
+    }
+    
+    /// Tests memory cleanup after large analysis
+    func testMemoryCleanupAfterLargeAnalysis() {
+        let initialMemory = getMemoryUsage()
+        
+        autoreleasepool {
+            // Create and analyze a large buffer
+            let largeBuffer = createTestBuffer(duration: 10.0)
+            _ = audioAnalysisService.analyzeAudioBuffer(largeBuffer)
+        }
+        
+        // Force cleanup
+        audioAnalysisService.cancelCurrentAnalysis()
+        
+        // Memory should return close to initial state
+        let finalMemory = getMemoryUsage()
+        let memoryDifference = abs(finalMemory - initialMemory)
+        
+        XCTAssertLessThan(memoryDifference, 1024 * 1024, "Memory not properly cleaned up after analysis")
+    }
+    
+    /// Tests concurrent buffer management
+    func testConcurrentBufferManagement() {
+        let expectation = XCTestExpectation(description: "Concurrent buffer management")
+        let operationCount = 10
+        let group = DispatchGroup()
+        
+        // Perform multiple concurrent operations
+        for i in 0..<operationCount {
+            group.enter()
+            DispatchQueue.global().async {
+                autoreleasepool {
+                    let buffer = self.createTestBuffer(duration: Double(i) / 10.0 + 0.5)
+                    let features = self.audioAnalysisService.analyzeAudioBuffer(buffer)
+                    XCTAssertNotNil(features, "Analysis \(i) should complete successfully")
+                    group.leave()
+                }
+            }
+        }
+        
+        group.notify(queue: .main) {
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 15.0)
+    }
+    
+    /// Tests high memory pressure handling
+    func testHighMemoryPressureHandling() {
+        // Create multiple large buffers to trigger memory pressure
+        var buffers: [AVAudioPCMBuffer] = []
+        let initialMemory = getMemoryUsage()
+        
+        // Add buffers until we hit memory pressure
+        for i in 0..<10 {
+            autoreleasepool {
+                let buffer = createTestBuffer(duration: 2.0)
+                buffers.append(buffer)
+                _ = audioAnalysisService.analyzeAudioBuffer(buffer)
+                
+                let currentMemory = getMemoryUsage()
+                print("Memory after buffer \(i): \(currentMemory / 1024 / 1024) MB")
+            }
+        }
+        
+        // Clear buffers
+        buffers.removeAll()
+        
+        // Memory should be managed properly
+        let finalMemory = getMemoryUsage()
+        XCTAssertLessThan(finalMemory - initialMemory, maxMemoryLimit, "Memory pressure not handled properly")
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func createTestBuffer(duration: TimeInterval) -> AVAudioPCMBuffer {
+        let frameCount = AVAudioFrameCount(duration * testSampleRate)
+        let format = AVAudioFormat(standardFormatWithSampleRate: testSampleRate, channels: 1)!
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
+        
+        buffer.frameLength = frameCount
+        if let channelData = buffer.floatChannelData?[0] {
+            // Fill with white noise for testing
+            for i in 0..<Int(frameCount) {
+                channelData[i] = Float.random(in: -1...1)
+            }
+        }
+        
+        return buffer
+    }
+    
+    private func getMemoryUsage() -> Int {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
+        
+        let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+        
+        return kerr == KERN_SUCCESS ? Int(info.resident_size) : 0
     }
 }

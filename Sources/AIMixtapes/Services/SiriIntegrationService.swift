@@ -15,8 +15,11 @@ import CoreML
 import Combine
 
 // MARK: - Custom Intent Handlers
-final class SiriIntegrationService: NSObject, PlayMoodIntentHandling, CreateMixtapeIntentHandling, AnalyzeCurrentSongIntentHandling {
+final class SiriIntegrationService: NSObject, PlayMoodIntentHandling, CreateMixtapeIntentHandling, AnalyzeCurrentSongIntentHandling, BaseIntentHandler {
+    // MARK: - Properties
+    
     static let shared = SiriIntegrationService()
+    private var cancellables = Set<AnyCancellable>()
     
     // Services
     private let moodEngine: MoodEngine
@@ -24,7 +27,30 @@ final class SiriIntegrationService: NSObject, PlayMoodIntentHandling, CreateMixt
     private let aiLogger: AILogger
     private var player: AVQueuePlayer
     private var moc: NSManagedObjectContext
-    private var subscriptions = Set<AnyCancellable>()
+    
+    // Base handler properties
+    let processingTimeout: TimeInterval = 2.0
+    let intentQueue = DispatchQueue(label: "com.aimixtapes.siri-intents", qos: .userInitiated)
+    let retryCount = 2
+    let retryDelay: TimeInterval = 0.5
+    
+    // Recovery options
+    var recoveryOptions: [IntentRecoveryOption] {
+        return [
+            IntentRecoveryOption(title: "Retry") { [weak self] in
+                self?.retryLastOperation()
+            },
+            IntentRecoveryOption(title: "Skip") { [weak self] in
+                self?.skipCurrentOperation()
+            }
+        ]
+    }
+    
+    // State tracking
+    private var lastOperation: (() -> Void)?
+    private var operationInProgress = false
+    private let operationQueue = OperationQueue()
+    private let semaphore = DispatchSemaphore(value: 1)
     
     init(aiService: AIIntegrationService, player: AVQueuePlayer, context: NSManagedObjectContext) {
         self.aiService = aiService
@@ -33,116 +59,202 @@ final class SiriIntegrationService: NSObject, PlayMoodIntentHandling, CreateMixt
         self.moc = context
         self.aiLogger = AILogger.shared
         super.init()
+        setupOperationQueue()
         setupShortcuts()
+    }
+    
+    // MARK: - Setup
+    
+    private func setupOperationQueue() {
+        operationQueue.maxConcurrentOperationCount = 1
+        operationQueue.qualityOfService = .userInitiated
     }
     
     // MARK: - Intent Handling
     
     func handle(intent: PlayMoodIntent, completion: @escaping (PlayMoodIntentResponse) -> Void) {
-        guard let moodString = intent.mood?.identifier,
-              let mood = Mood(rawValue: moodString) else {
+        // Validate parameters
+        let validations = validateParameters(intent) { label, value in 
+            if label == "mood", value == nil { return false }
+            return true
+        }
+        
+        guard case .success = validations else {
             completion(PlayMoodIntentResponse(code: .failure, userActivity: nil))
             return
         }
         
-        playMoodBasedMixtape(mood)
-        let response = PlayMoodIntentResponse(code: .success, userActivity: nil)
-        response.spokenResponse = "Playing \(mood.rawValue.lowercased()) music"
-        completion(response)
+        // Handle intent with timeout and retry
+        handleWithTimeout { [weak self] in
+            Future { promise in
+                guard let self = self,
+                      let moodString = intent.mood?.identifier,
+                      let mood = Mood(rawValue: moodString) else {
+                    promise(.failure(IntentError.invalidParameters))
+                    return
+                }
+                
+                self.intentQueue.async {
+                    do {
+                        try self.playMoodBasedMixtape(mood)
+                        let response = PlayMoodIntentResponse(code: .success, userActivity: nil)
+                        response.spokenResponse = "Playing \(mood.rawValue.lowercased()) music"
+                        promise(.success(response))
+                    } catch {
+                        promise(.failure(error))
+                    }
+                }
+            }.eraseToAnyPublisher()
+        }
+        .sink(
+            receiveCompletion: { [weak self] result in
+                switch result {
+                case .finished:
+                    break
+                case .failure(let error):
+                    self?.handleError(error)
+                    let response = PlayMoodIntentResponse(code: .failure, userActivity: nil)
+                    response.spokenResponse = "Sorry, I couldn't play that mood right now"
+                    completion(response)
+                }
+            },
+            receiveValue: { response in
+                completion(response)
+            }
+        )
+        .store(in: &cancellables)
     }
     
     func handle(intent: CreateMixtapeIntent, completion: @escaping (CreateMixtapeIntentResponse) -> Void) {
-        guard let moodString = intent.mood?.identifier,
-              let mood = Mood(rawValue: moodString) else {
+        // Validate parameters
+        let validations = validateParameters(intent) { label, value in 
+            if label == "mood", value == nil { return false }
+            return true
+        }
+        
+        guard case .success = validations else {
             completion(CreateMixtapeIntentResponse(code: .failure, userActivity: nil))
             return
         }
         
-        let newMixtape = aiService.generateMoodMixtape(mood: mood, context: moc)
-        
-        do {
-            try moc.save()
-            let response = CreateMixtapeIntentResponse(code: .success, userActivity: nil)
-            response.spokenResponse = "Created a \(mood.rawValue.lowercased()) mixtape"
-            completion(response)
-        } catch {
-            completion(CreateMixtapeIntentResponse(code: .failure, userActivity: nil))
+        handleWithTimeout { [weak self] in
+            Future { promise in
+                guard let self = self,
+                      let moodString = intent.mood?.identifier,
+                      let mood = Mood(rawValue: moodString) else {
+                    promise(.failure(IntentError.invalidParameters))
+                    return
+                }
+                
+                self.intentQueue.async {
+                    do {
+                        let newMixtape = self.aiService.generateMoodMixtape(mood: mood, context: self.moc)
+                        try self.moc.save()
+                        let response = CreateMixtapeIntentResponse(code: .success, userActivity: nil)
+                        response.spokenResponse = "Created a \(mood.rawValue.lowercased()) mixtape"
+                        promise(.success(response))
+                    } catch {
+                        promise(.failure(error))
+                    }
+                }
+            }.eraseToAnyPublisher()
         }
+        .sink(
+            receiveCompletion: { [weak self] result in
+                switch result {
+                case .finished:
+                    break
+                case .failure(let error):
+                    self?.handleError(error)
+                    let response = CreateMixtapeIntentResponse(code: .failure, userActivity: nil)
+                    response.spokenResponse = "Sorry, I couldn't create that mixtape right now"
+                    completion(response)
+                }
+            },
+            receiveValue: { response in
+                completion(response)
+            }
+        )
+        .store(in: &cancellables)
     }
     
     func handle(intent: AnalyzeCurrentSongIntent, completion: @escaping (AnalyzeCurrentSongIntentResponse) -> Void) {
-        guard player.currentItem != nil else {
-            let response = AnalyzeCurrentSongIntentResponse(code: .failure, userActivity: nil)
-            response.spokenResponse = "No song is currently playing"
-            completion(response)
-            return
-        }
-        
-        aiService.detectMoodFromCurrentAudio(player: player)
-        let response = AnalyzeCurrentSongIntentResponse(code: .success, userActivity: nil)
-        response.spokenResponse = "Analyzing your current song for mood and features"
-        completion(response)
-    }
-    
-    // MARK: - Parameter Resolution
-    
-    func resolveMood(for intent: PlayMoodIntent, with completion: @escaping (MoodParameterResolutionResult) -> Void) {
-        guard let mood = intent.mood else {
-            completion(.needsValue())
-            return
-        }
-        completion(.success(with: mood))
-    }
-    
-    // MARK: - Shortcut Donation
-    
-    func donateShortcuts() {
-        // Donate Play Mood shortcuts
-        for mood in Mood.allCases {
-            let intent = PlayMoodIntent()
-            intent.mood = MoodParameter(identifier: mood.rawValue, display: mood.rawValue)
-            intent.suggestedInvocationPhrase = "Play \(mood.rawValue.lowercased()) music"
-            
-            let interaction = INInteraction(intent: intent, response: nil)
-            interaction.donate { error in
-                if let error = error {
-                    print("Failed to donate shortcut: \(error)")
+        handleWithTimeout { [weak self] in
+            Future { promise in
+                guard let self = self,
+                      let currentItem = self.player.currentItem else {
+                    let response = AnalyzeCurrentSongIntentResponse(code: .failure, userActivity: nil)
+                    response.spokenResponse = "No song is currently playing"
+                    promise(.success(response))
+                    return
                 }
+                
+                self.intentQueue.async {
+                    do {
+                        self.aiService.detectMoodFromCurrentAudio(player: self.player)
+                        let response = AnalyzeCurrentSongIntentResponse(code: .success, userActivity: nil)
+                        response.spokenResponse = "Analyzing your current song for mood and features"
+                        promise(.success(response))
+                    } catch {
+                        promise(.failure(error))
+                    }
+                }
+            }.eraseToAnyPublisher()
+        }
+        .sink(
+            receiveCompletion: { [weak self] result in
+                switch result {
+                case .finished:
+                    break
+                case .failure(let error):
+                    self?.handleError(error)
+                    let response = AnalyzeCurrentSongIntentResponse(code: .failure, userActivity: nil)
+                    response.spokenResponse = "Sorry, I couldn't analyze that song right now"
+                    completion(response)
+                }
+            },
+            receiveValue: { response in
+                completion(response)
+            }
+        )
+        .store(in: &cancellables)
+    }
+    
+    // MARK: - Error Handling
+    
+    private func handleError(_ error: Error) {
+        aiLogger.log(error: error, category: "SiriIntegration")
+        
+        if let intentError = error as? IntentError {
+            switch intentError {
+            case .processingTimeout:
+                retryLastOperation()
+            case .serviceUnavailable:
+                // Implement service recovery
+                break
+            default:
+                break
             }
         }
-        
-        // Donate Create Mixtape shortcut
-        let createIntent = CreateMixtapeIntent()
-        createIntent.suggestedInvocationPhrase = "Create a mixtape"
-        
-        let createInteraction = INInteraction(intent: createIntent, response: nil)
-        createInteraction.donate(completion: nil)
-        
-        // Donate Analyze shortcut
-        let analyzeIntent = AnalyzeCurrentSongIntent()
-        analyzeIntent.suggestedInvocationPhrase = "Analyze this song"
-        
-        let analyzeInteraction = INInteraction(intent: analyzeIntent, response: nil)
-        analyzeInteraction.donate(completion: nil)
     }
     
-    // MARK: - Private Methods
+    // MARK: - Recovery Methods
     
-    private func playMoodBasedMixtape(_ mood: Mood) {
-        // Implementation to play mood-based music
+    private func retryLastOperation() {
+        guard let operation = lastOperation else { return }
+        operation()
+    }
+    
+    private func skipCurrentOperation() {
+        operationInProgress = false
+        semaphore.signal()
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func playMoodBasedMixtape(_ mood: Mood) throws {
         aiService.moodEngine.setMood(mood, confidence: 0.9)
-        // Additional implementation...
-    }
-    
-    private func setupShortcuts() {
-        // Register dynamic shortcuts
-        let shortcuts = Mood.allCases.map { mood in
-            let intent = PlayMoodIntent()
-            intent.mood = MoodParameter(identifier: mood.rawValue, display: mood.rawValue)
-            return INShortcut(intent: intent)
-        }
-        
-        INVoiceShortcutCenter.shared.setShortcutSuggestions(shortcuts)
+        // Additional implementation
     }
 }
 

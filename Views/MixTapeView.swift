@@ -223,10 +223,19 @@ struct MixTapeView: View {
     }
     
     private var moodTagsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Mood Tags")
-                .font(.headline)
-                .padding(.horizontal)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Mood Tags")
+                    .font(.headline)
+                
+                Spacer()
+                
+                Button(action: { }) {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundColor(aiService.moodEngine.currentMood.color)
+                }
+            }
+            .padding(.horizontal)
             
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -237,46 +246,64 @@ struct MixTapeView: View {
                                     selectedMoodTags.contains(tag) ?
                                         selectedMoodTags.removeAll { $0 == tag } :
                                         selectedMoodTags.append(tag)
-                                }
                             }
                         }
                     }
                 }
-                .padding(.horizontal)
             }
+            .padding(.horizontal)
         }
     }
     
     private var actionButtonsSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 20) {
+            HStack(spacing: 16) {
+                // Smart Reorder
                 ActionButton(
                     icon: "wand.and.stars",
                     title: "Smart Reorder",
+                    color: aiService.moodEngine.currentMood.color,
                     action: { showingSmartReorder = true }
                 )
                 
+                // Find Similar
                 ActionButton(
                     icon: "rectangle.stack.person.crop",
                     title: "Find Similar",
+                    color: aiService.personalityEngine.currentPersonality.themeColor,
                     action: {
                         showingSimilarMixtapes = true
                         aiService.trackInteraction(type: "find_similar", mixtape: mixTape)
                     }
                 )
                 
+                // Add Songs
                 ActionButton(
                     icon: "plus.circle",
                     title: "Add Songs",
+                    color: .blue,
                     action: {
                         showingDocsPicker = true
                         aiService.trackInteraction(type: "add_songs", mixtape: mixTape)
                     }
                 )
                 
+                // AI Analysis
                 ActionButton(
                     icon: "waveform.path",
+                    title: "AI Analysis",
+                    color: .purple,
+                    action: {
+                        showingAIAnalysis = true
+                        aiService.trackInteraction(type: "view_analysis", mixtape: mixTape)
+                    }
+                )
+                
+                // Visualize
+                ActionButton(
+                    icon: "chart.bar.xaxis",
                     title: "Visualize",
+                    color: .orange,
                     action: { showingVisualization = true }
                 )
             }
@@ -815,5 +842,138 @@ struct SimilarMixtapesView: View {
         
         // Cap at 1.0
         return min(score, 1.0)
+    }
+}
+
+struct ActionButton: View {
+    let icon: String
+    let title: String
+    let color: Color
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(color.opacity(0.1))
+                        .frame(width: 50, height: 50)
+                    
+                    Image(systemName: icon)
+                        .font(.system(size: 22))
+                        .foregroundColor(color)
+                }
+                
+                Text(title)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+            }
+            .frame(minWidth: 80)
+        }
+    }
+}
+
+struct MoodBadge: View {
+    let mood: Mood
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: mood.systemIcon)
+                    .font(.system(size: 12))
+                Text(mood.rawValue)
+                    .font(.caption)
+                    .fontWeight(.medium)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                ZStack {
+                    Capsule()
+                        .fill(mood.color.opacity(0.15))
+                    
+                    Capsule()
+                        .strokeBorder(mood.color.opacity(0.3), lineWidth: 1)
+                }
+            )
+            .foregroundColor(mood.color)
+        }
+        .buttonStyle(ScaleButtonStyle())
+    }
+}
+
+struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.spring(response: 0.2, dampingFraction: 0.9), value: configuration.isPressed)
+    }
+}
+
+struct SongRowView: View {
+    let song: Song
+    let isPlaying: Bool
+    let isSelected: Bool
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                // Play indicator or number
+                ZStack {
+                    if isPlaying {
+                        Circle()
+                            .fill(Color.accentColor.opacity(0.1))
+                            .frame(width: 36, height: 36)
+                        
+                        Image(systemName: "music.note")
+                            .font(.system(size: 14))
+                            .foregroundColor(.accentColor)
+                    } else {
+                        Circle()
+                            .fill(Color(.systemGray6))
+                            .frame(width: 36, height: 36)
+                        
+                        Text("\(songs.firstIndex(of: song)! + 1)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                // Song info
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(song.wrappedTitle)
+                        .font(.system(.body, design: .rounded))
+                        .fontWeight(.medium)
+                    
+                    Text(song.wrappedArtist)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                // Duration and mood
+                HStack(spacing: 12) {
+                    if let mood = song.mood {
+                        Circle()
+                            .fill(Mood(rawValue: mood)?.color ?? .gray)
+                            .frame(width: 8, height: 8)
+                    }
+                    
+                    Text(song.durationString)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .frame(width: 45, alignment: .trailing)
+                }
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .background(isPlaying ? Color.accentColor.opacity(0.05) : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
