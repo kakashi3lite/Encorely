@@ -158,6 +158,60 @@ Task {
 
 The framework also provides a SwiftUI view (`PerformanceValidationView`) to display validation results visually.
 
+## CI/CD Pipeline
+
+The project uses GitHub Actions and Fastlane for continuous integration and deployment. The pipeline includes:
+
+### Build & Test Jobs
+
+- **Main Build**: Compiles the app and runs SwiftLint
+- **Unit Tests**: Runs core unit test suite
+- **Performance Tests**: Runs performance benchmarks (PERF-001)
+- **MBTI Tests**: Validates personality matching (MBTI-008)
+- **MusicKit Tests**: Tests Apple Music integration (MKT-001)
+- **Visualization Tests**: Tests audio visualization (VIS-002)
+- **Voice Tests**: Tests voice recognition (VOI-003)
+- **Offline Cache Tests**: Tests offline functionality (OFF-004)
+- **Collaboration Tests**: Tests shared features (COL-005)
+
+### Deployment
+
+- **TestFlight**: Automated deployment to TestFlight
+- Versioning and changelogs are handled automatically
+- Build artifacts are preserved for debugging
+
+### Usage
+
+Run all tests locally:
+
+```bash
+bundle exec fastlane ios tests
+```
+
+Run specific test suite:
+
+```bash
+bundle exec fastlane ios musickit_tests
+bundle exec fastlane ios visualization_tests
+bundle exec fastlane ios voice_tests
+```
+
+Deploy to TestFlight:
+
+```bash
+bundle exec fastlane ios deploy_testflight
+```
+
+### CI Updates Log
+
+The pipeline maintains a `ci_updates.log` that tracks all CI/CD changes. Example entries:
+
+```plaintext
+[2025-05-30 10:00] init(CI-007): Initialize CI updates log
+[2025-05-30 10:01] feat(PERF-001): Add performance benchmarking job
+[2025-05-30 10:02] feat(MKT-001): Add MusicKit integration test job
+```
+
 ## Contributing
 
 We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.

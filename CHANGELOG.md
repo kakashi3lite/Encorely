@@ -7,7 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+### CI Updates
+
+- **Added** New CI/CD jobs for feature testing:
+  - Performance benchmarking (PERF-001)
+  - MBTI matching tests (MBTI-008)
+  - MusicKit integration tests (MKT-001)
+  - Visualization component tests (VIS-002)
+  - Voice recognition tests (VOI-003)
+  - Offline cache validation (OFF-004)
+  - Collaboration feature tests (COL-005)
+- **Added** Automated TestFlight deployment
+- **Added** CI updates logging system
+- **Updated** Build artifact retention policy
+- **Improved** Test reporting and documentation
+
+### Added Features
 
 - Enhanced audio analysis with emotional feature detection
   - New core emotional features (energy, valence, intensity)
