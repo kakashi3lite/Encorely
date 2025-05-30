@@ -1,11 +1,67 @@
-# Custom SwiftLint rule for asset verification
 included:
   - Sources
   - Tests
+  - Models
+  - Services
+  - ViewModels
+  - Views
+  - Modules
+  - utils
 
 excluded:
   - Tests/LinuxMain.swift
   - .build
+  - Pods
+  - .git
+  - fastlane
+  - Build
+  - backup
+  - "**/*.generated.swift"
+
+disabled_rules:
+  - trailing_whitespace
+  - todo
+
+opt_in_rules:
+  - array_init
+  - attributes
+  - closure_end_indentation
+  - closure_spacing
+  - collection_alignment
+  - contains_over_filter_count
+  - convenience_type
+  - discouraged_object_literal
+  - empty_collection_literal
+  - empty_count
+  - empty_string
+  - enum_case_associated_values_count
+  - fatal_error_message
+  - first_where
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - indentation_width
+  - last_where
+  - literal_expression_end_indentation
+  - multiline_arguments
+  - multiline_function_chains
+  - multiline_literal_brackets
+  - multiline_parameters
+  - multiline_parameters_brackets
+  - operator_usage_whitespace
+  - prefer_self_type_over_type_of_self
+  - redundant_nil_coalescing
+  - redundant_type_annotation
+  - strict_fileprivate
+  - toggle_bool
+  - unneeded_parentheses_in_closure_argument
+  - vertical_whitespace_closing_braces
+  - vertical_whitespace_opening_braces
+  - weak_delegate
+  - yoda_condition
+
+analyzer_rules:
+  - unused_declaration
+  - unused_import
 
 custom_rules:
   asset_validation:
@@ -20,9 +76,64 @@ custom_rules:
     message: "Make sure this color asset is included in ASSET_MANIFEST.json"
     severity: warning
 
-  # Rule to ensure all images are loaded through our asset helper
   use_asset_helper:
     name: "Use Asset Helper"
     regex: 'UIImage\(named:'
     message: "Consider using `Asset.image(name:)` to ensure assets are properly validated at compile time"
     severity: warning
+
+  logging_rule:
+    name: "Logging Rule"
+    regex: 'print\('
+    message: "Use AILogger instead of print for consistent logging"
+    severity: warning
+
+  force_try_rule:
+    name: "Force Try Rule"
+    regex: 'try!'
+    message: "Avoid using force try, handle errors appropriately"
+    severity: error
+
+line_length:
+  warning: 120
+  error: 150
+  ignores_comments: true
+  ignores_urls: true
+
+type_body_length:
+  warning: 300
+  error: 400
+
+file_length:
+  warning: 500
+  error: 700
+
+function_body_length:
+  warning: 50
+  error: 100
+
+type_name:
+  min_length: 3
+  max_length: 50
+
+identifier_name:
+  min_length: 2
+  max_length: 40
+  excluded:
+    - id
+    - URL
+    - x
+    - y
+    - dx
+    - dy
+    - up
+    - vm
+
+nesting:
+  type_level: 3
+
+cyclomatic_complexity:
+  warning: 10
+  error: 15
+
+reporter: "xcode"

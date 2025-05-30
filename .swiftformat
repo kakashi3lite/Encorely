@@ -1,28 +1,51 @@
 # Swift format configuration
 
---swiftversion 5.5
+# Version
+--swiftversion 5.9
+
+# File options
+--exclude Build,Pods,.build,fastlane,backup
 
 # Basic formatting
 --indent 4
 --maxwidth 120
---wraparguments before-first
---wrapcollections before-first
---wrapparameters before-first
+--wraparguments preserve
+--wrapcollections preserve
+--wrapparameters preserve
 --xcodeindentation enabled
 --semicolons never
 --commas always
 --trimwhitespace always
 --indent-switch-case true
+--linebreaks lf
+--stripunusedargs closure-only
 
-# Braces
+# Braces and Spacing
 --allman false
 --closingparen same-line
+--elseposition same-line
+--empty void
+--operatorfunc spaced
+--ranges spaced
+--self remove
 
-# Organization
+# Numbers formatting
+--binarygrouping 4,8
+--decimalgrouping 3,6
+--exponentcase lowercase
+--exponentgrouping disabled
+--fractiongrouping disabled
+--hexgrouping 4,8
+--hexliteralcase uppercase
+--octalgrouping 4,8
+
+# Code organization
 --organizetypes class,struct,enum,extension
 --marktypes never
 --markextensions always
 --typeblanklines remove
+--importgrouping testable-bottom
+--header ignore
 
 # Documentation
 --beforemarks empty
@@ -30,28 +53,42 @@
 --organizemark "MARK: - "
 
 # Rules
+--enable blankLinesAtEndOfScope
+--enable blankLinesAtStartOfScope
 --enable blankLinesBetweenScopes
+--enable consecutiveBlankLines
 --enable consecutiveSpaces
 --enable duplicateImports
 --enable elseOnSameLine
 --enable emptyBraces
---enable leadingDelimiters
+--enable linebreakAtEndOfFile
+--enable redundantBreak
+--enable redundantExtensionACL
+--enable redundantFileprivate
+--enable redundantGet
 --enable redundantInit
 --enable redundantLet
+--enable redundantLetError
 --enable redundantNilInit
+--enable redundantObjc
 --enable redundantParens
 --enable redundantPattern
 --enable redundantRawValues
+--enable redundantReturn
 --enable redundantVoidReturnType
 --enable semicolons
 --enable sortedImports
+--enable spaceAroundBraces
 --enable spaceAroundBrackets
 --enable spaceAroundComments
 --enable spaceAroundGenerics
 --enable spaceAroundOperators
+--enable spaceAroundParens
+--enable spaceInsideBraces
 --enable spaceInsideBrackets
+--enable spaceInsideComments
 --enable spaceInsideGenerics
+--enable spaceInsideParens
 --enable todos
---enable trailingSpace
---enable typeSugar
---enable void
+--enable trailingClosures
+--enable unusedArguments
