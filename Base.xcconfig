@@ -12,8 +12,8 @@ DEVELOPMENT_TEAM = $(DEVELOPMENT_TEAM)
 PRODUCT_BUNDLE_IDENTIFIER = com.swanand.aimixtapes
 
 // Deployment Target & SDK
-IPHONEOS_DEPLOYMENT_TARGET = 15.0
-SDKROOT = iphoneos
+MACOSX_DEPLOYMENT_TARGET = 12.0
+SDKROOT = macosx
 
 // Swift & Objective-C Version
 SWIFT_VERSION = 5.5

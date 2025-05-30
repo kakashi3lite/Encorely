@@ -1,7 +1,41 @@
 {
     "editor.quickSuggestions": {
-        "comments": "off",
-        "strings": "off",
-        "other": "off"
-    }
+        "comments": "on",
+        "strings": "on",
+        "other": "on"
+    },
+    "swift.path.swift_driver_bin": "/usr/bin/swift",
+    "swift.languageServerPath": "/usr/local/bin/sourcekit-lsp",
+    "lldb.executable": "/usr/bin/lldb",
+    "editor.formatOnSave": true,
+    "editor.rulers": [100],
+    "editor.suggestSelection": "first",
+    "editor.codeActionsOnSave": {
+        "source.fixAll.swiftlint": true
+    },
+    "swift.formatOnBuild": true,
+    "swift.interfaces.enableSnippets": true,
+    "files.exclude": {
+        "**/DerivedData": true,
+        "**/build": true,
+        "**/.build": true,
+        "**/*.xcodeproj/xcuserdata": true,
+        "**/*.xcworkspace/xcuserdata": true,
+        "**/*.xcodeproj/project.xcworkspace/xcuserdata": true
+    },
+    "files.watcherExclude": {
+        "**/DerivedData/**": true,
+        "**/.build/**": true,
+        "**/build/**": true
+    },
+    "[swift]": {
+        "editor.defaultFormatter": "vknabel.vscode-swiftformat",
+        "editor.formatOnSave": true,
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true
+    },
+    "gitlens.codeLens.enabled": true,
+    "swiftformat.configSearchPaths": [".swiftformat"],
+    "swiftlint.configSearchPaths": [".swiftlint.yml"],
+    "swiftlint.enable": true
 }

@@ -1,0 +1,32 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run AI-Mixtapes",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/Build/Release/AI-Mixtapes.app/Contents/MacOS/AI-Mixtapes",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Build for Mac"
+        },
+        {
+            "name": "Run AI-Mixtapes (Debug)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/Build/Debug/AI-Mixtapes.app/Contents/MacOS/AI-Mixtapes",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Build for Debug"
+        },
+        {
+            "name": "Run Tests",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/Build/Debug/AI-MixtapesTests.xctest/Contents/MacOS/AI-MixtapesTests",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Run Tests"
+        }
+    ]
+}

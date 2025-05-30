@@ -22,6 +22,23 @@
             ]
         },
         {
+            "label": "Build for Debug",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-scheme",
+                "AIMixtapes",
+                "-configuration",
+                "Debug",
+                "-destination",
+                "platform=macOS"
+            ],
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
             "label": "Clean Build",
             "type": "shell",
             "command": "xcodebuild clean && rm -rf ~/Library/Developer/Xcode/DerivedData/*",
@@ -40,6 +57,55 @@
                 "ONLY_TESTING=AIMixtapesTests/PerformanceTests"
             ],
             "group": "test"
+        },
+        {
+            "label": "Run All Tests",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-scheme",
+                "AIMixtapes",
+                "-destination",
+                "platform=macOS",
+                "test"
+            ],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "SwiftLint",
+            "type": "shell",
+            "command": "swiftlint",
+            "args": [
+                "lint",
+                "--path",
+                "${workspaceFolder}"
+            ],
+            "problemMatcher": {
+                "owner": "swift",
+                "fileLocation": "absolute",
+                "pattern": {
+                    "regexp": "^(.*):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            }
+        },
+        {
+            "label": "SwiftFormat",
+            "type": "shell",
+            "command": "swiftformat",
+            "args": [
+                "${workspaceFolder}",
+                "--config",
+                "${workspaceFolder}/.swiftformat"
+            ],
+            "problemMatcher": []
         }
     ]
 }
