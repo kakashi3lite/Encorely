@@ -12,6 +12,7 @@ import Accelerate
 import CoreML
 import Combine
 import os.log
+import Domain
 
 /// Custom errors for audio analysis operations
 enum AudioAnalysisError: LocalizedError {
@@ -193,16 +194,26 @@ class AudioAnalysisService: ObservableObject {
     private var analysisCancel: AnyCancellable?
     private let logger = Logger(subsystem: "com.aimixtapes", category: "AudioAnalysis")
     
-    // FFT processing
-    private lazy var fftProcessor = FFTProcessor(maxFrameSize: analysisBufferSize)
-    
     // Buffer management
-    private var bufferPool: [AVAudioPCMBuffer] = []
-    private let maxBufferPoolSize = 5
-    private var totalMemoryUsage: Int = 0
-    private let maxMemoryUsage = 50 * 1024 * 1024 // 50MB limit
-    private var activeBuffers: Set<AVAudioPCMBuffer> = []
+    private let audioBufferPool: AudioBufferPool
+    private let bufferQueue = DispatchQueue(label: "audio.buffer.queue", qos: .userInteractive)
+    private let analysisQueue = DispatchQueue(label: "audio.analysis.queue", qos: .utility)
+    private var activeBuffers = Set<ManagedAudioBuffer>()
     private let bufferLock = NSLock()
+    
+    // Configuration 
+    private let sampleRate: Double = 44100.0
+    private let bufferSize: UInt32 = 4096
+    private let maxBuffersInPool: Int = 10
+    
+    // Memory monitoring
+    private var totalMemoryUsage: Int = 0
+    private let maxMemoryUsage = 50 * 1024 * 1024 // 50MB
+    private var memorySamples: [Int] = []
+    private let maxMemorySamples = 20
+    private var processStartTime: Date?
+    private var lastCleanupTime: Date?
+    private let cleanupInterval: TimeInterval = 5.0
     
     // Retry configuration
     private let maxRetries = 3
@@ -210,155 +221,150 @@ class AudioAnalysisService: ObservableObject {
     
     // Performance monitoring
     private var performanceMetrics = PerformanceMetrics()
-    private var processStartTime: Date?
-    private var memorySamples: [Int] = []
     
     // MARK: - Initialization
     
     init() {
-        setupMemoryManagement()
+        self.audioBufferPool = AudioBufferPool(maxBuffers: maxBuffersInPool, bufferSize: bufferSize)
+        setupAudioEngine()
+        setupMemoryMonitoring()
     }
     
     deinit {
         cleanup()
     }
     
+    // MARK: - Setup
+    
+    private func setupMemoryMonitoring() {
+        // Start periodic memory monitoring
+        let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.checkMemoryPressure()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+    }
+    
     // MARK: - Memory Management
     
-    private func setupMemoryManagement() {
-        // Set up memory warning observer
-        #if os(iOS)
-        NotificationCenter.default.addObserver(
-            self, 
-            selector: #selector(handleMemoryWarning),
-            name: UIApplication.didReceiveMemoryWarningNotification,
-            object: nil
-        )
-        #endif
+    private func checkMemoryPressure() {
+        let currentMemory = totalMemoryUsage
+        
+        // Add to samples for tracking
+        if memorySamples.count >= maxMemorySamples {
+            memorySamples.removeFirst()
+        }
+        memorySamples.append(currentMemory)
+        
+        // Calculate pressure level
+        let pressure = Double(currentMemory) / Double(maxMemoryUsage)
+        
+        if pressure > 0.9 {
+            logger.warning("Critical memory pressure: \(pressure * 100, privacy: .public)%")
+            performEmergencyCleanup()
+        } else if pressure > 0.8 {
+            logger.warning("High memory pressure: \(pressure * 100, privacy: .public)%")
+            performGradualCleanup()
+        } else if pressure > 0.7 {
+            if shouldPerformRoutineCleanup() {
+                performRoutineCleanup()
+            }
+        }
     }
     
-    @objc private func handleMemoryWarning() {
-        cleanupBuffers()
+    private func shouldPerformRoutineCleanup() -> Bool {
+        guard let lastCleanup = lastCleanupTime else { return true }
+        return Date().timeIntervalSince(lastCleanup) >= cleanupInterval
     }
     
-    private func trackBuffer(_ buffer: AVAudioPCMBuffer) {
+    private func performRoutineCleanup() {
         bufferLock.lock()
         defer { bufferLock.unlock() }
         
-        let bufferSize = Int(buffer.frameLength * buffer.format.streamDescription.pointee.mBytesPerFrame)
-        totalMemoryUsage += bufferSize
-        activeBuffers.insert(buffer)
-        
-        // Record this memory usage for metrics
-        memorySamples.append(totalMemoryUsage)
-        if memorySamples.count > 20 {
-            memorySamples.removeFirst()
+        // Remove old buffers
+        let oldBuffers = activeBuffers.filter { $0.idleTime > 30 }
+        for buffer in oldBuffers {
+            untrackBuffer(buffer)
         }
         
-        // If we're using too much memory, clean up oldest buffers
-        if totalMemoryUsage > maxMemoryUsage {
+        lastCleanupTime = Date()
+    }
+    
+    private func performGradualCleanup() {
+        bufferLock.lock()
+        defer { bufferLock.unlock() }
+        
+        // Sort buffers by idle time
+        let sortedBuffers = activeBuffers.sorted { $0.idleTime > $1.idleTime }
+        
+        // Remove half of the oldest buffers
+        let removeCount = sortedBuffers.count / 2
+        for buffer in sortedBuffers.prefix(removeCount) {
+            untrackBuffer(buffer)
+        }
+        
+        // Reduce pool size
+        audioBufferPool.reducePoolSize()
+        
+        lastCleanupTime = Date()
+    }
+    
+    private func performEmergencyCleanup() {
+        bufferLock.lock()
+        defer { bufferLock.unlock() }
+        
+        // Clear all buffers
+        activeBuffers.forEach { untrackBuffer($0) }
+        activeBuffers.removeAll()
+        
+        // Reset buffer pool
+        audioBufferPool.releaseAllBuffers()
+        
+        totalMemoryUsage = 0
+        lastCleanupTime = Date()
+        
+        // Force garbage collection
+        autoreleasepool {
+            URLCache.shared.removeAllCachedResponses()
+        }
+    }
+    
+    private func trackBuffer(_ buffer: ManagedAudioBuffer) {
+        bufferLock.lock()
+        defer { bufferLock.unlock() }
+        
+        let memoryDelta = buffer.memorySize
+        if totalMemoryUsage + memoryDelta > maxMemoryUsage {
             handleHighMemoryUsage()
         }
         
-        // Log memory pressure if needed
-        let memoryPressure = Float(totalMemoryUsage) / Float(maxMemoryUsage)
-        if memoryPressure > 0.8 {
-            logger.warning("High memory pressure: \(memoryPressure * 100, privacy: .public)% of limit")
-        }
+        activeBuffers.insert(buffer)
+        totalMemoryUsage += memoryDelta
     }
     
-    private func untrackBuffer(_ buffer: AVAudioPCMBuffer) {
-        bufferLock.lock()
-        defer { bufferLock.unlock() }
-        
+    private func untrackBuffer(_ buffer: ManagedAudioBuffer) {
         if activeBuffers.remove(buffer) != nil {
-            let bufferSize = Int(buffer.frameLength * buffer.format.streamDescription.pointee.mBytesPerFrame)
-            totalMemoryUsage -= bufferSize
-            
-            // Return buffer to pool if space available and it's a reasonable size to keep
-            let isReasonableSize = buffer.frameLength <= UInt32(analysisBufferSize * 2)
-            if bufferPool.count < maxBufferPoolSize && isReasonableSize {
-                buffer.frameLength = 0 // Reset the buffer
-                bufferPool.append(buffer)
-            }
+            totalMemoryUsage -= buffer.memorySize
+            audioBufferPool.returnBuffer(buffer)
         }
-    }
-    
-    /// Get a buffer from the pool or create a new one
-    private func getOrCreateBuffer(with format: AVAudioFormat, frameCapacity: AVAudioFrameCount) -> AVAudioPCMBuffer {
-        bufferLock.lock()
-        defer { bufferLock.unlock() }
-        
-        // Try to get a buffer from the pool
-        if !bufferPool.isEmpty {
-            let buffer = bufferPool.removeLast()
-            // Verify format compatibility
-            if buffer.format.isEqual(format) && buffer.frameCapacity >= frameCapacity {
-                return buffer
-            }
-            // If format incompatible, don't return to pool
-        }
-        
-        // Create a new buffer if none available in pool
-        guard let newBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity) else {
-            // This should never happen with valid formats, but handle it gracefully
-            fatalError("Failed to create audio buffer with format \(format) and capacity \(frameCapacity)")
-        }
-        
-        return newBuffer
-    }
-    
-    private func cleanupBuffers() {
-        bufferLock.lock()
-        defer { bufferLock.unlock() }
-        
-        activeBuffers.removeAll()
-        bufferPool.removeAll()
-        totalMemoryUsage = 0
     }
     
     private func handleHighMemoryUsage() {
-        // Log the memory pressure
         logger.warning("Handling high memory usage: \(totalMemoryUsage / 1024 / 1024, privacy: .public) MB")
-        
-        // Remove oldest buffers until we're under the threshold
         let targetUsage = maxMemoryUsage * 3/4
         
-        // Sort buffers by estimated age (we don't track creation time, so this is approximate)
-        let sortedBuffers = Array(activeBuffers)
-        
-        // Remove buffers until we're under the threshold or no more buffers
+        // Remove oldest buffers until we're under target
+        let sortedBuffers = activeBuffers.sorted { $0.idleTime > $1.idleTime }
         for buffer in sortedBuffers {
-            // Skip if we're already below target
             if totalMemoryUsage <= targetUsage {
                 break
             }
-            
             untrackBuffer(buffer)
-            
-            // Log progress
-            logger.debug("Untracked buffer, memory now: \(totalMemoryUsage / 1024 / 1024, privacy: .public) MB")
         }
         
-        // If still too high, clear buffer pool completely
+        // If still too high, perform emergency cleanup
         if totalMemoryUsage > targetUsage {
-            let freedMemory = bufferPool.reduce(0) { sum, buffer in
-                sum + Int(buffer.frameCapacity * buffer.format.streamDescription.pointee.mBytesPerFrame)
-            }
-            bufferPool.removeAll()
-            
-            logger.info("Cleared buffer pool, freed \(freedMemory / 1024, privacy: .public) KB")
+            performEmergencyCleanup()
         }
-        
-        // Run garbage collection (indirectly by clearing caches)
-        URLCache.shared.removeAllCachedResponses()
-        
-        // Notify system of memory pressure
-        #if os(iOS)
-        Task { @MainActor in
-            UIApplication.shared.performFreeMemoryWarning()
-        }
-        #endif
     }
     
     /// Complete cleanup of all resources
@@ -373,7 +379,7 @@ class AudioAnalysisService: ObservableObject {
         audioFile = nil
         
         // Clean up buffers
-        cleanupBuffers()
+        audioBufferPool.releaseAllBuffers()
         
         // Release any analysis cancellables
         analysisCancel?.cancel()
@@ -404,7 +410,7 @@ class AudioAnalysisService: ObservableObject {
         Processing time: \(String(format: "%.2f", processingTime))s
         Average memory: \(avgMemory / 1024 / 1024)MB
         Peak memory: \(peakMemory / 1024 / 1024)MB
-        Buffer pool size: \(bufferPool.count)/\(maxBufferPoolSize)
+        Buffer pool size: \(audioBufferPool.currentPoolSize)/\(maxBuffersInPool)
         """
         
         logger.info("Performance: \(self.performanceReport, privacy: .public)")
@@ -768,360 +774,35 @@ class AudioAnalysisService: ObservableObject {
         return convertToAudioFeatures(from: combinedSpectralFeatures, withEnergy: avgEnergy, tempo: tempo)
     }
     
-    private func convertToAudioFeatures(from spectral: SpectralFeatures, withEnergy energy: Float = 0, tempo: Float? = nil) -> AudioFeatures {
-        // Calculate core emotional features from spectral features
-        let calculatedEnergy = calculateEnergy(
-            bassEnergy: spectral.bassEnergy,
-            midEnergy: spectral.midEnergy,
-            trebleEnergy: spectral.trebleEnergy,
-            energy: energy
+    private func convertToAudioFeatures(from spectralFeatures: SpectralFeatures) -> AudioFeatures {
+        // Calculate core features
+        let energy = calculateEnergy(
+            bassEnergy: spectralFeatures.bassEnergy,
+            midEnergy: spectralFeatures.midEnergy,
+            trebleEnergy: spectralFeatures.trebleEnergy
         )
         
         let valence = calculateValence(
-            brightness: spectral.brightness,
-            harmonicRatio: spectral.harmonicRatio,
-            spectralContrast: spectral.spectralContrast,
-            spread: spectral.spread,
-            centroid: spectral.centroid
+            brightness: spectralFeatures.brightness,
+            harmonicRatio: spectralFeatures.harmonicRatio,
+            spectralContrast: spectralFeatures.spectralContrast
         )
         
-        let intensity = calculateIntensity(
-            energy: calculatedEnergy,
-            flux: spectral.flux,
-            crest: spectral.crest,
-            flatness: spectral.flatness
-        )
-        
-        // Calculate additional timbral features
-        let complexity = calculateComplexity(
-            spectralContrast: spectral.spectralContrast,
-            spread: spectral.spread,
-            irregularity: spectral.irregularity,
-            kurtosis: spectral.kurtosis
-        )
-        
-        let brightness = normalizeToRange(spectral.brightness, min: 0, max: 1)
-        
-        let warmth = calculateWarmth(
-            bassEnergy: spectral.bassEnergy,
-            midEnergy: spectral.midEnergy,
-            trebleEnergy: spectral.trebleEnergy
-        )
-        
-        // Calculate danceability from rhythm features
-        let danceability = calculateDanceability(
-            tempo: tempo ?? spectral.estimatedTempo,
-            beatStrength: spectral.beatStrength,
-            flux: spectral.flux,
-            energy: calculatedEnergy
-        )
-        
-        // Calculate acousticness based on spectral features
-        let acousticness = calculateAcousticness(
-            spectralFlatness: spectral.flatness,
-            harmonicRatio: spectral.harmonicRatio,
-            centroid: spectral.centroid
-        )
-        
-        // Calculate instrumentalness (approximation)
-        let instrumentalness = calculateInstrumentalness(
-            spectralIrregularity: spectral.irregularity,
-            spectralFlatness: spectral.flatness
-        )
-        
-        // Calculate speechiness (approximation)
-        let speechiness = calculateSpeechiness(
-            spectralRolloff: spectral.rolloff,
-            zeroCrossingRate: spectral.zeroCrossingRate
-        )
-        
-        // Calculate liveness (approximation)
-        let liveness = calculateLiveness(
-            dynamicRange: spectral.dynamicRange,
-            crest: spectral.crest
-        )
-        
-        // Estimate musical mode (major vs minor) based on spectral features
-        let mode = estimateMode(
-            brightness: spectral.brightness,
-            valence: valence
-        )
-        
-        // Create comprehensive audio features
+        // Create AudioFeatures instance
         return AudioFeatures(
-            tempo: tempo ?? spectral.estimatedTempo,
-            energy: calculatedEnergy,
+            tempo: spectralFeatures.estimatedTempo,
+            energy: energy,
             valence: valence,
-            key: nil, // Key detection requires more complex pitch analysis
-            mode: mode,
-            danceability: danceability,
-            acousticness: acousticness,
-            instrumentalness: instrumentalness,
-            speechiness: speechiness,
-            liveness: liveness,
-            spectralFeatures: spectral,
-            temporalFeatures: nil, // Not implemented yet
-            rhythmFeatures: [
-                "beatStrength": spectral.beatStrength,
-                "intensity": intensity,
-                "complexity": complexity
-            ]
+            danceability: calculateDanceability(tempo: spectralFeatures.estimatedTempo, beatStrength: spectralFeatures.beatStrength),
+            acousticness: 1.0 - (spectralFeatures.bassEnergy + spectralFeatures.trebleEnergy) / 2.0,
+            instrumentalness: calculateInstrumentalness(spectralContrast: spectralFeatures.spectralContrast, harmonicRatio: spectralFeatures.harmonicRatio),
+            speechiness: calculateSpeechiness(zeroCrossingRate: spectralFeatures.zeroCrossingRate, spectralFlatness: spectralFeatures.flatness),
+            liveness: calculateLiveness(dynamicRange: spectralFeatures.dynamicRange, crest: spectralFeatures.crest),
+            spectralCentroid: spectralFeatures.centroid,
+            spectralRolloff: spectralFeatures.rolloff,
+            zeroCrossingRate: spectralFeatures.zeroCrossingRate,
+            loudness: calculateLoudness(dynamicRange: spectralFeatures.dynamicRange),
+            dynamicRange: spectralFeatures.dynamicRange
         )
     }
-    
-    private func calculateEnergy(bassEnergy: Float, midEnergy: Float, trebleEnergy: Float, energy: Float = 0) -> Float {
-        // If a pre-calculated energy value is provided, use it as a factor
-        let preCalculatedFactor = energy > 0 ? energy : 1.0
-        
-        // Combine band energies with higher weight on bass and mid
-        let bandEnergy = (bassEnergy * 0.5 + midEnergy * 0.3 + trebleEnergy * 0.2)
-        
-        // Normalize the result to a 0-1 range
-        return min(1.0, bandEnergy * preCalculatedFactor)
-    }
-    
-    private func calculateValence(brightness: Float, harmonicRatio: Float, spectralContrast: Float, spread: Float, centroid: Float) -> Float {
-        // Brightness contributes positively to valence
-        let brightnessContribution = brightness * 0.3
-        
-        // Harmonic ratio contributes positively to valence
-        let harmonicContribution = harmonicRatio * 0.3
-        
-        // Spectral contrast can indicate tonal clarity, which can contribute positively
-        let contrastContribution = min(1.0, spectralContrast / 20.0) * 0.2
-        
-        // Spectral centroid (which correlates with brightness but is more precise)
-        let centroidFactor = normalizeToRange(centroid, min: 500, max: 5000) * 0.2
-        
-        // Combine all factors
-        return min(1.0, brightnessContribution + harmonicContribution + contrastContribution + centroidFactor)
-    }
-    
-    private func calculateIntensity(energy: Float, flux: Float, crest: Float, flatness: Float) -> Float {
-        // Energy is the primary factor in intensity
-        let energyContribution = energy * 0.5
-        
-        // Flux indicates dynamic changes, which contribute to intensity
-        let fluxContribution = min(1.0, flux * 5.0) * 0.3
-        
-        // Crest factor (peak to average ratio) indicates transients
-        let crestContribution = min(1.0, crest / 10.0) * 0.1
-        
-        // Flatness (inverse contributes to intensity)
-        let flatnessContribution = (1.0 - flatness) * 0.1
-        
-        // Combine all factors
-        return min(1.0, energyContribution + fluxContribution + crestContribution + flatnessContribution)
-    }
-    
-    private func calculateComplexity(spectralContrast: Float, spread: Float, irregularity: Float, kurtosis: Float) -> Float {
-        // Spectral contrast indicates tonal vs. noisy content
-        let contrastContribution = min(1.0, spectralContrast / 20.0) * 0.3
-        
-        // Spread indicates how frequencies are distributed
-        let spreadContribution = normalizeToRange(spread, min: 500, max: 5000) * 0.3
-        
-        // Irregularity indicates jaggedness of the spectrum
-        let irregularityContribution = irregularity * 0.2
-        
-        // Kurtosis indicates peakedness of the spectrum
-        let kurtosisContribution = min(1.0, max(0.0, kurtosis / 10.0)) * 0.2
-        
-        // Combine all factors
-        return min(1.0, contrastContribution + spreadContribution + irregularityContribution + kurtosisContribution)
-    }
-    
-    private func calculateWarmth(bassEnergy: Float, midEnergy: Float, trebleEnergy: Float) -> Float {
-        // Warmth is related to the ratio of bass and low-mid to high frequencies
-        let bassContribution = bassEnergy * 0.6
-        let midContribution = midEnergy * 0.3
-        let trebleNegation = (1.0 - trebleEnergy) * 0.1
-        
-        // Combine factors
-        return min(1.0, bassContribution + midContribution + trebleNegation)
-    }
-    
-    private func normalizeToRange(_ value: Float, min: Float, max: Float) -> Float {
-        let normalized = (value - min) / (max - min)
-        return min(1.0, max(0.0, normalized))
-    }
-    
-    private func calculateDanceability(tempo: Float, beatStrength: Float, flux: Float, energy: Float) -> Float {
-        // A good dance track typically has:
-        // 1. Clear, steady beat (high beatStrength)
-        // 2. Tempo in dance-friendly range (approx 90-130 BPM)
-        // 3. Regular energy dynamics (moderate flux)
-        // 4. Sufficient overall energy
-        
-        // Beat strength is very important for danceability
-        let beatContribution = beatStrength * 0.5
-        
-        // Tempo factor - peaks around 120 BPM (typical dance tempo)
-        var tempoFactor: Float = 0
-        if tempo > 0 {
-            // Map tempo to a 0-1 range with peak at 120 BPM
-            let normalizedTempo = max(0, min(1, 1.0 - abs(tempo - 120) / 60))
-            tempoFactor = normalizedTempo * 0.25
-        }
-        
-        // Energy contribution
-        let energyContribution = energy * 0.15
-        
-        // Flux - moderate values are best for dancing
-        // Too static is boring, too chaotic is hard to dance to
-        let normalizedFlux = max(0, min(1, flux * 2)) // Scale flux to useful range
-        let fluxContribution = (1.0 - abs(normalizedFlux - 0.5) * 2) * 0.1
-        
-        return min(1.0, beatContribution + tempoFactor + energyContribution + fluxContribution)
-    }
-    
-    private func calculateAcousticness(spectralFlatness: Float, harmonicRatio: Float, centroid: Float) -> Float {
-        // Acoustic instruments typically have:
-        // 1. Lower spectral flatness (less noise-like)
-        // 2. Higher harmonic ratio (clearer partials)
-        // 3. Moderate spectral centroid (not too bright/harsh)
-        
-        // Low flatness indicates stronger harmonic content (less noise)
-        let flatnessContribution = (1.0 - spectralFlatness) * 0.4
-        
-        // High harmonic ratio indicates clearer tones
-        let harmonicContribution = harmonicRatio * 0.4
-        
-        // Centroid - acoustic instruments tend to have moderate spectral centroid
-        // Normalize centroid to a 0-1 range with peak around 2000-3000 Hz
-        let centroidFactor = 1.0 - abs(normalizeToRange(centroid, min: 500, max: 8000) - 0.3) * 1.5
-        let centroidContribution = max(0, centroidFactor) * 0.2
-        
-        return min(1.0, flatnessContribution + harmonicContribution + centroidContribution)
-    }
-    
-    private func calculateInstrumentalness(spectralIrregularity: Float, spectralFlatness: Float) -> Float {
-        // This is a rough approximation since true instrumentalness detection
-        // requires more sophisticated vocal detection algorithms
-        
-        // Higher irregularity can indicate human voice presence
-        let irregularityFactor = max(0, 1.0 - spectralIrregularity * 2) * 0.5
-        
-        // Higher flatness can indicate noise or electronic sounds
-        let flatnessFactor = spectralFlatness * 0.5
-        
-        return min(1.0, (irregularityFactor + flatnessFactor))
-    }
-    
-    private func calculateSpeechiness(spectralRolloff: Float, zeroCrossingRate: Float) -> Float {
-        // Rough approximation - speech recognition requires more sophisticated analysis
-        
-        // Speech typically has:
-        // 1. Lower spectral rolloff than music
-        // 2. Higher zero crossing rate for consonants
-        
-        // Normalize rolloff to a 0-1 range with lower values favoring speech
-        let rolloffFactor = max(0, 1.0 - normalizeToRange(spectralRolloff, min: 1000, max: 8000)) * 0.6
-        
-        // Normalize ZCR - speech has moderate-to-high values
-        let zcrFactor = min(1.0, zeroCrossingRate * 10) * 0.4
-        
-        return min(1.0, rolloffFactor + zcrFactor) * 0.8 // Scale down as this is approximate
-    }
-    
-    private func calculateLiveness(dynamicRange: Float, crest: Float) -> Float {
-        // Live recordings typically have:
-        // 1. Higher dynamic range
-        // 2. More peaks and transients (higher crest factor)
-        // 3. More ambient noise and room reverberation
-        
-        // Dynamic range contribution
-        let dynamicContribution = min(1.0, dynamicRange * 2) * 0.6
-        
-        // Crest factor contribution (higher for live)
-        let crestContribution = min(1.0, crest / 10.0) * 0.4
-        
-        return min(1.0, dynamicContribution + crestContribution)
-    }
-    
-    private func estimateMode(brightness: Float, valence: Float) -> Float {
-        // This is a simple approximation - true mode detection requires harmonic analysis
-        // Major mode is generally associated with brighter, more positive mood
-        // Minor mode is generally associated with darker, more negative mood
-        
-        // Combine brightness and valence as indicators
-        let modeIndicator = brightness * 0.3 + valence * 0.7
-        
-        // Map to range where values above 0.5 suggest major mode
-        return modeIndicator > 0.5 ? 1.0 : 0.0
-    }
-}
-
-// MARK: - Public Interface
-
-// MARK: - Supporting Types
-
-struct AnalysisOptions: OptionSet {
-    let rawValue: Int
-    
-    static let spectralAnalysis = AnalysisOptions(rawValue: 1 << 0)
-    static let tempoAnalysis = AnalysisOptions(rawValue: 1 << 1)
-    static let pitchAnalysis = AnalysisOptions(rawValue: 1 << 2)
-    
-    static let `default`: AnalysisOptions = [.spectralAnalysis, .tempoAnalysis]
-}
-
-struct PerformanceMetrics {
-    private(set) var analysisCount = 0
-    private(set) var totalDuration: TimeInterval = 0
-    private(set) var averageProcessingTime: TimeInterval = 0
-    
-    mutating func recordAnalysis(duration: TimeInterval, format: String) {
-        analysisCount += 1
-        totalDuration += duration
-        // Update metrics
-    }
-}
-
-// MARK: - AVAudioFile Extension
-
-extension AVAudioFile {
-    var duration: TimeInterval {
-        Double(length) / processingFormat.sampleRate
-    }
-}
-
-/// Handles analysis errors with optional retry
-private func handleAnalysisError(_ error: AudioAnalysisError, retryBlock: @escaping () -> Void, promise: @escaping (Result<AudioFeatures, Error>) -> Void) {
-    logger.error("Analysis error: \(error.localizedDescription, privacy: .public)")
-    
-    // Determine if we should retry based on error type
-    switch error {
-    case .networkUnavailable, .bufferProcessingFailed, .analysisTimeout:
-        // These are potentially transient issues that can be retried
-        retryBlock()
-    case .permissionDenied, .fileNotFound, .invalidAudioFormat, .unsupportedAudioFile, .insufficientAudioData:
-        // These require user intervention
-        promise(.failure(error))
-    case .modelLoadingFailed, .coreMLInferenceFailed:
-        // Model issues are unlikely to be resolved by retry
-        promise(.failure(error))
-    case .deviceResourcesUnavailable:
-        // Cleanup and retry once
-        cleanup()
-        retryBlock()
-    case .serviceUnavailable, .maxRetriesExceeded, .unknown:
-        // Give up
-        promise(.failure(error))
-    }
-}
-
-/// Logs metrics after successful processing
-private func logSuccessMetrics(audioFile: AVAudioFile, processingTime: TimeInterval) {
-    let duration = audioFile.duration
-    let format = audioFile.processingFormat
-    
-    logger.info("""
-        Successfully analyzed audio:
-        - Duration: \(duration, privacy: .public)s
-        - Format: \(format.sampleRate, privacy: .public) Hz, \(format.channelCount, privacy: .public) channels
-        - Processing time: \(processingTime, privacy: .public)s
-        - Processing ratio: \(processingTime / duration, privacy: .public)x realtime
-        - Peak memory: \(memorySamples.max() ?? 0 / 1024 / 1024, privacy: .public) MB
-    """)
 }

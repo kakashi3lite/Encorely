@@ -8,13 +8,14 @@
 
 import Foundation
 import AVFoundation
+import MusicKit
 import Combine
 
 /// Manages audio playback and session handling for the app
 class PlayerManager {
     static let shared = PlayerManager()
     
-    // Main player and observers
+    // Legacy player support
     private(set) var queuePlayer: AVQueuePlayer
     private(set) var statusObserver: PlayerStatusObserver
     private(set) var itemObserver: PlayerItemObserver
@@ -24,6 +25,9 @@ class PlayerManager {
     @Published private(set) var currentSongName = CurrentSongName()
     @Published private(set) var isPlaying = IsPlaying()
     
+    // MusicKit service
+    private let musicKitService = MusicKitService.shared
+    
     private var playerItemObservation: NSKeyValueObservation?
     private var cancellables = Set<AnyCancellable>()
     
@@ -32,6 +36,9 @@ class PlayerManager {
         queuePlayer = AVQueuePlayer()
         statusObserver = PlayerStatusObserver()
         itemObserver = PlayerItemObserver()
+        
+        // Configure MusicKit support
+        configureMusicKitPlayback()
         
         setupAudioSession()
         setupObservers()
