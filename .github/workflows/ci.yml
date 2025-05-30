@@ -1,13 +1,22 @@
-name: AI-Mixtapes CI
+name: CI - AI Mixtapes Modules
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_15.2.app/Contents/Developer
+  FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: 120
+  FASTLANE_XCODEBUILD_SETTINGS_RETRIES: 3
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
     name: Build and Test
     runs-on: macos-latest
     strategy:
@@ -17,27 +26,67 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Ruby for Fastlane
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.2'
+          ruby-version: "3.2"
           bundler-cache: true
-          
+
+      - name: Cache Pods
+        uses: actions/cache@v3
+        with:
+          path: Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
       - name: Install Dependencies
         run: |
           bundle install
-          brew install xcodegen
+          brew install xcodegen swiftlint
           xcodegen generate
-          
-      - name: Run Tests
+
+      - name: Install App Store Connect API Key
+        if: github.event_name != 'pull_request'
+        env:
+          APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          echo "$APP_STORE_CONNECT_KEY" > AuthKey.p8
+          echo "APP_STORE_CONNECT_API_KEY_PATH=$(pwd)/AuthKey.p8" >> $GITHUB_ENV
+          echo "APP_STORE_CONNECT_API_KEY_ID=$APP_STORE_CONNECT_KEY_ID" >> $GITHUB_ENV
+          echo "APP_STORE_CONNECT_ISSUER_ID=$APP_STORE_CONNECT_ISSUER_ID" >> $GITHUB_ENV
+
+      - name: Install Code Signing Certificates
+        if: github.event_name != 'pull_request'
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.IOS_DIST_SIGNING_KEY }}
+          P12_PASSWORD: ${{ secrets.IOS_DIST_SIGNING_KEY_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          PROVISIONING_PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          echo -n "$CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+          security import certificate.p12 -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -d user -s $KEYCHAIN_PATH
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo -n "$PROVISIONING_PROFILE" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+
+      - name: Run Tests and Lint
         env:
           FASTLANE_SKIP_UPDATE_CHECK: true
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          FIREBASE_CLI_TOKEN: ${{ secrets.FIREBASE_CLI_TOKEN }}
         run: |
           bundle exec fastlane tests
           bundle exec fastlane lint
-          
+
       - name: Upload Coverage
         uses: codecov/codecov-action@v4
         with:
@@ -45,26 +94,227 @@ jobs:
           xcode_derived_data: ./DerivedData
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
-          
-  deploy:
+
+  deploy_testflight:
     name: Deploy to TestFlight
     needs: test
-    runs-on: macos-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
+    runs-on: macos-latest
+    env:
+      APPLE_APP_ID: ${{ secrets.APPLE_APP_ID }}
+
     steps:
       - uses: actions/checkout@v4
-      
+        with:
+          fetch-depth: 0
+
       - name: Set up Ruby for Fastlane
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: '3.2'
+          ruby-version: "3.2"
           bundler-cache: true
-          
+
       - name: Deploy to TestFlight
         env:
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD: ${{ secrets.FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD }}
-          APPSTORE_CONNECT_API_KEY_ID: ${{ secrets.APPSTORE_CONNECT_API_KEY_ID }}
-          APPSTORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APPSTORE_CONNECT_API_KEY_CONTENT }}
         run: bundle exec fastlane beta
+
+  deploy_appstore:
+    name: Deploy to App Store
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-latest
+    env:
+      APPLE_APP_ID: ${{ secrets.APPLE_APP_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Ruby for Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Deploy to App Store
+        env:
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+        run: bundle exec fastlane release
+
+  benchmark:
+    name: Performance Benchmarks
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Run Performance Tests
+        run: |
+          echo "[$(date '+%Y-%m-%d %H:%M')] feat(PERF-001): Running performance benchmarks" >> ci_updates.log
+          bundle exec fastlane ios benchmark
+
+      - name: Upload Benchmark Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results
+          path: Build/Reports/**/PerformanceTestReport.md
+
+  mbti-test:
+    name: MBTI Matching Tests
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Run MBTI Tests
+        run: |
+          echo "[$(date '+%Y-%m-%d %H:%M')] feat(MBTI-008): Running MBTI matching tests" >> ci_updates.log
+          bundle exec fastlane ios mbti_tests
+
+      - name: Upload MBTI Test Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: mbti-test-results
+          path: Build/Reports/**/MBTITestReport.md
+
+  musickit-test:
+    name: MusicKit Integration Tests
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Run MusicKit Tests
+        env:
+          MUSICKIT_TOKEN: ${{ secrets.MUSICKIT_DEVELOPER_TOKEN }}
+        run: |
+          echo "[$(date '+%Y-%m-%d %H:%M')] feat(MKT-001): Running MusicKit integration tests" >> ci_updates.log
+          bundle exec fastlane ios musickit_tests
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: musickit-test-results
+          path: Build/Reports/**/MusicKitTestReport.md
+
+  visualization-test:
+    name: Visualization Tests
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Run Visualization Tests
+        run: |
+          echo "[$(date '+%Y-%m-%d %H:%M')] feat(VIS-002): Running visualization component tests" >> ci_updates.log
+          bundle exec fastlane ios visualization_tests
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: visualization-test-results
+          path: Build/Reports/**/VisualizationTestReport.md
+
+  voice-test:
+    name: Voice Recognition Tests
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Run Voice Tests
+        run: |
+          echo "[$(date '+%Y-%m-%d %H:%M")] feat(VOI-003): Running voice recognition tests" >> ci_updates.log
+          bundle exec fastlane ios voice_tests
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: voice-test-results
+          path: Build/Reports/**/VoiceTestReport.md
+
+  offline-cache-test:
+    name: Offline Cache Tests
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Run Offline Cache Tests
+        run: |
+          echo "[$(date '+%Y-%m-%d %H:%M')] feat(OFF-004): Running offline cache validation" >> ci_updates.log
+          bundle exec fastlane ios offline_cache_tests
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: offline-cache-results
+          path: Build/Reports/**/OfflineCacheReport.md
+
+  collaboration-test:
+    name: Collaboration Feature Tests
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Run Collaboration Tests
+        run: |
+          echo "[$(date '+%Y-%m-%d %H:%M')] feat(COL-005): Running collaboration feature tests" >> ci_updates.log
+          bundle exec fastlane ios collaboration_tests
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: collaboration-test-results
+          path: Build/Reports/**/CollaborationTestReport.md

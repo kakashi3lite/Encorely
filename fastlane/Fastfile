@@ -1,6 +1,10 @@
 default_platform(:ios)
 
 platform :ios do
+  before_all do
+    setup_ci if is_ci
+  end
+
   desc "Run unit tests"
   lane :tests do
     run_tests(
@@ -25,6 +29,10 @@ platform :ios do
 
   desc "Build release version"
   lane :build_release do
+    ensure_git_status_clean
+    increment_build_number(
+      build_number: latest_testflight_build_number + 1
+    )
     build_ios_app(
       project: "AI-Mixtapes.xcodeproj",
       scheme: "AI-Mixtapes",
@@ -32,6 +40,7 @@ platform :ios do
       clean: true,
       export_method: "app-store"
     )
+    commit_version_bump
   end
 
   desc "Run SwiftLint"
@@ -40,6 +49,212 @@ platform :ios do
       mode: :lint,
       config_file: ".swiftlint.yml",
       strict: true
+    )
+  end
+
+  desc "Beta deployment to TestFlight"
+  lane :beta do
+    ensure_git_branch(branch: 'main')
+    build_release
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+      apple_id: ENV["APPLE_APP_ID"],
+      distribute_external: true,
+      changelog: read_changelog,
+      groups: ["External Testers"]
+    )
+  end
+
+  desc "Release to App Store"
+  lane :release do
+    ensure_git_branch(branch: 'main')
+    build_release
+    deliver(
+      submit_for_review: true,
+      automatic_release: true,
+      force: true,
+      skip_metadata: false,
+      skip_screenshots: false,
+      submission_information: {
+        add_id_info_serves_ads: false,
+        add_id_info_tracks_action: true,
+        add_id_info_tracks_install: true,
+        add_id_info_uses_idfa: true,
+        content_rights_contains_third_party_content: false,
+        export_compliance_platform: 'ios',
+        export_compliance_compliance_required: false,
+        export_compliance_encryption_updated: false,
+        export_compliance_uses_encryption: false
+      }
+    )
+  end
+
+  desc "Run performance benchmarks"
+  lane :benchmark do
+    test_log = "Running performance benchmarks..."
+    UI.message test_log
+    File.open("../ci_updates.log", "a") { |f| f.puts "[#{Time.now.strftime('%Y-%m-%d %H:%M')}] test(PERF-001): #{test_log}" }
+    
+    run_tests(
+      project: "AI-Mixtapes.xcodeproj",
+      scheme: "AI-Mixtapes",
+      testplan: "AI-Mixtapes.xctestplan",
+      only_testing: [
+        "AIMixtapesTests/PerformanceTests"
+      ],
+      result_bundle: true,
+      output_directory: "Build/Reports"
+    )
+  end
+  
+  desc "Run MBTI matching tests"
+  lane :mbti_tests do
+    test_log = "Running MBTI matching algorithm tests..."
+    UI.message test_log
+    File.open("../ci_updates.log", "a") { |f| f.puts "[#{Time.now.strftime('%Y-%m-%d %H:%M')}] test(MBTI-008): #{test_log}" }
+    
+    run_tests(
+      project: "AI-Mixtapes.xcodeproj",
+      scheme: "AI-Mixtapes",
+      testplan: "AI-Mixtapes.xctestplan",
+      only_testing: [
+        "AIMixtapesTests/MBTIMatchingTests"
+      ],
+      result_bundle: true,
+      output_directory: "Build/Reports"
+    )
+  end
+
+  desc "Run MusicKit integration tests"
+  lane :musickit_tests do
+    test_log = "Running MusicKit integration tests..."
+    UI.message test_log
+    File.open("../ci_updates.log", "a") { |f| f.puts "[#{Time.now.strftime('%Y-%m-%d %H:%M')}] test(MKT-001): #{test_log}" }
+    
+    run_tests(
+      project: "AI-Mixtapes.xcodeproj",
+      scheme: "AI-Mixtapes",
+      testplan: "AI-Mixtapes.xctestplan",
+      only_testing: [
+        "AIMixtapesTests/MusicKitTests"
+      ],
+      result_bundle: true,
+      output_directory: "Build/Reports"
+    )
+  end
+
+  desc "Run visualization tests"
+  lane :visualization_tests do
+    test_log = "Running visualization component tests..."
+    UI.message test_log
+    File.open("../ci_updates.log", "a") { |f| f.puts "[#{Time.now.strftime('%Y-%m-%d %H:%M')}] test(VIS-002): #{test_log}" }
+    
+    run_tests(
+      project: "AI-Mixtapes.xcodeproj",
+      scheme: "AI-Mixtapes",
+      testplan: "AI-Mixtapes.xctestplan",
+      only_testing: [
+        "AIMixtapesTests/VisualizationTests"
+      ],
+      result_bundle: true,
+      output_directory: "Build/Reports"
+    )
+  end
+
+  desc "Run voice recognition tests"
+  lane :voice_tests do
+    test_log = "Running voice recognition tests..."
+    UI.message test_log
+    File.open("../ci_updates.log", "a") { |f| f.puts "[#{Time.now.strftime('%Y-%m-%d %H:%M')}] test(VOI-003): #{test_log}" }
+    
+    run_tests(
+      project: "AI-Mixtapes.xcodeproj",
+      scheme: "AI-Mixtapes",
+      testplan: "AI-Mixtapes.xctestplan",
+      only_testing: [
+        "AIMixtapesTests/VoiceRecognitionTests"
+      ],
+      result_bundle: true,
+      output_directory: "Build/Reports"
+    )
+  end
+
+  desc "Run offline cache tests"
+  lane :offline_cache_tests do
+    test_log = "Running offline cache validation..."
+    UI.message test_log
+    File.open("../ci_updates.log", "a") { |f| f.puts "[#{Time.now.strftime('%Y-%m-%d %H:%M')}] test(OFF-004): #{test_log}" }
+    
+    run_tests(
+      project: "AI-Mixtapes.xcodeproj",
+      scheme: "AI-Mixtapes",
+      testplan: "AI-Mixtapes.xctestplan",
+      only_testing: [
+        "AIMixtapesTests/OfflineCacheTests"
+      ],
+      result_bundle: true,
+      output_directory: "Build/Reports"
+    )
+  end
+
+  desc "Run collaboration feature tests"
+  lane :collaboration_tests do
+    test_log = "Running collaboration feature tests..."
+    UI.message test_log
+    File.open("../ci_updates.log", "a") { |f| f.puts "[#{Time.now.strftime('%Y-%m-%d %H:%M')}] test(COL-005): #{test_log}" }
+    
+    run_tests(
+      project: "AI-Mixtapes.xcodeproj",
+      scheme: "AI-Mixtapes",
+      testplan: "AI-Mixtapes.xctestplan",
+      only_testing: [
+        "AIMixtapesTests/CollaborationTests"
+      ],
+      result_bundle: true,
+      output_directory: "Build/Reports"
+    )
+  end
+
+  desc "Deploy to TestFlight"
+  lane :deploy_testflight do
+    ensure_git_status_clean
+    
+    # Increment build number
+    current_build = latest_testflight_build_number(
+      app_identifier: "com.aimixtapes.app"
+    )
+    increment_build_number(
+      build_number: current_build + 1
+    )
+    
+    # Log deployment start
+    deploy_log = "Starting TestFlight deployment..."
+    UI.message deploy_log
+    File.open("../ci_updates.log", "a") { |f| f.puts "[#{Time.now.strftime('%Y-%m-%d %H:%M')}] deploy(CI-007): #{deploy_log}" }
+    
+    # Build and upload
+    build_ios_app(
+      scheme: "AI-Mixtapes",
+      configuration: "Release",
+      clean: true,
+      export_method: "app-store",
+      include_bitcode: false,
+      include_symbols: true
+    )
+    
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+      changelog: "New features and improvements:\n- MusicKit integration\n- Voice recognition\n- Offline cache\n- Collaboration features"
+    )
+    
+    # Log completion
+    complete_log = "TestFlight deployment complete"
+    UI.success complete_log
+    File.open("../ci_updates.log", "a") { |f| f.puts "[#{Time.now.strftime('%Y-%m-%d %H:%M')}] deploy(CI-007): #{complete_log}" }
+    
+    # Commit version bump
+    commit_version_bump(
+      message: "ci(version): bump build number [skip ci]"
     )
   end
 end
