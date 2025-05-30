@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import Combine
+import Domain
 
 struct AudioVisualizationView: View {
     // MARK: - Properties
