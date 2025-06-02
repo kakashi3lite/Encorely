@@ -22,10 +22,24 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         return container
     }()
     
+    private func setupAudioSession() {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playAndRecord, mode: .default, 
+                                  options: [.mixWithOthers, .allowBluetooth, .defaultToSpeaker])
+            try session.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            print("Failed to setup audio session: \(error.localizedDescription)")
+        }
+    }
+
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Initialize services
         player = AVQueuePlayer()
         aiService = AIIntegrationService(context: persistentContainer.viewContext)
+        
+        // Setup audio session for background processing
+        setupAudioSession()
         siriService = SiriIntegrationService(aiService: aiService, player: player, context: persistentContainer.viewContext)
         
         // Request Siri authorization

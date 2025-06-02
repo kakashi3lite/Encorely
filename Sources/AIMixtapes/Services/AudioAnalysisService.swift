@@ -187,6 +187,16 @@ class AudioAnalysisService: ObservableObject {
     @Published private(set) var analysisHistory: [URL: AudioFeatures] = [:]
     @Published private(set) var performanceReport: String = ""
     
+    // Background task support
+    private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+    private let analysisTimeout: TimeInterval = 180 // 3 minutes
+    private var lastCheckpointTime: Date?
+    private let checkpointInterval: TimeInterval = 30 // Save state every 30 seconds
+    
+    // State persistence
+    private let stateQueue = DispatchQueue(label: "com.aimixtapes.state", qos: .utility)
+    private let stateKey = "AudioAnalysisState"
+    
     private let audioQueue = DispatchQueue(label: "com.aimixtapes.audioanalysis", qos: .userInitiated)
     private let analysisBufferSize = 4096
     private var audioEngine: AVAudioEngine?
@@ -249,63 +259,76 @@ class AudioAnalysisService: ObservableObject {
     private func checkMemoryPressure() {
         let currentMemory = totalMemoryUsage
         
-        // Add to samples for tracking
+        // Add to samples for memory trend analysis
         if memorySamples.count >= maxMemorySamples {
             memorySamples.removeFirst()
         }
         memorySamples.append(currentMemory)
         
-        // Calculate pressure level
+        // Calculate pressure and trend
         let pressure = Double(currentMemory) / Double(maxMemoryUsage)
+        let trend = calculateMemoryTrend()
         
-        if pressure > 0.9 {
+        // Progressive cleanup based on pressure and trend
+        switch (pressure, trend) {
+        case (0.9..., _):
             logger.warning("Critical memory pressure: \(pressure * 100, privacy: .public)%")
             performEmergencyCleanup()
-        } else if pressure > 0.8 {
+        case (0.8..., .increasing):
+            logger.warning("High memory pressure with increasing trend")
+            handleHighMemoryUsage()
+        case (0.8..., _):
             logger.warning("High memory pressure: \(pressure * 100, privacy: .public)%")
             performGradualCleanup()
-        } else if pressure > 0.7 {
+        case (0.7..., .increasing):
             if shouldPerformRoutineCleanup() {
                 performRoutineCleanup()
             }
+        default:
+            break
         }
     }
     
-    private func shouldPerformRoutineCleanup() -> Bool {
-        guard let lastCleanup = lastCleanupTime else { return true }
-        return Date().timeIntervalSince(lastCleanup) >= cleanupInterval
+    private enum MemoryTrend {
+        case increasing, stable, decreasing
     }
     
-    private func performRoutineCleanup() {
-        bufferLock.lock()
-        defer { bufferLock.unlock() }
+    private func calculateMemoryTrend() -> MemoryTrend {
+        guard memorySamples.count >= 3 else { return .stable }
         
-        // Remove old buffers
-        let oldBuffers = activeBuffers.filter { $0.idleTime > 30 }
-        for buffer in oldBuffers {
-            untrackBuffer(buffer)
+        let recentSamples = memorySamples.suffix(3)
+        let differences = zip(recentSamples.dropLast(), recentSamples.dropFirst())
+            .map { $1 - $0 }
+        
+        let avgDifference = differences.reduce(0, +) / Int64(differences.count)
+        let threshold = Int64(maxMemoryUsage) / 100 // 1% change threshold
+        
+        if avgDifference > threshold {
+            return .increasing
+        } else if avgDifference < -threshold {
+            return .decreasing
         }
-        
-        lastCleanupTime = Date()
+        return .stable
     }
     
     private func performGradualCleanup() {
         bufferLock.lock()
         defer { bufferLock.unlock() }
         
-        // Sort buffers by idle time
+        let targetUsage = maxMemoryUsage * 3/4
         let sortedBuffers = activeBuffers.sorted { $0.idleTime > $1.idleTime }
         
-        // Remove half of the oldest buffers
-        let removeCount = sortedBuffers.count / 2
-        for buffer in sortedBuffers.prefix(removeCount) {
+        // Remove buffers gradually until target is reached
+        for buffer in sortedBuffers {
+            if totalMemoryUsage <= targetUsage {
+                break
+            }
             untrackBuffer(buffer)
         }
         
-        // Reduce pool size
-        audioBufferPool.reducePoolSize()
-        
+        // Update metrics
         lastCleanupTime = Date()
+        audioBufferPool.reducePoolSize()
     }
     
     private func performEmergencyCleanup() {
@@ -432,12 +455,10 @@ class AudioAnalysisService: ObservableObject {
         }
     }
     
-    /// Analyze audio file with robust error handling and progress updates
-    /// - Parameters:
-    ///   - url: URL of the audio file
-    ///   - options: Analysis options
-    /// - Returns: Publisher with analysis results or error
-    func analyzeAudio(at url: URL, options: AnalysisOptions = .default) -> AnyPublisher<AudioFeatures, Error> {
+    // MARK: - Public Methods
+    
+    /// Analyze audio file with background processing support
+    func analyze(url: URL, options: AnalysisOptions = .defaultOptions) -> AnyPublisher<AudioFeatures, Error> {
         Deferred {
             Future { [weak self] promise in
                 guard let self = self else {
@@ -445,364 +466,254 @@ class AudioAnalysisService: ObservableObject {
                     return
                 }
                 
-                self.audioQueue.async {
-                    self.performAnalysis(url: url, options: options, promise: promise)
+                // Start background task
+                self.beginBackgroundTask()
+                
+                // Begin analysis
+                self.isAnalyzing = true
+                self.progress = 0
+                
+                // Track analysis start
+                self.logger.info("Starting analysis of \(url.lastPathComponent)")
+                
+                do {
+                    // Check for cached results
+                    if let cachedFeatures = self.analysisHistory[url] {
+                        self.logger.info("Using cached analysis for \(url.lastPathComponent)")
+                        promise(.success(cachedFeatures))
+                        self.endBackgroundTask()
+                        return
+                    }
+                    
+                    // Setup audio session
+                    try self.setupAudioSession()
+                    
+                    // Load and validate audio file
+                    guard let audioFile = try? self.loadAudioFile(url: url) else {
+                        throw AudioAnalysisError.fileNotFound(url)
+                    }
+                    
+                    // Process audio in chunks to avoid memory pressure
+                    let features = try self.processAudioChunks(audioFile: audioFile, options: options)
+                    
+                    // Update state
+                    DispatchQueue.main.async {
+                        self.analysisHistory[url] = features
+                        self.currentFeatures = features
+                        self.progress = 1.0
+                        self.isAnalyzing = false
+                    }
+                    
+                    // Save final state
+                    self.saveState()
+                    
+                    // End background task
+                    self.endBackgroundTask()
+                    
+                    promise(.success(features))
+                    
+                } catch let error as AudioAnalysisError {
+                    self.handleAnalysisError(error, url: url, promise: promise)
+                } catch {
+                    promise(.failure(AudioAnalysisError.unknown(error)))
+                    self.endBackgroundTask()
                 }
             }
         }
-        .handleEvents(
-            receiveSubscription: { [weak self] _ in
-                self?.isAnalyzing = true
-                self?.processStartTime = Date()
-                self?.progress = 0
-            },
-            receiveCompletion: { [weak self] _ in
-                self?.isAnalyzing = false
-                self?.cleanup()
-                self?.updatePerformanceReport()
-            },
-            receiveCancel: { [weak self] in
-                self?.cancelAnalysis()
-            }
-        )
         .receive(on: DispatchQueue.main)
         .eraseToAnyPublisher()
     }
     
-    /// Analyze a short audio segment for real-time processing
-    /// - Parameter buffer: Audio buffer to analyze
-    /// - Returns: Extracted audio features
-    func analyzeAudioBuffer(_ buffer: AVAudioPCMBuffer) -> AudioFeatures? {
-        guard !isAnalyzing else { return nil }
-        
-        // Track buffer for memory management
-        trackBuffer(buffer)
-        
-        // Process with FFT
-        guard let spectralFeatures = fftProcessor.analyzeSpectralFeatures(buffer) else {
-            untrackBuffer(buffer)
-            return nil
-        }
-        
-        // Create audio features from spectral features
-        let features = convertToAudioFeatures(from: spectralFeatures)
-        
-        // Untrack buffer when done
-        untrackBuffer(buffer)
-        
-        // Update current features
-        DispatchQueue.main.async {
-            self.currentFeatures = features
-        }
-        
-        return features
-    }
-    
-    /// Cancels any ongoing analysis
-    private func cancelAnalysis() {
-        logger.info("Analysis operation cancelled")
-        
-        // Cancel any running operations
-        analysisCancel?.cancel()
-        analysisCancel = nil
-        
-        // Stop audio engine if running
-        if let engine = audioEngine, engine.isRunning {
-            engine.stop()
-        }
-        
-        // Set analyzing flag to false
-        DispatchQueue.main.async {
-            self.isAnalyzing = false
-            self.progress = 0
-        }
-        
-        // Clean up resources
-        cleanup()
-    }
-    
-    /// Cancels any ongoing analysis and cleans up resources
-    private func cancelAnalysis() {
-        logger.info("Analysis operation cancelled")
-        
-        // Cancel any running operations
-        analysisCancel?.cancel()
-        analysisCancel = nil
-        
-        // Stop audio engine if running
-        if let engine = audioEngine, engine.isRunning {
-            engine.stop()
-        }
-        
-        // Set analyzing flag to false
-        DispatchQueue.main.async {
-            self.isAnalyzing = false
-            self.progress = 0
-        }
-        
-        // Clean up resources
-        cleanup()
-    }
-    
-    /// Returns performance statistics
-    func getPerformanceStatistics() -> String {
-        return performanceMetrics.generateReport()
-    }
-    
-    // MARK: - Private Implementation
-    
-    private func performAnalysis(url: URL, options: AnalysisOptions, promise: @escaping (Result<AudioFeatures, Error>) -> Void) {
-        var retryCount = 0
-        
-        func retry() {
-            guard retryCount < maxRetries else {
-                promise(.failure(AudioAnalysisError.maxRetriesExceeded))
-                return
-            }
-            
-            retryCount += 1
-            logger.info("Retrying analysis (attempt \(retryCount)/\(maxRetries))")
-            
-            DispatchQueue.global().asyncAfter(deadline: .now() + retryDelay) {
-                self.performAnalysis(url: url, options: options, promise: promise)
-            }
-        }
-        
-        do {
-            // Check if we already have processed this file
-            if let cachedFeatures = analysisHistory[url] {
-                logger.info("Using cached analysis for \(url.lastPathComponent)")
-                promise(.success(cachedFeatures))
-                return
-            }
-            
-            // Setup audio session
-            try setupAudioSession()
-            
-            // Load and validate audio file
-            guard let audioFile = try? loadAudioFile(url: url) else {
-                throw AudioAnalysisError.fileNotFound(url)
-            }
-            
-            // Process audio in chunks
-            let features = try processAudioChunks(audioFile: audioFile, options: options)
-            
-            // Cache the results
-            DispatchQueue.main.async {
-                self.analysisHistory[url] = features
-                self.currentFeatures = features
-            }
-            
-            // Log success metrics
-            let processingTime = processStartTime != nil ? Date().timeIntervalSince(processStartTime!) : 0
-            logSuccessMetrics(audioFile: audioFile, processingTime: processingTime)
-            
-            promise(.success(features))
-        } catch let error as AudioAnalysisError {
-            handleAnalysisError(error, retryBlock: retry, promise: promise)
-        } catch {
-            promise(.failure(AudioAnalysisError.unknown(error)))
-        }
-    }
-    
-    private func setupAudioSession() throws {
-        let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playback, mode: .default)
-        try session.setActive(true)
-    }
-    
-    private func loadAudioFile(url: URL) throws -> AVAudioFile {
-        guard let file = try? AVAudioFile(forReading: url) else {
-            throw AudioAnalysisError.fileNotFound(url)
-        }
-        return file
-    }
-    
     private func processAudioChunks(audioFile: AVAudioFile, options: AnalysisOptions) throws -> AudioFeatures {
         let format = audioFile.processingFormat
-        let channelCount = format.channelCount
+        let frameCount = UInt32(audioFile.length)
+        let totalChunks = Int(ceil(Double(frameCount) / Double(analysisBufferSize)))
+        var processedChunks = 0
         
-        // Configure buffer
-        let bufferSize = AVAudioFrameCount(analysisBufferSize)
-        let buffer = getOrCreateBuffer(with: format, frameCapacity: bufferSize)
+        // Create aggregate features
+        var aggregateFeatures = AudioFeatures()
         
-        var totalFrames: AVAudioFrameCount = 0
-        let frameCount = audioFile.length
-        
-        // Initialize result containers
-        var allSpectralFeatures: [SpectralFeatures] = []
-        var energyValues: [Float] = []
-        var peakValues: [Float] = []
-        
-        // Check if we have enough audio to analyze
-        if frameCount < bufferSize {
-            throw AudioAnalysisError.insufficientAudioData
-        }
-        
-        // Process audio in chunks
-        while totalFrames < frameCount {
-            try autoreleasepool {
-                // Reset buffer
-                buffer.frameLength = 0
-                
-                // Read chunk
-                do {
-                    try audioFile.read(into: buffer)
-                } catch {
-                    throw AudioAnalysisError.bufferProcessingFailed("Failed to read audio chunk: \(error.localizedDescription)")
-                }
-                
-                // Track buffer for memory management
-                trackBuffer(buffer)
-                
-                // Process spectral features
-                if options.contains(.spectralAnalysis) {
-                    if let features = fftProcessor.analyzeSpectralFeatures(buffer) {
-                        allSpectralFeatures.append(features)
-                    }
-                }
-                
-                // Process energy features
-                if let channelData = buffer.floatChannelData {
-                    let rms = processAudioRMS(channelData, channelCount: channelCount, frameLength: buffer.frameLength)
-                    energyValues.append(rms)
-                    
-                    // Find peak value
-                    var peak: Float = 0
-                    vDSP_maxv(channelData[0], 1, &peak, vDSP_Length(buffer.frameLength))
-                    peakValues.append(peak)
-                }
-                
-                // Untrack buffer when done with this chunk
-                untrackBuffer(buffer)
-                
-                // Track memory usage
-                sampleMemoryUsage()
-                
-                // Update progress
-                totalFrames += buffer.frameLength
-                updateProgress(Double(totalFrames) / Double(frameCount))
+        // Process in chunks
+        for chunkIndex in 0..<totalChunks {
+            // Update progress
+            let progress = Double(chunkIndex) / Double(totalChunks)
+            DispatchQueue.main.async {
+                self.progress = progress
             }
-        }
-        
-        // Combine all features into final result
-        return createFinalFeatures(
-            spectralFeatures: allSpectralFeatures,
-            energyValues: energyValues,
-            peakValues: peakValues,
-            tempo: options.contains(.tempoAnalysis) ? estimateTempo(energyValues: energyValues, sampleRate: Float(format.sampleRate), bufferSize: Int(bufferSize)) : nil
-        )
-    }
-    
-    private func processAudioRMS(_ channelData: UnsafePointer<UnsafeMutablePointer<Float>>, channelCount: AVAudioChannelCount, frameLength: AVAudioFrameCount) -> Float {
-        // Process audio data using vDSP for efficiency
-        var rms: Float = 0
-        vDSP_rmsqv(channelData[0], 1, &rms, vDSP_Length(frameLength))
-        return rms
-    }
-    
-    private func estimateTempo(energyValues: [Float], sampleRate: Float, bufferSize: Int) -> Float? {
-        // Simple onset detection and tempo estimation
-        guard energyValues.count > 1 else { return nil }
-        
-        // Calculate energy differences to detect onsets
-        var diffs: [Float] = []
-        for i in 1..<energyValues.count {
-            diffs.append(max(0, energyValues[i] - energyValues[i-1]))
-        }
-        
-        // Apply threshold to find significant onsets
-        let mean = diffs.reduce(0, +) / Float(diffs.count)
-        let threshold = mean * 1.5
-        var onsets: [Int] = []
-        
-        for i in 0..<diffs.count {
-            if diffs[i] > threshold {
-                onsets.append(i)
-            }
-        }
-        
-        // Calculate inter-onset intervals
-        guard onsets.count > 1 else { return 120.0 } // Default tempo if we can't detect
-        
-        var intervals: [Int] = []
-        for i in 1..<onsets.count {
-            intervals.append(onsets[i] - onsets[i-1])
-        }
-        
-        // Calculate average interval in frames
-        let avgInterval = Float(intervals.reduce(0, +)) / Float(intervals.count)
-        
-        // Convert to tempo (beats per minute)
-        // frames per beat / (frames per second) * 60 seconds = beats per minute
-        let framesPerSecond = sampleRate / Float(bufferSize)
-        let tempo = (framesPerSecond * 60.0) / avgInterval
-        
-        return max(min(tempo, 240.0), 40.0) // Clamp to reasonable range
-    }
-    
-    private func createFinalFeatures(spectralFeatures: [SpectralFeatures], energyValues: [Float], peakValues: [Float], tempo: Float?) -> AudioFeatures {
-        // Calculate averages from all the gathered data
-        let avgEnergy = energyValues.reduce(0, +) / Float(max(1, energyValues.count))
-        let peakEnergy = peakValues.max() ?? 0
-        
-        // Create a combined spectral features set with averaged values
-        var combinedSpectralFeatures = SpectralFeatures()
-        
-        if !spectralFeatures.isEmpty {
-            // Calculate spectral averages
-            combinedSpectralFeatures.centroid = spectralFeatures.reduce(0) { $0 + $1.centroid } / Float(spectralFeatures.count)
-            combinedSpectralFeatures.spread = spectralFeatures.reduce(0) { $0 + $1.spread } / Float(spectralFeatures.count)
-            combinedSpectralFeatures.rolloff = spectralFeatures.reduce(0) { $0 + $1.rolloff } / Float(spectralFeatures.count)
-            combinedSpectralFeatures.flux = spectralFeatures.reduce(0) { $0 + $1.flux } / Float(spectralFeatures.count)
-            combinedSpectralFeatures.bassEnergy = spectralFeatures.reduce(0) { $0 + $1.bassEnergy } / Float(spectralFeatures.count)
-            combinedSpectralFeatures.midEnergy = spectralFeatures.reduce(0) { $0 + $1.midEnergy } / Float(spectralFeatures.count)
-            combinedSpectralFeatures.trebleEnergy = spectralFeatures.reduce(0) { $0 + $1.trebleEnergy } / Float(spectralFeatures.count)
-            combinedSpectralFeatures.brightness = spectralFeatures.reduce(0) { $0 + $1.brightness } / Float(spectralFeatures.count)
-            combinedSpectralFeatures.flatness = spectralFeatures.reduce(0) { $0 + $1.flatness } / Float(spectralFeatures.count)
-            combinedSpectralFeatures.crest = spectralFeatures.reduce(0) { $0 + $1.crest } / Float(spectralFeatures.count)
-            combinedSpectralFeatures.irregularity = spectralFeatures.reduce(0) { $0 + $1.irregularity } / Float(spectralFeatures.count)
-            combinedSpectralFeatures.skewness = spectralFeatures.reduce(0) { $0 + $1.skewness } / Float(spectralFeatures.count)
-            combinedSpectralFeatures.kurtosis = spectralFeatures.reduce(0) { $0 + $1.kurtosis } / Float(spectralFeatures.count)
             
-            // Set estimated tempo if we calculated it
-            if let calculatedTempo = tempo {
-                combinedSpectralFeatures.estimatedTempo = calculatedTempo
+            // Check for background task expiration
+            if backgroundTask == .invalid {
+                throw AudioAnalysisError.deviceResourcesUnavailable
             }
+            
+            // Save state periodically
+            checkpointIfNeeded()
+            
+            // Process chunk
+            let chunkSize = min(analysisBufferSize, frameCount - UInt32(chunkIndex * analysisBufferSize))
+            let buffer = try processChunk(size: chunkSize, offset: UInt32(chunkIndex * analysisBufferSize))
+            
+            // Aggregate features
+            if let chunkFeatures = extractFeaturesFromBuffer(buffer) {
+                aggregateFeatures.updateWith(features: chunkFeatures)
+            }
+            
+            processedChunks += 1
         }
         
-        return convertToAudioFeatures(from: combinedSpectralFeatures, withEnergy: avgEnergy, tempo: tempo)
+        return aggregateFeatures
     }
     
-    private func convertToAudioFeatures(from spectralFeatures: SpectralFeatures) -> AudioFeatures {
-        // Calculate core features
-        let energy = calculateEnergy(
-            bassEnergy: spectralFeatures.bassEnergy,
-            midEnergy: spectralFeatures.midEnergy,
-            trebleEnergy: spectralFeatures.trebleEnergy
+    private func handleAnalysisError(_ error: AudioAnalysisError, url: URL, promise: @escaping (Result<AudioFeatures, Error>) -> Void) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            self.isAnalyzing = false
+            self.progress = 0
+            
+            // Log error
+            self.logger.error("Analysis failed for \(url.lastPathComponent): \(error.localizedDescription)")
+            
+            // Attempt recovery for certain errors
+            switch error {
+            case .deviceResourcesUnavailable:
+                // Save state and retry later
+                self.saveState()
+                promise(.failure(error))
+                
+            case .analysisTimeout:
+                // Save progress and allow resume
+                self.saveState()
+                promise(.failure(error))
+                
+            default:
+                promise(.failure(error))
+            }
+            
+            self.endBackgroundTask()
+        }
+    }
+}
+
+// MARK: - Background Task Management
+
+extension AudioAnalysisService {
+    private func beginBackgroundTask() {
+        // End any existing background task
+        if backgroundTask != .invalid {
+            UIApplication.shared.endBackgroundTask(backgroundTask)
+        }
+        
+        // Start new background task
+        backgroundTask = UIApplication.shared.beginBackgroundTask { [weak self] in
+            self?.handleBackgroundTaskExpiration()
+        }
+        
+        // Start state checkpoint timer
+        lastCheckpointTime = Date()
+        
+        // Schedule analysis timeout
+        audioQueue.asyncAfter(deadline: .now() + analysisTimeout) { [weak self] in
+            self?.handleAnalysisTimeout()
+        }
+    }
+    
+    private func endBackgroundTask() {
+        if backgroundTask != .invalid {
+            saveState()
+            UIApplication.shared.endBackgroundTask(backgroundTask)
+            backgroundTask = .invalid
+        }
+    }
+    
+    private func handleBackgroundTaskExpiration() {
+        // Save state before expiration
+        saveState()
+        
+        // Pause analysis
+        isAnalyzing = false
+        
+        // Notify user
+        NotificationCenter.default.post(
+            name: .audioServicePaused,
+            object: AudioAnalysisError.deviceResourcesUnavailable
         )
         
-        let valence = calculateValence(
-            brightness: spectralFeatures.brightness,
-            harmonicRatio: spectralFeatures.harmonicRatio,
-            spectralContrast: spectralFeatures.spectralContrast
+        // End task
+        if backgroundTask != .invalid {
+            UIApplication.shared.endBackgroundTask(backgroundTask)
+            backgroundTask = .invalid
+        }
+    }
+    
+    private func handleAnalysisTimeout() {
+        guard isAnalyzing else { return }
+        
+        // Save final state
+        saveState()
+        
+        // Stop analysis
+        isAnalyzing = false
+        
+        // Notify timeout
+        NotificationCenter.default.post(
+            name: .audioServiceTimeout,
+            object: AudioAnalysisError.analysisTimeout
         )
         
-        // Create AudioFeatures instance
-        return AudioFeatures(
-            tempo: spectralFeatures.estimatedTempo,
-            energy: energy,
-            valence: valence,
-            danceability: calculateDanceability(tempo: spectralFeatures.estimatedTempo, beatStrength: spectralFeatures.beatStrength),
-            acousticness: 1.0 - (spectralFeatures.bassEnergy + spectralFeatures.trebleEnergy) / 2.0,
-            instrumentalness: calculateInstrumentalness(spectralContrast: spectralFeatures.spectralContrast, harmonicRatio: spectralFeatures.harmonicRatio),
-            speechiness: calculateSpeechiness(zeroCrossingRate: spectralFeatures.zeroCrossingRate, spectralFlatness: spectralFeatures.flatness),
-            liveness: calculateLiveness(dynamicRange: spectralFeatures.dynamicRange, crest: spectralFeatures.crest),
-            spectralCentroid: spectralFeatures.centroid,
-            spectralRolloff: spectralFeatures.rolloff,
-            zeroCrossingRate: spectralFeatures.zeroCrossingRate,
-            loudness: calculateLoudness(dynamicRange: spectralFeatures.dynamicRange),
-            dynamicRange: spectralFeatures.dynamicRange
-        )
+        endBackgroundTask()
+    }
+    
+    // MARK: - State Management
+    
+    private func saveState() {
+        stateQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            let state = AudioAnalysisState(
+                isAnalyzing: self.isAnalyzing,
+                progress: self.progress,
+                currentFeatures: self.currentFeatures,
+                analysisHistory: self.analysisHistory
+            )
+            
+            if let encodedState = try? JSONEncoder().encode(state) {
+                UserDefaults.standard.set(encodedState, forKey: self.stateKey)
+            }
+            
+            self.lastCheckpointTime = Date()
+            self.logger.info("Analysis state saved at progress: \(self.progress)")
+        }
+    }
+    
+    private func restoreState() {
+        stateQueue.async { [weak self] in
+            guard let self = self,
+                  let encodedState = UserDefaults.standard.data(forKey: self.stateKey),
+                  let state = try? JSONDecoder().decode(AudioAnalysisState.self, from: encodedState)
+            else { return }
+            
+            DispatchQueue.main.async {
+                self.isAnalyzing = state.isAnalyzing
+                self.progress = state.progress
+                self.currentFeatures = state.currentFeatures
+                self.analysisHistory = state.analysisHistory
+                
+                self.logger.info("Analysis state restored at progress: \(self.progress)")
+                
+                if self.isAnalyzing {
+                    // Resume analysis if it was in progress
+                    self.beginBackgroundTask()
+                }
+            }
+        }
+    }
+    
+    private func checkpointIfNeeded() {
+        guard let lastCheckpoint = lastCheckpointTime,
+              Date().timeIntervalSince(lastCheckpoint) >= checkpointInterval
+        else { return }
+        
+        saveState()
     }
 }
