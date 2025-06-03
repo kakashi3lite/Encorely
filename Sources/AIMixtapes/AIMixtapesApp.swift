@@ -1,10 +1,29 @@
 import SwiftUI
+import AudioKit
+import SoundpipeAudioKit
+import MusicKitModule
+import AudioAnalysisModule
 
 @main
 struct AIMixtapesApp: App {
+    // Services
+    private let container = DIContainer.shared
+    
+    // State Objects
+    @StateObject private var appState = AppState()
+    @StateObject private var performanceMonitor = PerformanceMonitor.shared
+    
+    init() {
+        setupAppearance()
+    }
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(\.managedObjectContext, container.viewContext)
+                .environmentObject(appState)
+                .environmentObject(container.audioProcessor)
+                .environmentObject(performanceMonitor)
                 .trackPerformance(identifier: "main_view_lifecycle")
                 .onAppear {
                     setupPerformanceMonitoring()

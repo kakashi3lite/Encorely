@@ -39,15 +39,15 @@
     {
       "target" : {
         "containerPath" : "container:AI-Mixtapes.xcodeproj",
-        "identifier" : "88F2A6922B3D7C0200E11D98",
+        "identifier" : "FB55C1259397BFFE0D5F3632",
         "name" : "AI-MixtapesTests"
       }
     },
     {
       "target" : {
         "containerPath" : "container:AI-Mixtapes.xcodeproj",
-        "identifier" : "00E356ED1AD99517003FC87E",
-        "name" : "AIMixtapesTests"
+        "identifier" : "869E03C6AE505D23C28DB3CF",
+        "name" : "AI-MixtapesUITests"
       }
     },
     {

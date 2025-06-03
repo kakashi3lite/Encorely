@@ -2,6 +2,7 @@ import Foundation
 import CoreML
 import AVFoundation
 import Combine
+import os.signpost
 
 class MoodDetectionService: ObservableObject {
     // MARK: - Published Properties
@@ -13,6 +14,21 @@ class MoodDetectionService: ObservableObject {
     private let audioAnalysis: AudioAnalysisService
     private let aiLogger = AILogger.shared
     private let moodEngine = MLConfig.loadMoodModel()
+    private let logger = Logger(subsystem: "com.aimixtapes", category: "MoodDetection")
+    
+    // Dedicated inference queue with QoS for real-time processing
+    private let inferenceQueue = DispatchQueue(
+        label: "com.aimixtapes.inference",
+        qos: .userInteractive,
+        attributes: .concurrent
+    )
+    
+    // Performance optimization
+    private var modelCache: MLModelCache?
+    private var predictionPool: MLDictionaryFeatureProvider?
+    private var lastPredictionTime: TimeInterval = 0
+    private var inferenceCount: Int = 0
+    private let poolSize = 10
     
     private var moodSubscriptions = Set<AnyCancellable>()
     private var analysisTimer: Timer?
@@ -26,12 +42,25 @@ class MoodDetectionService: ObservableObject {
     private let confidenceThreshold: Float = 0.7
     private let transitionThreshold: Float = 0.3
     
+    private var probabilityHistory = ProbabilityHistory(capacity: MLConfig.Analysis.probabilityHistorySize)
+    private var lastMoodTransitionTime = Date()
+    
+    // Performance monitoring
+    private let signposter = OSSignposter(subsystem: "com.aimixtapes", category: "MoodDetection")
+    private static let moodAnalysisInterval = OSSignpostInterval(name: "Mood Analysis")
+    private static let mlInferenceInterval = OSSignpostInterval(name: "ML Inference")
+    
+    // Performance metrics
+    private var inferenceMetrics: [TimeInterval] = []
+    private let maxMetricSamples = 100
+    
     // MARK: - Initialization
     
     init(audioAnalysis: AudioAnalysisService = AudioAnalysisService()) {
         self.audioAnalysis = audioAnalysis
         setupAudioAnalysis()
         startMoodTracking()
+        setupOptimizedInference()
     }
     
     // MARK: - Public Methods
@@ -109,61 +138,93 @@ class MoodDetectionService: ObservableObject {
             .store(in: &moodSubscriptions)
     }
     
+    private func setupOptimizedInference() {
+        modelCache = try? MLModelCache(modelAsset: .emotionClassifier)
+        setupPredictionPool()
+    }
+    
+    private func setupPredictionPool() {
+        // Pre-allocate feature providers for better performance
+        let featureNames = ["energy", "tempo", "valence", "spectralCentroid", "spectralRolloff", "zeroCrossingRate"]
+        predictionPool = MLDictionaryFeatureProvider(dictionary: featureNames.reduce(into: [:]) { dict, name in
+            dict[name] = MLFeatureValue(double: 0.0)
+        })
+    }
+    
     private func analyzeMood() {
         guard let features = audioFeatures else { return }
         
-        // Prepare input for mood model
-        let input = prepareMoodModelInput(from: features)
+        let state = signposter.beginInterval(MoodDetectionService.moodAnalysisInterval)
         
-        // Get mood prediction
-        do {
-            let prediction = try moodEngine.prediction(input: input)
-            let predictedMood = Mood(rawValue: prediction.mood) ?? .neutral
-            let confidence = prediction.confidence[prediction.mood] ?? 0.0
+        inferenceQueue.async { [weak self] in
+            guard let self = self else { return }
             
-            // Update mood buffer
-            recentMoods.append(predictedMood)
-            if recentMoods.count > moodBufferSize {
-                recentMoods.removeFirst()
+            autoreleasepool {
+                let mlState = self.signposter.beginInterval(MoodDetectionService.mlInferenceInterval)
+                let inferenceStart = CACurrentMediaTime()
+                
+                do {
+                    // Reuse prediction pool for better performance
+                    if let pool = self.predictionPool {
+                        self.updatePredictionPool(pool, with: features)
+                        let prediction = try self.moodEngine.prediction(input: pool)
+                        let inferenceTime = CACurrentMediaTime() - inferenceStart
+                        
+                        self.updateInferenceMetrics(time: inferenceTime)
+                        
+                        // Get prediction with confidence
+                        let (predictedMood, confidence) = self.selectMoodFromPrediction(prediction)
+                        
+                        DispatchQueue.main.async {
+                            if self.shouldUpdateMood(to: predictedMood, withConfidence: confidence) {
+                                self.updateMood(to: predictedMood, withConfidence: confidence)
+                            }
+                        }
+                    }
+                } catch {
+                    self.logger.error("ML inference failed: \(error.localizedDescription)")
+                }
+                
+                self.signposter.endInterval(MoodDetectionService.mlInferenceInterval, mlState)
+                self.signposter.endInterval(MoodDetectionService.moodAnalysisInterval, state)
             }
-            
-            // Only update mood if we have stable detection
-            if shouldUpdateMood(to: predictedMood, withConfidence: confidence) {
-                updateMood(to: predictedMood, withConfidence: confidence)
-            }
-            
-        } catch {
-            aiLogger.logError(error, context: "Mood detection failed")
         }
     }
     
-    private func prepareMoodModelInput(from features: AudioFeatures) -> MoodModelInput {
-        // Normalize and prepare audio features
-        let normalizedEnergy = normalize(features.energy, min: 0, max: 100)
-        let normalizedTempo = normalize(features.tempo, min: 60, max: 180)
-        let normalizedValence = features.valence
+    private func updatePredictionPool(_ pool: MLDictionaryFeatureProvider, with features: AudioFeatures) {
+        // Update feature values in place to avoid allocations
+        pool.dictionary["energy"] = MLFeatureValue(double: normalize(features.energy, min: 0, max: 100))
+        pool.dictionary["tempo"] = MLFeatureValue(double: normalize(features.tempo, min: 60, max: 180))
+        pool.dictionary["valence"] = MLFeatureValue(double: features.valence)
+        pool.dictionary["spectralCentroid"] = MLFeatureValue(double: features.spectralCentroid)
+        pool.dictionary["spectralRolloff"] = MLFeatureValue(double: features.spectralRolloff)
+        pool.dictionary["zeroCrossingRate"] = MLFeatureValue(double: features.zeroCrossingRate)
+    }
+    
+    private func selectMoodFromPrediction(_ prediction: MoodModelPrediction) -> (Mood, Float) {
+        var bestMood = Mood.neutral
+        var bestConfidence: Float = 0
         
-        return MoodModelInput(
-            energy: normalizedEnergy,
-            tempo: normalizedTempo,
-            valence: normalizedValence,
-            spectralCentroid: features.spectralCentroid,
-            spectralRolloff: features.spectralRolloff,
-            zeroCrossingRate: features.zeroCrossingRate
-        )
+        for (mood, confidence) in prediction.moodProbabilities {
+            if let mood = Mood(rawValue: mood), confidence > bestConfidence {
+                bestMood = mood
+                bestConfidence = confidence
+            }
+        }
+        
+        return (bestMood, bestConfidence)
     }
     
     private func shouldUpdateMood(to newMood: Mood, withConfidence confidence: Float) -> Bool {
-        // Check if the new mood is stable
-        let dominantMood = recentMoods.mostFrequent()
-        
-        // Require high confidence for mood changes
-        if newMood != currentMood {
-            return confidence >= confidenceThreshold && newMood == dominantMood
+        // If same mood, allow update with lower confidence
+        if newMood == currentMood {
+            return confidence >= MLConfig.Analysis.moodTransitionThreshold
         }
         
-        // Allow mood to persist with lower confidence
-        return confidence >= transitionThreshold
+        // Require higher confidence and stable history for mood changes
+        let moodStability = probabilityHistory.getSmoothedConfidence(for: newMood)
+        return confidence >= MLConfig.Analysis.confidenceThreshold &&
+               moodStability >= MLConfig.Analysis.moodStabilityFactor
     }
     
     private func updateMood(to newMood: Mood, withConfidence confidence: Float) {
@@ -175,6 +236,80 @@ class MoodDetectionService: ObservableObject {
     
     private func normalize(_ value: Double, min: Double, max: Double) -> Double {
         return (value - min) / (max - min)
+    }
+    
+    private func updateInferenceMetrics(time: TimeInterval) {
+        inferenceMetrics.append(time)
+        if inferenceMetrics.count > maxMetricSamples {
+            inferenceMetrics.removeFirst()
+        }
+        
+        // Log if average inference time exceeds threshold
+        let avgInference = inferenceMetrics.reduce(0, +) / Double(inferenceMetrics.count)
+        if avgInference > 0.01 { // 10ms threshold
+            logger.warning("High inference latency: \(String(format: "%.2f", avgInference * 1000))ms")
+        }
+    }
+    
+    func getPerformanceMetrics() -> String {
+        let avgInference = inferenceMetrics.reduce(0, +) / Double(inferenceMetrics.count)
+        return """
+        Mood Detection Performance:
+        Average Inference Time: \(String(format: "%.2f", avgInference * 1000))ms
+        Recent Samples: \(inferenceMetrics.count)
+        Confidence: \(String(format: "%.2f", moodConfidence * 100))%
+        """
+    }
+    
+    private struct ProbabilityHistory {
+        private var buffer: [(mood: Mood, confidence: Float)]
+        private let capacity: Int
+        private var currentIndex = 0
+        
+        init(capacity: Int) {
+            self.capacity = capacity
+            self.buffer = []
+            self.buffer.reserveCapacity(capacity)
+        }
+        
+        mutating func add(_ mood: Mood, confidence: Float) {
+            if buffer.count < capacity {
+                buffer.append((mood, confidence))
+            } else {
+                buffer[currentIndex] = (mood, confidence)
+            }
+            currentIndex = (currentIndex + 1) % capacity
+        }
+        
+        func getSmoothedConfidence(for mood: Mood) -> Float {
+            guard !buffer.isEmpty else { return 0 }
+            
+            // Apply exponential moving average
+            let alpha: Float = 0.7 // Weight for most recent values
+            var weightedSum: Float = 0
+            var weightedCount: Float = 0
+            var weight: Float = 1.0
+            
+            for entry in buffer.reversed() where entry.mood == mood {
+                weightedSum += entry.confidence * weight
+                weightedCount += weight
+                weight *= (1 - alpha)
+            }
+            
+            return weightedCount > 0 ? weightedSum / weightedCount : 0
+        }
+        
+        func getConsecutiveLowConfidence() -> Int {
+            var count = 0
+            for entry in buffer.reversed() {
+                if entry.confidence < MLConfig.Analysis.neutralFallbackThreshold {
+                    count += 1
+                } else {
+                    break
+                }
+            }
+            return count
+        }
     }
 }
 

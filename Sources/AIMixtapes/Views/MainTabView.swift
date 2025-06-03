@@ -10,9 +10,9 @@ import SwiftUI
 import AVKit
 import CoreData
 
-/// Main tab view controller with enhanced navigation
 struct MainTabView: View {
     @Environment(\.managedObjectContext) var moc
+    @StateObject private var errorMonitor = CoreDataErrorMonitor()
     
     // Player state
     let queuePlayer: AVQueuePlayer
@@ -23,401 +23,81 @@ struct MainTabView: View {
     @ObservedObject var isPlaying: IsPlaying
     var aiService: AIIntegrationService
     
-    // Navigation state
-    @State private var selectedTab = 0
+    // Navigation and UI state
+    @State private var selectedTab = AppSection.library
     @State private var navigationPath = NavigationPath()
-    @State private var newlyCreatedMixtape: MixTape?
-    @State private var shouldNavigateToMixtape = false
-    
-    // Mode selection state
-    @State private var selectedMode = 0 // 0: Player, 1: Podcast, 2: News
-    
-    // Initializer
-    init(
-        queuePlayer: AVQueuePlayer,
-        playerItemObserver: PlayerItemObserver,
-        playerStatusObserver: PlayerStatusObserver,
-        currentPlayerItems: CurrentPlayerItems,
-        currentSongName: CurrentSongName,
-        isPlaying: IsPlaying,
-        aiService: AIIntegrationService
-    ) {
-        self.queuePlayer = queuePlayer
-        self.playerItemObserver = playerItemObserver
-        self.playerStatusObserver = playerStatusObserver
-        self.currentPlayerItems = currentPlayerItems
-        self.currentSongName = currentSongName
-        self.isPlaying = isPlaying
-        self.aiService = aiService
-    }
+    @State private var showMiniPlayer = true
+    @State private var showingMoodPicker = false
+    @State private var showingPersonalityView = false
     
     var body: some View {
-        ZStack(alignment: .bottom) {
-            VStack(spacing: 0) {
-                // Mode Selector at the top
-                AnimatedModeSelector(selectedMode: $selectedMode, aiService: aiService)
-                    .padding(.top, 8)
-                    .accessibilityElement(children: .contain)
-                    .accessibilityLabel("Mode selection")
-                    .accessibilityHint("Select between Player, Podcast and News modes")
-                
-                // Mode-specific content
-                ZStack {
-                    // Player Mode Content
-                    if selectedMode == 0 {
-                        playerModeContent
-                            .transition(.opacity.combined(with: .move(edge: .leading)))
-                            .accessibilityElement(children: .contain)
-                            .accessibilityLabel("Player mode")
-                    }
-                    
-                    // Podcast Mode Content
-                    if selectedMode == 1 {
-                        podcastModeContent
-                            .transition(.opacity.combined(with: .move(edge: selectedMode > 1 ? .leading : .trailing)))
-                            .accessibilityElement(children: .contain)
-                            .accessibilityLabel("Podcast mode") 
-                    }
-                    
-                    // News Mode Content
-                    if selectedMode == 2 {
-                        newsModeContent
-                            .transition(.opacity.combined(with: .move(edge: .trailing)))
-                            .accessibilityElement(children: .contain)
-                            .accessibilityLabel("News mode")
-                    }
-                }
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selectedMode)
-                
-                Spacer()
-                
-                // Bottom TabView for navigation within each mode
-                TabView(selection: $selectedTab) {
-                    // Library Tab with NavigationStack
-                    NavigationStack(path: $navigationPath) {
-                        EmptyView() // Content is displayed in the main view area based on mode
-                    }
-                    .tabItem {
-                        Label("Library", systemImage: "music.note.list")
-                            .environment(\.symbolVariants, selectedTab == 0 ? .fill : .none)
-                            .accessibilityLabel("Library")
-                            .accessibilityHint("Browse your music library")
-                    }
-                    .tag(0)
-                
-                    // AI Generate Tab
-                    EmptyView() // Content is displayed in the main view area based on mode
-                    .tabItem {
-                        Label("Generate", systemImage: "wand.and.stars")
-                            .environment(\.symbolVariants, selectedTab == 1 ? .fill : .none)
-                            .accessibilityLabel("Generate")
-                            .accessibilityHint("Create new AI-generated mixtapes")
-                    }
-                    .tag(1)
-                
-                    EmptyView() // Content is displayed in the main view area based on mode
-                        .tabItem {
-                            Label("Analyze", systemImage: "waveform")
-                                .environment(\.symbolVariants, selectedTab == 2 ? .fill : .none)
-                                .accessibilityLabel("Analyze")
-                                .accessibilityHint("Analyze your music data")
-                        }
-                        .tag(2)
-                
-                    EmptyView() // Content is displayed in the main view area based on mode
-                        .tabItem {
-                            Label("Insights", systemImage: "chart.bar")
-                                .environment(\.symbolVariants, selectedTab == 3 ? .fill : .none)
-                                .accessibilityLabel("Insights")
-                                .accessibilityHint("View AI insights and reports")
-                        }
-                        .tag(3)
-                
-                    EmptyView() // Content is displayed in the main view area based on mode
-                        .tabItem {
-                            Label("Settings", systemImage: "gear")
-                                .environment(\.symbolVariants, selectedTab == 4 ? .fill : .none)
-                                .accessibilityLabel("Settings")
-                                .accessibilityHint("Configure app settings")
-                        }
-                        .tag(4)
+        NavigationSplitView {
+            List(selection: $selectedTab) {
+                ForEach([AppSection.library, .generate, .analyze, .insights, .settings], id: \.self) { section in
+                    Label(section.title, systemImage: section.icon)
+                        .tag(section)
                 }
             }
-            .tint(aiService.moodEngine.currentMood.color)
-
-            // AI Suggestion Banner
-            AISuggestionBanner(
-                isVisible: .constant(true),
-                aiService: aiService,
-                tabSelection: $selectedTab
-            )
-            .padding(.bottom, 60)
-        }
-        .onChange(of: shouldNavigateToMixtape) { navigate in
-            if navigate, let mixtape = newlyCreatedMixtape {
-                selectedTab = 0
-                selectedMode = 0 // Ensure we're in Player mode
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    navigationPath.append(mixtape)
-                    shouldNavigateToMixtape = false
-                    newlyCreatedMixtape = nil
-                }
-            }
-        }
-        .onChange(of: selectedMode) { newMode in
-            // Provide haptic feedback when changing modes
-            let generator = UIImpactFeedbackGenerator(style: .medium)
-            generator.prepare()
-            generator.impactOccurred()
-            
-            // Track mode change
-            aiService.trackInteraction(type: "mode_changed_to_\(modeTitle(for: newMode))")
-        }
-        .onChange(of: selectedTab) { newTab in
-            // Track tab change
-            aiService.trackInteraction(type: "tab_changed_to_\(newTab)")
-        }
-    }
-    
-    // MARK: - Mode-specific Views
-    
-    /// Player Mode Content
-    private var playerModeContent: some View {
-        VStack {
-            // Library content with navigation
+            .listStyle(.sidebar)
+            .navigationTitle("AI Mixtapes")
+        } detail: {
             NavigationStack(path: $navigationPath) {
-                ContentView(
+                Group {
+                    switch selectedTab {
+                    case .library:
+                        LibraryView(aiService: aiService)
+                    case .generate: 
+                        AIGeneratedMixtapeView(aiService: aiService)
+                    case .analyze:
+                        AudioVisualizationView(queuePlayer: queuePlayer, 
+                                             currentSongName: currentSongName,
+                                             aiService: aiService)
+                    case .insights:
+                        InsightsDashboardView(aiService: aiService)
+                    case .settings:
+                        SettingsView(aiService: aiService)
+                    }
+                }
+                .toolbar {
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        Button(action: { showingMoodPicker = true }) {
+                            Label(aiService.moodEngine.currentMood.rawValue,
+                                  systemImage: aiService.moodEngine.currentMood.systemIcon)
+                                .foregroundColor(aiService.moodEngine.currentMood.color)
+                        }
+                        
+                        Button(action: { showingPersonalityView = true }) {
+                            Label(aiService.personalityEngine.currentPersonality.rawValue,
+                                  systemImage: "person.crop.circle")
+                        }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingMoodPicker) {
+            MoodView(moodEngine: aiService.moodEngine)
+        }
+        .sheet(isPresented: $showingPersonalityView) {
+            PersonalityView(personalityEngine: aiService.personalityEngine)
+        }
+        .overlay(alignment: .bottom) {
+            if showMiniPlayer && currentSongName.wrappedValue != "Not Playing" {
+                MiniPlayerView(
                     queuePlayer: queuePlayer,
-                    playerItemObserver: playerItemObserver,
-                    playerStatusObserver: playerStatusObserver,
-                    currentPlayerItems: currentPlayerItems,
                     currentSongName: currentSongName,
                     isPlaying: isPlaying,
                     aiService: aiService
                 )
-                .navigationDestination(for: MixTape.self) { mixtape in
-                    MixTapeView(
-                        songs: mixtape.songsArray,
-                        mixTape: mixtape,
-                        currentMixTapeName: .constant(""),
-                        currentMixTapeImage: .constant(URL(fileURLWithPath: "")),
-                        queuePlayer: queuePlayer,
-                        currentStatusObserver: playerStatusObserver,
-                        currentItemObserver: playerItemObserver,
-                        currentPlayerItems: currentPlayerItems,
-                        currentSongName: currentSongName,
-                        isPlaying: isPlaying,
-                        aiService: aiService
-                    )
-                }
-            }
-            .environment(\.managedObjectContext, moc)
-        }
-    }
-    
-    /// Podcast Mode Content
-    private var podcastModeContent: some View {
-        VStack {
-            // Podcast content
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    // Featured podcasts header
-                    HStack {
-                        Text("Featured Podcasts")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        Spacer()
-                        Button("See All") {}
-                            .foregroundColor(aiService.moodEngine.currentMood.color)
-                    }
-                    .padding(.horizontal)
-                    
-                    // Featured podcasts carousel
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 15) {
-                            ForEach(0..<5) { i in
-                                PodcastCard(
-                                    title: ["Tech Insights", "Music Theory", "AI Revolution", "Sound Stories", "Beat Lab"][i],
-                                    host: ["Sarah Chen", "Mark Johnson", "AI Collective", "Emma Davis", "Rhythm Crew"][i],
-                                    coverImage: "podcast\(i+1)",
-                                    mood: aiService.moodEngine.currentMood
-                                )
-                                .frame(width: 160, height: 220)
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-                    
-                    // Recent episodes section
-                    Text("Recent Episodes")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .padding(.horizontal)
-                        .padding(.top, 10)
-                    
-                    // Episodes list
-                    VStack(spacing: 12) {
-                        ForEach(0..<6) { i in
-                            PodcastEpisodeRow(
-                                title: ["The Future of AI Music", "Composing with Algorithms", "Exploring Sound Design", 
-                                        "Interview with Music Producers", "Neural Audio Processing", "Creative AI Tools"][i],
-                                podcast: ["Tech Insights", "Music Theory", "Sound Stories", 
-                                          "Beat Lab", "AI Revolution", "Music Theory"][i % 5],
-                                duration: [45, 32, 58, 41, 37, 29][i],
-                                aiService: aiService
-                            )
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-                .padding(.vertical)
+                .transition(.move(edge: .bottom))
             }
         }
-    }
-    
-    /// News Mode Content
-    private var newsModeContent: some View {
-        VStack {
-            // News content
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    // Trending header
-                    HStack {
-                        Text("Music News")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        Spacer()
-                        Button("Refresh") {}
-                            .foregroundColor(aiService.moodEngine.currentMood.color)
-                    }
-                    .padding(.horizontal)
-                    
-                    // Featured news card
-                    VStack(alignment: .leading, spacing: 10) {
-                        ZStack(alignment: .bottomLeading) {
-                            Rectangle()
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [.clear, .black.opacity(0.8)]),
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
-                                .frame(height: 200)
-                                .cornerRadius(12)
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("TRENDING")
-                                    .font(.caption)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(aiService.moodEngine.currentMood.color)
-                                
-                                Text("AI Revolutionizes Music Production in 2025")
-                                    .font(.headline)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                                
-                                Text("How artificial intelligence is transforming the way artists create and produce music")
-                                    .font(.subheadline)
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .lineLimit(2)
-                            }
-                            .padding()
-                        }
-                    }
-                    .padding(.horizontal)
-                    
-                    // Latest news section
-                    Text("Latest Updates")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .padding(.horizontal)
-                    
-                    // News list
-                    VStack(spacing: 15) {
-                        ForEach(0..<5) { i in
-                            NewsArticleRow(
-                                title: ["New AI Music Generation Plugin Released", 
-                                        "Virtual Reality Concert Platform Launches", 
-                                        "Streaming Services Introduce Spatial Audio Feature",
-                                        "Indie Artists Embrace AI Collaboration Tools",
-                                        "Music Industry Report: AI Impact on Creativity"][i],
-                                source: ["TechCrunch", "Music Business Weekly", "AudioPro", "IndieWire", "Industry Analysis"][i],
-                                timeAgo: [2, 5, 8, 12, 24][i],
-                                hasImage: [true, false, true, false, true][i],
-                                aiService: aiService
-                            )
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-                .padding(.vertical)
-            }
-        }
-    }
-    
-    /// Title for mode
-    private func modeTitle(for index: Int) -> String {
-        ["player", "podcast", "news"][index]
-    }
-    
-    /// Handle mixtape creation and navigation
-    private func handleMixtapeCreated(_ mixtape: MixTape) {
-        newlyCreatedMixtape = mixtape
-        shouldNavigateToMixtape = true
-    }
-    
-    /// Handle mixtape creation and navigation
-    private func handleMixtapeCreated(_ mixtape: MixTape) {
-        newlyCreatedMixtape = mixtape
-        shouldNavigateToMixtape = true
-    }
-}
-
-/// Wrapper for AIGeneratedMixtapeView with completion handling
-struct AIGeneratedMixtapeViewWrapper: View {
-    let aiService: AIIntegrationService
-    let onMixtapeCreated: (MixTape) -> Void
-    @Environment(\.managedObjectContext) var moc
-    
-    var body: some View {
-        AIGeneratedMixtapeView(aiService: aiService)
-            .onReceive(NotificationCenter.default.publisher(for: .mixtapeCreated)) { notification in
-                if let mixtape = notification.object as? MixTape {
-                    onMixtapeCreated(mixtape)
-                }
-            }
-    }
-}
-
-/// Wrapper for AIGeneratedMixtapeView with completion handling
-struct AIGeneratedMixtapeViewWrapper: View {
-    let aiService: AIIntegrationService
-    let onMixtapeCreated: (MixTape) -> Void
-    @Environment(\.managedObjectContext) var moc
-    
-    var body: some View {
-        AIGeneratedMixtapeView(aiService: aiService)
-            .onReceive(NotificationCenter.default.publisher(for: .mixtapeCreated)) { notification in
-                if let mixtape = notification.object as? MixTape {
-                    onMixtapeCreated(mixtape)
-                }
-            }
+        .tint(aiService.moodEngine.currentMood.color)
     }
 }
 
 /// Notification extension for mixtape creation
 extension Notification.Name {
     static let mixtapeCreated = Notification.Name("mixtapeCreated")
-}
-
-/// Color blending extension
-extension Color {
-    func blended(with color: Color) -> Color {
-        // In a real app, we would implement color blending
-        // For now, just return the original color
-        return self
-    }
 }
 
 /// Color blending extension

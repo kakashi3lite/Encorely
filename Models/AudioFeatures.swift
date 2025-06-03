@@ -3,33 +3,33 @@ import Accelerate
 
 /// Spectral features extracted from audio analysis
 struct SpectralFeatures: Codable, Equatable {
-    // Band energy distribution
-    var bassEnergy: Float = 0
-    var midEnergy: Float = 0
-    var trebleEnergy: Float = 0
+    // Core spectral features
+    var centroid: Float = 0       // Weighted mean frequency
+    var spread: Float = 0         // Variance around centroid
+    var rolloff: Float = 0        // Frequency below which 85% of energy lies
+    var flux: Float = 0           // Frame-to-frame spectral difference
+    var zeroCrossingRate: Float = 0 // Rate of sign changes in time domain
+    var flatness: Float = 0       // Ratio of geometric to arithmetic mean
     
-    // Spectral shape descriptors
-    var brightness: Float = 0
-    var centroid: Float = 0
-    var spread: Float = 0
-    var rolloff: Float = 0
-    var flux: Float = 0
-    var flatness: Float = 0
-    var irregularity: Float = 0
-    var crest: Float = 0
-    var skewness: Float = 0
-    var kurtosis: Float = 0
-    var roughness: Float = 0
+    // Energy distribution
+    var bassEnergy: Float = 0     // Energy in 20-250 Hz
+    var midEnergy: Float = 0      // Energy in 250-4000 Hz
+    var trebleEnergy: Float = 0   // Energy above 4000 Hz
     
     // Perceptual features
-    var harmonicRatio: Float = 0
-    var spectralContrast: Float = 0
-    var zeroCrossingRate: Float = 0
-    var dynamicRange: Float = 0
+    var brightness: Float = 0       // High-frequency energy ratio
+    var roughness: Float = 0       // Sensory dissonance
+    var spectralContrast: Float = 0 // Valley/peak ratio
+    var harmonicRatio: Float = 0    // Harmonic vs noise energy
     
-    // Rhythmic features
-    var estimatedTempo: Float = 0
-    var beatStrength: Float = 0
+    // Additional metrics
+    var crest: Float = 0           // Peak to average ratio
+    var irregularity: Float = 0    // Successive peak variation
+    var skewness: Float = 0        // Spectral asymmetry
+    var kurtosis: Float = 0        // Spectral peakedness
+    var dynamicRange: Float = 0    // dB range
+    var beatStrength: Float = 0    // Temporal accentuation
+    var estimatedTempo: Float = 0  // BPM estimate
     
     /// An empty instance of spectral features
     static var empty: SpectralFeatures {

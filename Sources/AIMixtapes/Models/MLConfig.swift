@@ -25,11 +25,20 @@ public struct MLConfig {
     
     // MARK: - Performance Settings
     struct Performance {
-        static let maxProcessingLatency: TimeInterval = 0.1
-        static let targetFPS: Double = 20.0
+        #if os(macOS)
+        static let maxProcessingLatency: TimeInterval = 0.15  // 150ms for macOS
+        static let maxMemoryUsage = 100 * 1024 * 1024  // 100MB for macOS
+        static let targetFPS: Double = 30.0  // Higher FPS for macOS
+        static let maxConcurrentOperations = 8  // More concurrent operations on macOS
+        #else
+        static let maxProcessingLatency: TimeInterval = 0.10  // 100ms for iOS
+        static let maxMemoryUsage = 50 * 1024 * 1024  // 50MB for iOS
+        static let targetFPS: Double = 20.0  // Lower FPS for iOS
+        static let maxConcurrentOperations = 4  // Fewer concurrent operations on iOS
+        #endif
+        
         static let maxBufferSize = 1024 * 1024  // 1MB
         static let maxCacheSize = 100 * 1024 * 1024  // 100MB
-        static let maxMemoryUsage = 50 * 1024 * 1024 // 50MB
         static let maxHistorySize = 1000
     }
     
@@ -38,7 +47,13 @@ public struct MLConfig {
         static let adaptToDeviceCapabilities = true
         static let lowPowerModeEnabled = true
         static let adaptToThermalState = true
-        static let backgroundProcessingEnabled = true
+        #if os(macOS)
+        static let backgroundProcessingEnabled = true  // Enable background processing on macOS
+        static let useMetalAcceleration = true  // Enable Metal acceleration on macOS
+        #else
+        static let backgroundProcessingEnabled = false  // Disable on iOS by default
+        static let useMetalAcceleration = false  // Disable on iOS by default
+        #endif
     }
     
     // MARK: - Core ML Model Configuration
@@ -49,7 +64,14 @@ public struct MLConfig {
         
         static let modelVersion = "2.0.0"
         static let minimumConfidence: Float = 0.6
-        static let defaultDevice = "cpu"  // or "neuralEngine" if available
+        
+        #if os(macOS)
+        static let defaultDevice = "mps"  // Use Metal Performance Shaders on macOS
+        static let computeUnits = "all"   // Use all available compute units
+        #else
+        static let defaultDevice = "cpu"  // Use CPU on iOS for better battery life
+        static let computeUnits = "cpuAndNeuralEngine"  // Use CPU and Neural Engine if available
+        #endif
     }
     
     // MARK: - Audio Analysis Configuration

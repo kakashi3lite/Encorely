@@ -16,7 +16,7 @@ import Combine
 import AVFoundation
 import Intents
 import os.log
-import AIMixtapes // Contains SharedTypes
+import SharedTypes
 
 // Mood enum is now defined in SharedTypes.swift
 // Here we add domain-specific mood analysis capabilities
@@ -513,26 +513,67 @@ public final class MoodEngine: ObservableObject {
     /// Detects mood from audio features
     /// - Parameter features: Audio features to analyze
     /// - Returns: Tuple containing detected mood and confidence level
-    private func detectMoodFromFeatures(_ features: AudioFeatures) -> (mood: Mood, confidence: Float) {
-        // Use ML model if available and enhanced features are enabled
-        if useEnhancedFeatures, let classifier = moodClassifier {
-            if let prediction = try? classifier.prediction(
-                energy: features.energy ?? 0.5,
-                valence: features.valence ?? 0.5,
-                tempo: features.tempo ?? 120,
-                danceability: features.danceability ?? 0.5,
-                acousticness: features.acousticness ?? 0.5
-            ) {
-                // Extract top prediction
-                if let moodString = prediction.mood, let mood = Mood(rawValue: moodString),
-                   let confidence = prediction.confidence, confidence >= confidenceThreshold {
-                    return (mood, confidence)
-                }
-            }
-        }
+    private func detectMoodFromFeatures(_ features: AudioFeatures) -> Mood {
+        var moodScores: [(mood: Mood, score: Float)] = []
         
-        // Fall back to rule-based detection if ML fails or is disabled
-        return extractMoodFromAudioAnalysis(features)
+        // Energetic
+        moodScores.append((.energetic, calculateEnergeticScore(features)))
+        
+        // Relaxed
+        moodScores.append((.relaxed, calculateRelaxedScore(features)))
+        
+        // Happy
+        moodScores.append((.happy, calculateHappyScore(features)))
+        
+        // Melancholic
+        moodScores.append((.melancholic, calculateMelancholicScore(features)))
+        
+        // Focused
+        moodScores.append((.focused, calculateFocusedScore(features)))
+        
+        // Find highest scoring mood
+        moodScores.sort { $0.score > $1.score }
+        return moodScores.first?.mood ?? .neutral
+    }
+    
+    private func calculateEnergeticScore(_ features: AudioFeatures) -> Float {
+        return min(1.0, (
+            features.energy * 0.4 +
+            (features.tempo / 180.0) * 0.3 +
+            features.danceability * 0.3
+        ))
+    }
+    
+    private func calculateRelaxedScore(_ features: AudioFeatures) -> Float {
+        return min(1.0, (
+            (1.0 - features.energy) * 0.4 +
+            features.acousticness * 0.3 +
+            (1.0 - features.tempo / 120.0) * 0.3
+        ))
+    }
+    
+    private func calculateHappyScore(_ features: AudioFeatures) -> Float {
+        return min(1.0, (
+            features.valence * 0.4 +
+            features.energy * 0.3 +
+            features.danceability * 0.3
+        ))
+    }
+    
+    private func calculateMelancholicScore(_ features: AudioFeatures) -> Float {
+        return min(1.0, (
+            (1.0 - features.valence) * 0.4 +
+            (1.0 - features.energy) * 0.3 +
+            features.acousticness * 0.3
+        ))
+    }
+    
+    private func calculateFocusedScore(_ features: AudioFeatures) -> Float {
+        return min(1.0, (
+            features.instrumentalness * 0.4 +
+            (1.0 - features.speechiness) * 0.3 +
+            (0.5 - abs(0.5 - features.energy)) * 0.3
+        ))
     }
     
     // MARK: - Enhanced Mood Detection Methods

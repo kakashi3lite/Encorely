@@ -1,0 +1,190 @@
+name: AI-Mixtapes
+options:
+  bundleIdPrefix: com.swanand
+  createIntermediateGroups: true
+  groupSortPosition: top
+  deploymentTarget:
+    iOS: "15.0"
+    macOS: "12.0"
+  xcodeVersion: "15.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    ENABLE_BITCODE: NO
+    CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED: YES
+    CLANG_ANALYZER_SECURITY_INSECUREAPI_RAND: YES
+    CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER: YES
+  configs:
+    Debug:
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
+      SWIFT_COMPILATION_MODE: wholemodule
+
+configs:
+  Debug:
+    type: debug
+    xcconfig: Debug.xcconfig
+  Release:
+    type: release
+    xcconfig: Release.xcconfig
+targets:
+  AI-Mixtapes:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - Sources
+      - Models
+      - ViewModels
+      - Views
+      - Services
+      - utils
+      - path: Modules/AudioAnalysisModule
+      - path: Modules/MusicKitModule
+      - path: Resources
+        type: folder
+    settings:
+      base:
+        PRODUCT_NAME: AI-Mixtapes
+        PRODUCT_BUNDLE_IDENTIFIER: com.swanand.aimixtapes
+        MARKETING_VERSION: 0.9.0
+        CURRENT_PROJECT_VERSION: 1
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: 5.9
+        TARGETED_DEVICE_FAMILY: 1,2
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_APP_SANDBOX: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_FILE: Info.plist
+        LD_RUNPATH_SEARCH_PATHS: $(inherited) @executable_path/Frameworks
+    dependencies:
+      - package: AudioKit
+      - package: SoundpipeAudioKit
+      - target: AudioAnalysisModule
+      - target: MusicKitModule
+    preBuildScripts:
+      - name: SwiftFormat
+        script: swiftformat .
+        basedOnDependencyAnalysis: false
+      - name: SwiftLint
+        script: swiftlint lint --strict
+        basedOnDependencyAnalysis: false
+    buildRules:
+      - name: Process Core ML Models
+        filePattern: "*.mlmodel"
+        script: xcrun coremlc compile ${INPUT_FILE_PATH} ${DERIVED_FILE_DIR}
+        outputFiles:
+          - $(DERIVED_FILE_DIR)/$(INPUT_FILE_BASE).mlmodelc
+        DEVELOPMENT_TEAM: TEMP123456
+        PROVISIONING_PROFILE_SPECIFIER: AI-Mixtapes_Dev_Profile
+        CODE_SIGN_IDENTITY: iPhone Developer
+        CURRENT_PROJECT_VERSION: 1
+        DEVELOPMENT_ASSET_PATHS: ""
+        MARKETING_VERSION: 1.0
+      configs:
+        Debug:
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+          ENABLE_TESTABILITY: YES
+        Release:
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
+          ENABLE_TESTABILITY: NO
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDevelopmentRegion: en
+        CFBundleDisplayName: AI-Mixtapes
+        UILaunchStoryboardName: LaunchScreen
+        UIMainStoryboardFile: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSMicrophoneUsageDescription: "AI-Mixtapes needs microphone access for audio analysis"
+        LSRequiresIPhoneOS: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default Configuration
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+    dependencies:
+      - framework: AVFoundation.framework
+      - framework: CoreData.framework
+      - framework: CoreML.framework
+      - framework: Speech.framework
+    scheme:
+      testTargets:
+        - AI-MixtapesTests
+      gatherCoverageData: true
+      commandLineArguments: {}
+      environmentVariables: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.swanand.AIMixtapes
+        DEVELOPMENT_TEAM: ""
+        SWIFT_VERSION: 5.0
+        TARGETED_DEVICE_FAMILY: 1,2
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDevelopmentRegion: en
+        CFBundleDisplayName: AI-Mixtapes
+        UILaunchStoryboardName: LaunchScreen
+        UIMainStoryboardFile: ""
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSMicrophoneUsageDescription: "AI-Mixtapes needs microphone access for audio analysis"
+        LSRequiresIPhoneOS: true
+    dependencies: []
+    preBuildScripts: []
+    postBuildScripts: []
+
+  AI-MixtapesTests:
+    type: bundle.unit-test
+    platform: [iOS, macOS]
+    sources:
+      - Tests/UnitTests
+    dependencies:
+      - target: AI-Mixtapes
+    settings:
+      base:
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/AI-Mixtapes.app/Contents/MacOS/AI-Mixtapes
+        BUNDLE_LOADER: $(TEST_HOST)
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+
+  AI-MixtapesUITests:
+    type: bundle.ui-testing
+    platform: [iOS, macOS]
+    sources:
+      - Tests/UITests
+    dependencies:
+      - target: AI-Mixtapes
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+
+schemes:
+  AI-Mixtapes:
+    build:
+      targets:
+        AI-Mixtapes: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - AI-MixtapesTests
+        - AI-MixtapesUITests
+      gatherCoverageData: true
+      coverageTargets:
+        - AI-Mixtapes
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

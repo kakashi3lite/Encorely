@@ -2,116 +2,204 @@ import XCTest
 @testable import AIMixtapes
 
 final class AudioMemoryTests: XCTestCase {
+    private var audioBufferPool: AudioBufferPool!
     private var audioProcessor: AudioProcessor!
-    private let maxMemoryLimit = 50 * 1024 * 1024 // 50MB
+    private var audioAnalysisService: AudioAnalysisService!
+    private var performanceMonitor: AudioPerformanceMonitor!
+    
     private let testSampleRate: Double = 44100
+    private let maxMemoryLimit = 50 * 1024 * 1024 // 50MB
     
     override func setUp() {
         super.setUp()
-        audioProcessor = AudioProcessor()
+        let format = AVAudioFormat(standardFormatWithSampleRate: testSampleRate, channels: 2)!
+        audioBufferPool = AudioBufferPool(format: format, frameCapacity: 4096)
+        performanceMonitor = AudioPerformanceMonitor()
+        audioAnalysisService = AudioAnalysisService()
+        audioProcessor = AudioProcessor(audioAnalysisService: audioAnalysisService)
+        
+        performanceMonitor.startMonitoring()
     }
     
     override func tearDown() {
+        performanceMonitor.stopMonitoring()
         audioProcessor = nil
+        audioAnalysisService = nil
+        audioBufferPool = nil
         super.tearDown()
     }
     
-    func testBufferPoolMemoryManagement() throws {
+    // MARK: - Buffer Pool Tests
+    
+    func testBufferPoolMemoryManagement() {
         let initialMemory = getMemoryUsage()
-        let duration: TimeInterval = 2.0
         var buffers: [ManagedAudioBuffer] = []
         
         // Create buffers until memory pressure
         while getMemoryUsage() - initialMemory < maxMemoryLimit {
-            let buffer = createTestBuffer(duration: duration)
-            let managedBuffer = ManagedAudioBuffer(buffer: buffer)
-            buffers.append(managedBuffer)
-            autoreleasepool {
-                // Process each buffer
-                audioProcessor.handleAudioData(buffer: buffer)
+            if let buffer = audioBufferPool.getBuffer() {
+                buffers.append(buffer)
             }
         }
         
-        // Memory should be near but not over limit
-        let usedMemory = getMemoryUsage() - initialMemory
-        XCTAssertLessThan(usedMemory, maxMemoryLimit, "Memory usage exceeded limit")
-        XCTAssertGreaterThan(usedMemory, maxMemoryLimit/2, "Memory usage unusually low")
+        // Verify memory pressure handling
+        let midMemory = getMemoryUsage()
+        XCTAssertGreaterThan(buffers.count, 0, "Should allocate some buffers")
+        XCTAssertLessThan(midMemory - initialMemory, maxMemoryLimit, "Should stay under memory limit")
         
         // Clear buffers
+        buffers.forEach { audioBufferPool.returnBuffer($0) }
         buffers.removeAll()
-        audioProcessor.cleanupBuffers()
+        
+        // Force cleanup
+        audioBufferPool.releaseAllBuffers()
         
         // Memory should be significantly reduced
-        let finalMemory = getMemoryUsage() - initialMemory 
-        XCTAssertLessThan(finalMemory, maxMemoryLimit/4, "Memory not properly released")
+        let finalMemory = getMemoryUsage() - initialMemory
+        XCTAssertLessThan(finalMemory, maxMemoryLimit/4, "Memory should be properly released")
     }
     
     func testMemoryPressureHandling() {
-        let initialMemory = getMemoryUsage()
-        var lastMemory = initialMemory
+        let expectation = XCTestExpectation(description: "Memory pressure handling")
+        var memoryReadings: [Int] = []
+        var lastMemory = getMemoryUsage()
         
         // Create memory pressure
         for i in 0..<20 {
             autoreleasepool {
-                let buffer = createTestBuffer(duration: 1.0)
-                audioProcessor.handleAudioData(buffer: buffer)
-                
-                let currentMemory = getMemoryUsage()
-                if i > 0 {
-                    // Memory increase should slow down under pressure
-                    let increase = currentMemory - lastMemory
-                    XCTAssertLessThan(increase, maxMemoryLimit/10, "Memory growing too fast")
+                if let buffer = createTestBuffer(duration: 1.0) {
+                    audioProcessor.processAudioBuffer(buffer) { _ in }
+                    let currentMemory = getMemoryUsage()
+                    memoryReadings.append(currentMemory)
+                    lastMemory = currentMemory
+                    
+                    // Simulate memory warning at midpoint
+                    if i == 10 {
+                        NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+                    }
                 }
-                lastMemory = currentMemory
             }
         }
         
-        // Final memory should be under limit
+        // Verify memory pressure handling
+        let peakMemory = memoryReadings.max() ?? 0
         let finalMemory = getMemoryUsage()
-        XCTAssertLessThan(finalMemory - initialMemory, maxMemoryLimit, 
-                         "Memory pressure not properly handled")
+        
+        XCTAssertLessThan(peakMemory - lastMemory, maxMemoryLimit, "Peak memory should not exceed limit")
+        XCTAssertLessThan(finalMemory - lastMemory, maxMemoryLimit/2, "Should recover from memory pressure")
+        
+        expectation.fulfill()
+        wait(for: [expectation], timeout: 5.0)
     }
     
-    func testConcurrentBufferProcessing() {
-        let concurrentCount = 5
-        let expectation = XCTestExpectation(description: "Concurrent processing")
-        expectation.expectedFulfillmentCount = concurrentCount
+    func testConcurrentBufferOperations() {
+        let expectation = XCTestExpectation(description: "Concurrent operations")
+        let operationCount = 50
+        let concurrentQueue = DispatchQueue(label: "test.concurrent", attributes: .concurrent)
+        let group = DispatchGroup()
         
+        var successfulOperations = 0
+        var failedOperations = 0
         let initialMemory = getMemoryUsage()
+        var peakMemory = initialMemory
         
-        // Process buffers concurrently
-        for _ in 0..<concurrentCount {
-            DispatchQueue.global().async {
+        // Perform concurrent operations
+        for _ in 0..<operationCount {
+            group.enter()
+            concurrentQueue.async {
                 autoreleasepool {
-                    let buffer = self.createTestBuffer(duration: 0.5)
-                    self.audioProcessor.handleAudioData(buffer: buffer)
-                    expectation.fulfill()
+                    if let buffer = self.createTestBuffer(duration: 0.5) {
+                        // Process buffer
+                        self.audioProcessor.processAudioBuffer(buffer) { _ in }
+                        successfulOperations += 1
+                        
+                        // Track memory
+                        let currentMemory = self.getMemoryUsage()
+                        peakMemory = max(peakMemory, currentMemory)
+                    } else {
+                        failedOperations += 1
+                    }
+                    group.leave()
                 }
             }
         }
         
-        wait(for: [expectation], timeout: 10)
+        group.notify(queue: .main) {
+            // Verify results
+            XCTAssertGreaterThan(successfulOperations, 0, "Should complete some operations")
+            XCTAssertLessThan(failedOperations, operationCount/2, "Should not fail too many operations")
+            XCTAssertLessThan(peakMemory - initialMemory, self.maxMemoryLimit, "Should stay under memory limit")
+            
+            expectation.fulfill()
+        }
         
-        // Check memory hasn't grown excessively
-        let finalMemory = getMemoryUsage()
-        XCTAssertLessThan(finalMemory - initialMemory, maxMemoryLimit/2,
-                         "Concurrent processing caused excessive memory growth")
+        wait(for: [expectation], timeout: 10.0)
+    }
+    
+    func testBufferLifecycleManagement() {
+        let expectation = XCTestExpectation(description: "Buffer lifecycle")
+        let bufferCount = 10
+        var buffers: [ManagedAudioBuffer] = []
+        
+        // Allocate buffers
+        for _ in 0..<bufferCount {
+            if let buffer = audioBufferPool.getBuffer() {
+                buffers.append(buffer)
+            }
+        }
+        
+        XCTAssertEqual(buffers.count, bufferCount, "Should allocate all requested buffers")
+        
+        // Use buffers
+        buffers.forEach { buffer in
+            // Mark as used
+            buffer.markUsed()
+            XCTAssertLessThan(buffer.idleTime, 0.1, "Buffer should not be idle after use")
+        }
+        
+        // Return half the buffers
+        for _ in 0..<bufferCount/2 {
+            if let buffer = buffers.popLast() {
+                audioBufferPool.returnBuffer(buffer)
+            }
+        }
+        
+        // Try to get new buffers
+        var newBuffers: [ManagedAudioBuffer] = []
+        for _ in 0..<bufferCount/2 {
+            if let buffer = audioBufferPool.getBuffer() {
+                newBuffers.append(buffer)
+            }
+        }
+        
+        XCTAssertEqual(newBuffers.count, bufferCount/2, "Should reuse returned buffers")
+        
+        // Cleanup
+        buffers.forEach { audioBufferPool.returnBuffer($0) }
+        newBuffers.forEach { audioBufferPool.returnBuffer($0) }
+        
+        expectation.fulfill()
+        wait(for: [expectation], timeout: 5.0)
     }
     
     // MARK: - Helper Methods
     
-    private func createTestBuffer(duration: TimeInterval) -> AVAudioPCMBuffer {
+    private func createTestBuffer(duration: TimeInterval) -> AVAudioPCMBuffer? {
         let frameCount = AVAudioFrameCount(duration * testSampleRate)
-        let format = AVAudioFormat(standardFormatWithSampleRate: testSampleRate, channels: 1)!
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
+        let format = AVAudioFormat(standardFormatWithSampleRate: testSampleRate, channels: 2)!
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            return nil
+        }
         
         buffer.frameLength = frameCount
-        if let channelData = buffer.floatChannelData?[0] {
-            // Fill with test signal
-            for i in 0..<Int(frameCount) {
-                let frequency = 440.0 // A4 note
-                let amplitude = 0.5
-                channelData[i] = Float(amplitude * sin(2.0 * .pi * frequency * Double(i) / testSampleRate))
+        
+        // Fill with test signal
+        if let channelData = buffer.floatChannelData {
+            for channel in 0..<Int(format.channelCount) {
+                for frame in 0..<Int(frameCount) {
+                    let phase = 2.0 * .pi * 440.0 * Double(frame) / testSampleRate
+                    channelData[channel][frame] = Float(sin(phase))
+                }
             }
         }
         

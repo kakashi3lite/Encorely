@@ -13,19 +13,16 @@ let package = Package(
         .executable(
             name: "AI-Mixtapes",
             targets: ["App"]
+        ),
+        .library(
+            name: "SharedTypes",
+            targets: ["SharedTypes"]
         )
     ],
     dependencies: [
         // Local Modules
         .package(path: "Modules/MusicKitModule"),
-        .package(path: "Modules/AIModule"),
         .package(path: "Modules/AudioAnalysisModule"),
-        .package(path: "Modules/CoreDataModule"),
-        .package(path: "Modules/NetworkingModule"),
-        .package(path: "Modules/UIComponentsModule"),
-        .package(path: "Modules/UtilitiesModule"),
-        .package(path: "Modules/SiriKitModule"),
-        .package(path: "Modules/VisualizationModule"),
         
         // External Dependencies
         .package(url: "https://github.com/apple/swift-algorithms", from: "1.2.0"),
@@ -33,21 +30,21 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-async-algorithms", from: "1.0.0"),
         .package(url: "https://github.com/pointfreeco/swift-composable-architecture", from: "1.5.0"),
         .package(url: "https://github.com/AudioKit/AudioKit", from: "5.6.0"),
-        .package(url: "https://github.com/AudioKit/SoundpipeAudioKit", from: "5.6.0")
+        .package(url: "https://github.com/AudioKit/SoundpipeAudioKit", from: "5.6.0"),
+        .package(url: "https://github.com/socketio/socket.io-client-swift", from: "16.0.1")
     ],
     targets: [
+        .target(
+            name: "SharedTypes",
+            dependencies: []
+        ),
         .executableTarget(
             name: "App",
             dependencies: [
+                "SharedTypes",
                 // Local Modules
                 .product(name: "MusicKitModule", package: "MusicKitModule"),
-                .product(name: "AIModule", package: "AIModule"),
                 .product(name: "AudioAnalysisModule", package: "AudioAnalysisModule"),
-                .product(name: "CoreDataModule", package: "CoreDataModule"),
-                .product(name: "NetworkingModule", package: "NetworkingModule"),
-                .product(name: "UIComponentsModule", package: "UIComponentsModule"),
-                .product(name: "UtilitiesModule", package: "UtilitiesModule"),
-                .product(name: "SiriKitModule", package: "SiriKitModule"),
                 .product(name: "VisualizationModule", package: "VisualizationModule"),
                 
                 // External Dependencies
@@ -56,7 +53,8 @@ let package = Package(
                 .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
                 .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
                 .product(name: "AudioKit", package: "AudioKit"),
-                .product(name: "SoundpipeAudioKit", package: "SoundpipeAudioKit")
+                .product(name: "SoundpipeAudioKit", package: "SoundpipeAudioKit"),
+                .product(name: "SocketIO", package: "socket.io-client-swift")
             ],
             path: "Sources/App",
             resources: [
@@ -141,6 +139,40 @@ package.targets.append(
 )
 #endif
 
+    // MCP packages
+    .target(
+        name: "MCPClient",
+        dependencies: [
+            .product(name: "SocketIO", package: "socket.io-client-swift")
+        ]
+    ),
+    .target(
+        name: "MCPServer",
+        dependencies: [
+            .product(name: "Express", package: "express"),
+            .product(name: "SocketIO", package: "socket.io")
+        ]
+    )
+)
+
+let package = Package(
+    name: "AI-Mixtapes",
+    platforms: [
+        .iOS(.v15),
+        .macOS(.v12)
+    ],
+    products: [
+        .library(name: "MCPClient", targets: ["MCPClient"]),
+        .library(name: "MCPServer", targets: ["MCPServer"])
+    ],
+    dependencies: [
+        .package(url: "https://github.com/socketio/socket.io-client-swift.git", from: "16.0.0"),
+        .package(url: "https://github.com/expressjs/express.git", from: "4.18.2"),
+        .package(url: "https://github.com/socketio/socket.io.git", from: "4.7.1")
+    ],
+    targets: allTargets
+)
+
 // MARK: - Build Configuration
 
 extension Target {
@@ -148,6 +180,7 @@ extension Target {
         return .executableTarget(
             name: "App",
             dependencies: [
+                .target(name: "MCPClient"),
                 // All module dependencies listed above
             ],
             path: "Sources/App",

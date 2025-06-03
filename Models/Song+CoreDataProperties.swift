@@ -6,17 +6,22 @@ extension Song {
         return NSFetchRequest<Song>(entityName: "Song")
     }
 
+    // Required attributes
     @NSManaged public var name: String
+    @NSManaged public var positionInTape: Int16
+    
+    // Optional attributes
     @NSManaged public var artist: String?
     @NSManaged public var albumName: String?
     @NSManaged public var genre: String?
     @NSManaged public var mood: String?
     @NSManaged public var duration: Double
     @NSManaged public var playCount: Int32
-    @NSManaged public var positionInTape: Int16
     @NSManaged public var urlData: Data?
     @NSManaged public var audioFeatures: Data?
     @NSManaged public var thumbnailData: Data?
+    
+    // Relationships
     @NSManaged public var mixTape: MixTape?
     
     // Convenience computed properties

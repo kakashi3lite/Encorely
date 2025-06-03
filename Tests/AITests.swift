@@ -520,4 +520,91 @@ extension AITests {
             wait(for: [expectation], timeout: 10.0)
         }
     }
+    
+    // MARK: - Performance Validation Tests
+    
+    func testMoodDetectionPerformance() {
+        measure(metrics: [
+            XCTCPUMetric(),
+            XCTMemoryMetric(),
+            XCTClockMetric()
+        ]) {
+            let expectation = expectation(description: "Mood detection performance test")
+            let testFeatures = AudioFeatures(
+                energy: 0.8,
+                tempo: 120,
+                valence: 0.7,
+                spectralCentroid: 2000,
+                spectralRolloff: 4000,
+                zeroCrossingRate: 0.3
+            )
+            
+            for _ in 0..<100 {
+                let start = CACurrentMediaTime()
+                let prediction = moodEngine.predictMood(from: testFeatures)
+                let duration = CACurrentMediaTime() - start
+                
+                // Verify latency requirement (<40ms)
+                XCTAssertLessThanOrEqual(duration, 0.04, "Inference latency exceeds 40ms requirement")
+                
+                // Verify prediction confidence
+                XCTAssertGreaterThanOrEqual(prediction.confidence, MLConfig.Analysis.confidenceThreshold)
+            }
+            
+            expectation.fulfill()
+            wait(for: [expectation], timeout: 5.0)
+        }
+    }
+    
+    func testModelSize() {
+        guard let modelUrl = MLConfig.ModelAsset.emotionClassifierOptimized.url else {
+            XCTFail("Optimized model not found")
+            return
+        }
+        
+        do {
+            let fileSize = try FileManager.default.attributesOfItem(atPath: modelUrl.path)[.size] as? Int64 ?? 0
+            let sizeInMB = Double(fileSize) / (1024 * 1024)
+            
+            // Verify size requirement (<5MB)
+            XCTAssertLessThanOrEqual(sizeInMB, 5.0, "Model size exceeds 5MB requirement")
+        } catch {
+            XCTFail("Failed to get model file size: \(error)")
+        }
+    }
+    
+    func testAccuracyComparison() async {
+        let testCases = [
+            ("happy_song.mp3", .happy),
+            ("sad_song.mp3", .melancholic),
+            ("energetic_song.mp3", .energetic)
+        ]
+        
+        var originalCorrect = 0
+        var optimizedCorrect = 0
+        let totalCases = testCases.count
+        
+        for (song, expectedMood) in testCases {
+            guard let audioURL = Bundle.main.url(forResource: song, withExtension: nil) else { continue }
+            
+            // Test original model
+            if let prediction = try? await moodEngine.detectMood(from: audioURL, useOptimized: false),
+               prediction.mood == expectedMood {
+                originalCorrect += 1
+            }
+            
+            // Test optimized model
+            if let prediction = try? await moodEngine.detectMood(from: audioURL, useOptimized: true),
+               prediction.mood == expectedMood {
+                optimizedCorrect += 1
+            }
+        }
+        
+        let originalAccuracy = Double(originalCorrect) / Double(totalCases)
+        let optimizedAccuracy = Double(optimizedCorrect) / Double(totalCases)
+        
+        // Verify accuracy loss requirement (<2%)
+        XCTAssertLessThanOrEqual(originalAccuracy - optimizedAccuracy, 0.02, 
+                                "Accuracy drop exceeds 2% requirement")
+    }
 }

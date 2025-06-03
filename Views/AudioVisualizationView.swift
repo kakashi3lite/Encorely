@@ -6,6 +6,7 @@ struct AudioVisualizationView: View {
     // MARK: - Properties
     @ObservedObject var queuePlayer: AVQueuePlayer
     @ObservedObject var currentSongName: CurrentSongName
+    @ObservedObject var mcpService = MCPSocketService()
     var aiService: AIIntegrationService
     
     @State private var visualizationData: [Float] = Array(repeating: 0, count: 40)
@@ -45,14 +46,20 @@ struct AudioVisualizationView: View {
                             AnimatedVisualizationView(
                                 audioData: visualizationData,
                                 mood: currentMood,
-                                sensitivity: sensitivity
+                                sensitivity: sensitivity,
+                                mcpService: mcpService
                             )
                             .frame(height: 300)
                             .cornerRadius(16)
-                            .shadow(radius: 2)
                         } else {
-                            VisualizationView(data: visualizationData)
-                                .frame(height: 200)
+                            ClassicVisualizationView(
+                                audioData: visualizationData,
+                                mood: currentMood,
+                                sensitivity: sensitivity,
+                                mcpService: mcpService
+                            )
+                            .frame(height: 300)
+                            .cornerRadius(16)
                         }
                     }
                     .padding(.horizontal)
@@ -130,9 +137,11 @@ struct AudioVisualizationView: View {
                 FrequencyAnalysisView(visualizationData: visualizationData)
             }
             .onAppear {
+                mcpService.connect()
                 startVisualization()
             }
             .onDisappear {
+                mcpService.disconnect()
                 stopVisualization()
             }
         }
@@ -192,26 +201,6 @@ struct AudioVisualizationView: View {
             .background(Color(.systemBackground))
             .cornerRadius(16)
             .shadow(color: Color.black.opacity(0.05), radius: 5)
-        }
-    }
-    
-    struct VisualizationView: View {
-        let data: [Float]
-        @State private var animate = false
-        
-        var body: some View {
-            HStack(spacing: 2) {
-                ForEach(data.indices, id: \.self) { index in
-                    Rectangle()
-                        .fill(Color.accentColor)
-                        .frame(width: 4)
-                        .frame(height: CGFloat(data[index] * 100))
-                        .animation(
-                            Animation.easeInOut(duration: 0.2)
-                                .delay(Double(index) * 0.02)
-                        )
-                }
-            }
         }
     }
     
@@ -289,14 +278,15 @@ struct AudioVisualizationView: View {
     // MARK: - Helper Methods
     
     private func startVisualization() {
-        // Start audio monitoring and update visualization
+        // Start audio analysis timer
         Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
-            updateVisualization()
-        }
-        
-        // Start mood analysis if song is playing
-        if currentSongName.wrappedValue != "Not Playing" {
-            analyzeCurrentAudio()
+            guard let audioFeatures = analyzeAudio() else { return }
+            
+            // Update visualization data
+            visualizationData = audioFeatures.frequencies.map { Float($0) }
+            
+            // Send audio features to MCP server
+            mcpService.emitAudioVisualization(audioFeatures)
         }
     }
     
@@ -304,26 +294,20 @@ struct AudioVisualizationView: View {
         // Clean up timers and audio analysis
     }
     
-    private func updateVisualization() {
-        guard currentSongName.wrappedValue != "Not Playing" else {
-            visualizationData = Array(repeating: 0, count: 40)
-            return
-        }
+    private func analyzeAudio() -> AudioFeatures? {
+        guard let currentItem = queuePlayer.currentItem else { return nil }
         
-        // Simulate audio visualization data
-        visualizationData = (0..<40).map { _ in
-            Float.random(in: 0.1...1.0)
-        }
-    }
-    
-    private func analyzeCurrentAudio() {
-        isAnalyzing = true
+        let energy = calculateEnergy(currentItem)
+        let tempo = calculateTempo(currentItem)
+        let valence = calculateValence(currentItem)
+        let frequencies = calculateFrequencies(currentItem)
         
-        // Simulate audio analysis
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            currentMood = Mood.allCases.randomElement() ?? .neutral
-            isAnalyzing = false
-        }
+        return AudioFeatures(
+            energy: energy,
+            tempo: tempo,
+            valence: valence,
+            frequencies: frequencies
+        )
     }
     
     private func getCurrentAudioCharacteristics() -> [AudioCharacteristic] {
@@ -408,5 +392,113 @@ struct AudioVisualizationView_Previews: PreviewProvider {
             currentSongName: CurrentSongName(),
             aiService: AIIntegrationService()
         )
+    }
+}
+
+private struct AnimatedVisualizationView: View {
+    let audioData: [Float]
+    let mood: Mood
+    let sensitivity: Double
+    let mcpService: MCPSocketService
+    
+    @State private var isAnimating = false
+    
+    var body: some View {
+        GeometryReader { geometry in
+            HStack(spacing: geometry.size.width / CGFloat(audioData.count * 2)) {
+                ForEach(Array(audioData.enumerated()), id: \.offset) { index, value in
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    mood.color.opacity(0.6),
+                                    mood.color
+                                ]),
+                                startPoint: .bottom,
+                                endPoint: .top
+                            )
+                        )
+                        .frame(width: geometry.size.width / CGFloat(audioData.count) / 1.5,
+                               height: geometry.size.height * CGFloat(value) * CGFloat(sensitivity))
+                        .animation(
+                            Animation.spring(response: 0.3, dampingFraction: 0.6)
+                                .repeatForever(autoreverses: true)
+                                .delay(Double(index) * 0.05),
+                            value: isAnimating
+                        )
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(.systemBackground).opacity(0.1))
+            .onAppear {
+                isAnimating = true
+            }
+        }
+    }
+}
+
+private struct ClassicVisualizationView: View {
+    let audioData: [Float]
+    let mood: Mood
+    let sensitivity: Double
+    let mcpService: MCPSocketService
+    
+    var body: some View {
+        GeometryReader { geometry in
+            let maxHeight = geometry.size.height
+            let width = geometry.size.width
+            
+            Path { path in
+                path.move(to: CGPoint(x: 0, y: maxHeight / 2))
+                
+                for (index, value) in audioData.enumerated() {
+                    let x = width * CGFloat(index) / CGFloat(audioData.count)
+                    let y = maxHeight / 2 + CGFloat(value) * maxHeight / 2 * CGFloat(sensitivity)
+                    
+                    if index == 0 {
+                        path.move(to: CGPoint(x: x, y: y))
+                    } else {
+                        path.addLine(to: CGPoint(x: x, y: y))
+                    }
+                }
+                
+                // Mirror the waveform
+                for (index, value) in audioData.enumerated().reversed() {
+                    let x = width * CGFloat(index) / CGFloat(audioData.count)
+                    let y = maxHeight / 2 - CGFloat(value) * maxHeight / 2 * CGFloat(sensitivity)
+                    path.addLine(to: CGPoint(x: x, y: y))
+                }
+                
+                path.closeSubpath()
+            }
+            .fill(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        mood.color.opacity(0.3),
+                        mood.color.opacity(0.7)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay(
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: maxHeight / 2))
+                    
+                    for (index, value) in audioData.enumerated() {
+                        let x = width * CGFloat(index) / CGFloat(audioData.count)
+                        let y = maxHeight / 2 + CGFloat(value) * maxHeight / 2 * CGFloat(sensitivity)
+                        
+                        if index == 0 {
+                            path.move(to: CGPoint(x: x, y: y))
+                        } else {
+                            path.addLine(to: CGPoint(x: x, y: y))
+                        }
+                    }
+                }
+                .stroke(mood.color, lineWidth: 2)
+                .blur(radius: 1)
+            )
+        }
     }
 }

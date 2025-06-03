@@ -1,6 +1,7 @@
 import Foundation
 import Accelerate
 import AVFoundation
+import CoreData
 
 class FFTProcessor {
     private let fftSetup: vDSP_DFT_Setup?
@@ -11,6 +12,8 @@ class FFTProcessor {
     private var previousMagnitudes: [Float]?
     private var tempBuffer: [Float]
     
+    private var tempoEstimator: TempoEstimator
+    
     init(maxFrameSize: Int, sampleRate: Float = 44100.0) {
         self.maxFrameSize = maxFrameSize
         self.sampleRate = sampleRate
@@ -20,15 +23,15 @@ class FFTProcessor {
             vDSP_DFT_Direction.FORWARD
         )
         
-        // Initialize Hanning window
+        // Initialize window and buffers
         self.window = [Float](repeating: 0, count: maxFrameSize)
         vDSP_hann_window(&self.window, vDSP_Length(maxFrameSize), Int32(vDSP_HANN_NORM))
         
-        // Initialize temp buffer
         self.tempBuffer = [Float](repeating: 0, count: maxFrameSize)
-        
-        // Calculate normalization factor for magnitude spectrum
         self.magnitudeNormalizationFactor = 2.0 / Float(maxFrameSize)
+        
+        // Initialize tempo estimator
+        self.tempoEstimator = TempoEstimator(bufferSize: maxFrameSize)
     }
     
     deinit {
@@ -102,7 +105,7 @@ class FFTProcessor {
         // Calculate frequency bands
         let bandEnergies = calculateBandEnergies(magnitudes: magnitudes, frequencyResolution: frequencyResolution)
         
-        // Spectral features
+        // Calculate spectral features
         let centroid = calculateSpectralCentroid(magnitudes: magnitudes, frequencyResolution: frequencyResolution)
         let flatness = calculateSpectralFlatness(magnitudes: magnitudes)
         let rolloff = calculateSpectralRolloff(magnitudes: magnitudes, frequencyResolution: frequencyResolution)
@@ -110,8 +113,20 @@ class FFTProcessor {
         let contrast = calculateSpectralContrast(bandEnergies: bandEnergies)
         let harmonicRatio = calculateHarmonicRatio(magnitudes: magnitudes, frequencyResolution: frequencyResolution)
         let zeroCrossingRate = calculateZeroCrossingRate(magnitudes: magnitudes)
-        let crest = calculateSpectralCrest(magnitudes: magnitudes)
         
+        // Calculate RMS energy for tempo detection
+        var rms: Float = 0
+        vDSP_rmsqv(magnitudes, 1, &rms, vDSP_Length(magnitudes.count))
+        
+        // Estimate tempo using combined features
+        let estimatedTempo = tempoEstimator.estimateTempo(
+            magnitudes: magnitudes,
+            rms: rms,
+            sampleRate: sampleRate,
+            bufferSize: maxFrameSize
+        )
+        
+        // Create spectral features with all calculated values
         return SpectralFeatures(
             bassEnergy: bandEnergies.bass,
             midEnergy: bandEnergies.mid,
@@ -123,9 +138,10 @@ class FFTProcessor {
             spectralContrast: contrast,
             harmonicRatio: harmonicRatio,
             zeroCrossingRate: zeroCrossingRate,
-            spectralCrest: crest,
+            spectralCrest: calculateSpectralCrest(magnitudes: magnitudes),
             dynamicRange: calculateDynamicRange(magnitudes: magnitudes),
-            spectralFlux: 0 // Will be set later
+            spectralFlux: calculateSpectralFlux(current: magnitudes, previous: previousMagnitudes ?? magnitudes),
+            estimatedTempo: estimatedTempo
         )
     }
     
@@ -224,6 +240,7 @@ struct SpectralFeatures {
     let spectralCrest: Float
     let dynamicRange: Float
     var spectralFlux: Float
+    var estimatedTempo: Float
 }
 
 // MARK: - Supporting Types
@@ -256,3 +273,113 @@ struct AudioFeatures {
 }
 
 struct MoodIndicators {
+    let energy: Float
+    let brightness: Float
+    let complexity: Float
+    let density: Float
+}
+
+// MARK: - TempoEstimator
+
+struct TempoEstimator {
+    // Detection parameters
+    static let minTempo: Float = 40.0  // Minimum BPM
+    static let maxTempo: Float = 240.0 // Maximum BPM
+    static let onsetThreshold: Float = 0.3 // Onset detection sensitivity
+    static let smoothingFactor: Float = 0.15 // Temporal smoothing
+    
+    // Previous values for spectral flux calculation
+    private var previousMagnitudes: [Float]?
+    private var previousRMS: Float = 0
+    private var tempoHistory: [Float] = []
+    private let historySize = 8
+    
+    // Buffer management
+    private var tempBuffer: [Float]
+    
+    init(bufferSize: Int) {
+        self.tempBuffer = [Float](repeating: 0, count: bufferSize)
+    }
+    
+    mutating func estimateTempo(magnitudes: [Float], rms: Float, sampleRate: Float, bufferSize: Int) -> Float {
+        // Calculate spectral flux
+        let spectralFlux = calculateSpectralFlux(current: magnitudes, previous: previousMagnitudes)
+        
+        // Calculate energy changes
+        let energyFlux = max(0, rms - previousRMS)
+        
+        // Combine spectral and energy features for onset detection
+        let onsetStrength = 0.6 * spectralFlux + 0.4 * energyFlux
+        
+        // Store current values for next frame
+        previousMagnitudes = magnitudes
+        previousRMS = rms
+        
+        // Detect peaks in onset strength
+        if onsetStrength > onsetThreshold {
+            // Calculate tempo using inter-onset intervals
+            let framesPerSecond = sampleRate / Float(bufferSize)
+            let tempo = estimateTempoFromOnset(framesPerSecond: framesPerSecond)
+            
+            // Add to history with temporal smoothing
+            if tempo > TempoEstimator.minTempo && tempo < TempoEstimator.maxTempo {
+                tempoHistory.append(tempo)
+                if tempoHistory.count > historySize {
+                    tempoHistory.removeFirst()
+                }
+            }
+        }
+        
+        // Return smoothed tempo or default if not enough data
+        return calculateSmoothedTempo()
+    }
+    
+    private func calculateSpectralFlux(current: [Float], previous: [Float]?) -> Float {
+        guard let prev = previous, prev.count == current.count else {
+            return 0
+        }
+        
+        vDSP_vsub(prev, 1, current, 1, &tempBuffer, 1, vDSP_Length(current.count))
+        vDSP_vabs(tempBuffer, 1, &tempBuffer, 1, vDSP_Length(current.count))
+        
+        var flux: Float = 0
+        vDSP_sve(tempBuffer, 1, &flux, vDSP_Length(current.count))
+        
+        return flux / Float(current.count)
+    }
+    
+    private func estimateTempoFromOnset(framesPerSecond: Float) -> Float {
+        // Convert frame interval to BPM
+        let instantTempo = framesPerSecond * 60.0
+        return min(max(instantTempo, TempoEstimator.minTempo), TempoEstimator.maxTempo)
+    }
+    
+    private func calculateSmoothedTempo() -> Float {
+        guard !tempoHistory.isEmpty else { return 120.0 } // Default tempo if no history
+        
+        // Apply median filter for stability
+        let sortedTempos = tempoHistory.sorted()
+        let medianIndex = sortedTempos.count / 2
+        let medianTempo = sortedTempos[medianIndex]
+        
+        // Apply exponential smoothing
+        var smoothedTempo = tempoHistory[0]
+        for tempo in tempoHistory.dropFirst() {
+            smoothedTempo = smoothedTempo * (1 - TempoEstimator.smoothingFactor) + tempo * TempoEstimator.smoothingFactor
+        }
+        
+        // Weight median and smoothed values
+        return 0.7 * medianTempo + 0.3 * smoothedTempo
+    }
+}
+
+struct ContentView: View {
+    @Environment(\.managedObjectContext) var viewContext
+    @EnvironmentObject var audioProcessor: AudioProcessor
+    
+    var body: some View {
+        // Your view code here
+    }
+}
+
+let config = AudioProcessingConfiguration.shared

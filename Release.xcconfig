@@ -1,0 +1,45 @@
+// Release configuration for AI-Mixtapes
+#include "Base.xcconfig"
+
+// Release-specific settings
+DEBUG = 0
+DEBUG_INFORMATION_FORMAT = dwarf-with-dsym
+DEPLOYMENT_POSTPROCESSING = YES
+ENABLE_NS_ASSERTIONS = NO
+GCC_OPTIMIZATION_LEVEL = s
+MTL_ENABLE_DEBUG_INFO = NO
+SWIFT_COMPILATION_MODE = wholemodule
+SWIFT_OPTIMIZATION_LEVEL = -O
+VALIDATE_PRODUCT = YES
+
+// Release-specific optimizations
+DEAD_CODE_STRIPPING = YES
+LLVM_LTO = YES
+STRIP_INSTALLED_PRODUCT = YES
+STRIP_SWIFT_SYMBOLS = YES
+
+// Memory optimization
+SWIFT_STRICT_CONCURRENCY = complete
+ML_MEMORY_BUDGET = 150 // Optimized for release
+
+// Performance settings
+ENABLE_PERFORMANCE_MONITORING = 1
+AI_INFERENCE_TIMEOUT = 50 // Stricter timeout for release
+
+// Logging level for release
+ERROR_LOG_LEVEL = 1 // Only errors
+
+// Security settings
+ENABLE_HARDENED_RUNTIME = 1
+ENABLE_APP_SANDBOX = 1
+FORCE_LOCAL_PROCESSING = 1
+
+// Disable debug features
+ENABLE_MEMORY_GRAPH_DEBUGGER = 0
+ENABLE_VIEW_DEBUG_GAUGES = 0
+ENABLE_RUNTIME_DEBUGGING = 0
+ENABLE_PREVIEWS = NO
+
+// Audio processing optimization
+AUDIO_PROCESSING_QUALITY = high
+ENABLE_AUDIO_OPTIMIZATION = 1

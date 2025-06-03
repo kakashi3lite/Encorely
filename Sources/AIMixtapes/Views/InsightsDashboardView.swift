@@ -21,14 +21,13 @@ struct InsightsDashboardView: View {
     @State private var showingSiriShortcuts = false
     @State private var refreshing = false
     @State private var metrics: InsightMetrics?
-    @State private var selectedTab = 0
     
     // MARK: - Body
     
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                // Overview metrics
+                // Overview header
                 HStack {
                     TimeframeSelector(selection: $selectedTimeframe)
                     Spacer()
@@ -36,23 +35,13 @@ struct InsightsDashboardView: View {
                 }
                 .padding(.horizontal)
                 
-                // Key metrics cards
-                LazyVGrid(columns: [
-                    GridItem(.flexible()),
-                    GridItem(.flexible())
-                ], spacing: 16) {
+                // High-level metrics
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
                     MetricCard(
                         title: "Total Listening Time",
                         value: metrics?.totalListeningTime ?? "0h",
                         icon: "clock",
                         color: .blue
-                    )
-                    
-                    MetricCard(
-                        title: "Favorite Mood",
-                        value: metrics?.topMood ?? "N/A",
-                        icon: "heart.fill",
-                        color: .pink
                     )
                     
                     MetricCard(
@@ -63,15 +52,22 @@ struct InsightsDashboardView: View {
                     )
                     
                     MetricCard(
-                        title: "Songs Added",
-                        value: "\(metrics?.songsAdded ?? 0)",
-                        icon: "plus.circle",
+                        title: "AI Suggestions Used",
+                        value: "\(metrics?.aiSuggestionsUsed ?? 0)",
+                        icon: "brain",
                         color: .green
+                    )
+                    
+                    MetricCard(
+                        title: "Mood Changes",
+                        value: "\(metrics?.moodChanges ?? 0)",
+                        icon: "heart.fill",
+                        color: aiService.moodEngine.currentMood.color
                     )
                 }
                 .padding(.horizontal)
                 
-                // Mood distribution
+                // Mood distribution chart
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Mood Distribution")
                         .font(.headline)
@@ -85,7 +81,7 @@ struct InsightsDashboardView: View {
                 .shadow(radius: 2)
                 .padding(.horizontal)
                 
-                // Listening habits
+                // Listening habits chart
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Listening Habits")
                         .font(.headline)
@@ -99,52 +95,45 @@ struct InsightsDashboardView: View {
                 .shadow(radius: 2)
                 .padding(.horizontal)
                 
-                // AI-generated insights
+                // AI-generated insights carousel
                 if let insights = metrics?.aiInsights {
                     InsightsCarousel(insights: insights)
                         .padding(.horizontal)
                 }
                 
-                // Siri shortcuts section
+                // Quick actions
                 VStack(alignment: .leading) {
-                    HStack {
-                        Image(systemName: "waveform")
-                            .foregroundColor(.blue)
-                        Text("Voice Commands")
-                            .font(.headline)
-                        Spacer()
-                        Button(action: { showingSiriShortcuts = true }) {
-                            Text("Manage")
-                                .foregroundColor(.blue)
-                        }
-                    }
-                    .padding()
+                    Text("Quick Actions")
+                        .font(.headline)
+                        .padding(.horizontal)
                     
-                    if aiService.siriIntegrationEnabled {
-                        Text("Use Siri to control your music by mood and create AI mixtapes hands-free.")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal)
-                    } else {
-                        HStack {
-                            Image(systemName: "exclamationmark.triangle")
-                                .foregroundColor(.orange)
-                            Text("Enable Siri in Settings to use voice commands")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 16) {
+                            QuickActionButton(
+                                title: "Manage Siri Shortcuts",
+                                icon: "waveform",
+                                action: { showingSiriShortcuts = true }
+                            )
+                            
+                            QuickActionButton(
+                                title: "Generate Weekly Report",
+                                icon: "doc.text.below.ecg",
+                                action: generateWeeklyReport
+                            )
+                            
+                            QuickActionButton(
+                                title: "Analyze Library",
+                                icon: "magnifyingglass.circle",
+                                action: analyzeLibrary
+                            )
                         }
-                        .padding()
+                        .padding(.horizontal)
                     }
                 }
-                .background(Color(.systemBackground))
-                .cornerRadius(16)
-                .shadow(radius: 2)
-                .padding(.horizontal)
             }
             .padding(.vertical)
         }
-        .navigationTitle("Your Music Insights")
-        .background(Color(.systemGroupedBackground))
+        .navigationTitle("Insights")
         .sheet(isPresented: $showingSiriShortcuts) {
             SiriShortcutsView(aiService: aiService)
         }
@@ -153,232 +142,114 @@ struct InsightsDashboardView: View {
         }
     }
     
-    // MARK: - Supporting Views
-    
-    struct TimeframeSelector: View {
-        @Binding var selection: TimeFrame
-        
-        var body: some View {
-            Picker("Timeframe", selection: $selection) {
-                ForEach(TimeFrame.allCases) { timeframe in
-                    Text(timeframe.description)
-                        .tag(timeframe)
-                }
-            }
-            .pickerStyle(SegmentedPickerStyle())
-        }
-    }
-    
-    struct MetricCard: View {
-        let title: String
-        let value: String
-        let icon: String
-        let color: Color
-        
-        var body: some View {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Image(systemName: icon)
-                        .foregroundColor(color)
-                    Text(title)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                
-                Text(value)
-                    .font(.title2)
-                    .fontWeight(.semibold)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(Color(.systemBackground))
-            .cornerRadius(12)
-            .shadow(color: color.opacity(0.1), radius: 5)
-        }
-    }
-    
-    struct MoodDistributionChart: View {
-        let data: [String: Double]
-        
-        var body: some View {
-            Chart {
-                ForEach(Array(data.keys.sorted()), id: \.self) { mood in
-                    BarMark(
-                        x: .value("Mood", mood),
-                        y: .value("Percentage", data[mood] ?? 0)
-                    )
-                    .foregroundStyle(getMoodColor(mood))
-                }
-            }
-        }
-        
-        private func getMoodColor(_ mood: String) -> Color {
-            Mood(rawValue: mood)?.color ?? .gray
-        }
-    }
-    
-    struct ListeningHabitsChart: View {
-        let data: [String: Int]
-        
-        var body: some View {
-            Chart {
-                ForEach(Array(data.keys.sorted()), id: \.self) { hour in
-                    LineMark(
-                        x: .value("Hour", hour),
-                        y: .value("Listens", data[hour] ?? 0)
-                    )
-                    .foregroundStyle(.blue)
-                }
-            }
-        }
-    }
-    
-    struct InsightsCarousel: View {
-        let insights: [String]
-        @State private var selectedIndex = 0
-        
-        var body: some View {
-            TabView(selection: $selectedIndex) {
-                ForEach(insights.indices, id: \.self) { index in
-                    InsightCard(text: insights[index])
-                        .tag(index)
-                }
-            }
-            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
-            .frame(height: 160)
-        }
-    }
-    
-    struct InsightCard: View {
-        let text: String
-        
-        var body: some View {
-            VStack(alignment: .leading, spacing: 16) {
-                Image(systemName: "lightbulb.fill")
-                    .foregroundColor(.yellow)
-                    .font(.title2)
-                
-                Text(text)
-                    .font(.body)
-                    .foregroundColor(.primary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(Color(.systemBackground))
-            .cornerRadius(16)
-            .shadow(radius: 2)
-        }
-    }
+    // MARK: - Components
     
     private var refreshButton: some View {
         Button(action: refreshData) {
-            Image(systemName: refreshing ? "hourglass" : "arrow.clockwise")
-                .imageScale(.large)
-                .rotationEffect(.degrees(refreshing ? 0 : 360))
-                .animation(
-                    refreshing ? 
-                        Animation.linear(duration: 1).repeatForever(autoreverses: false) : 
-                        .default,
-                    value: refreshing
-                )
+            Image(systemName: "arrow.clockwise")
+                .rotationEffect(.degrees(refreshing ? 360 : 0))
         }
         .disabled(refreshing)
     }
     
-    // MARK: - Actions
+    // MARK: - Helper Functions
     
     private func loadData() {
-        refreshData()
+        // Load insights data
+        refreshing = true
+        // Implement data loading
+        refreshing = false
     }
     
     private func refreshData() {
-        refreshing = true
-        
-        // Simulate data loading
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            metrics = InsightMetrics(
-                totalListeningTime: "12h",
-                topMood: "Happy",
-                mixtapesCreated: mixtapes.count,
-                songsAdded: getTotalSongs(),
-                moodDistribution: generateMoodDistribution(),
-                listeningHabits: generateListeningHabits(),
-                aiInsights: generateInsights()
-            )
-            refreshing = false
-        }
+        loadData()
     }
     
-    private func getTotalSongs() -> Int {
-        mixtapes.reduce(0) { $0 + $1.songsArray.count }
+    private func generateWeeklyReport() {
+        // Implement report generation
     }
     
-    private func generateMoodDistribution() -> [String: Double] {
-        var distribution: [String: Double] = [:]
-        let moods = Mood.allCases
-        
-        for mood in moods {
-            distribution[mood.rawValue] = Double.random(in: 0...100)
-        }
-        
-        return distribution
-    }
-    
-    private func generateListeningHabits() -> [String: Int] {
-        var habits: [String: Int] = [:]
-        
-        for hour in 0..<24 {
-            habits[String(format: "%02d:00", hour)] = Int.random(in: 0...50)
-        }
-        
-        return habits
-    }
-    
-    private func generateInsights() -> [String] {
-        [
-            "You listen to more upbeat music in the morning",
-            "Your favorite mood this week is Happy",
-            "You've created 3 new mixtapes this week",
-            "Try exploring more relaxing music for evening sessions"
-        ]
+    private func analyzeLibrary() {
+        // Implement library analysis
     }
 }
 
-// MARK: - Supporting Types
+// MARK: - Supporting Views
 
-struct InsightMetrics {
-    let totalListeningTime: String
-    let topMood: String
-    let mixtapesCreated: Int
-    let songsAdded: Int
-    let moodDistribution: [String: Double]
-    let listeningHabits: [String: Int]
-    let aiInsights: [String]
+struct TimeframeSelector: View {
+    @Binding var selection: TimeFrame
+    
+    var body: some View {
+        Picker("Timeframe", selection: $selection) {
+            ForEach(TimeFrame.allCases) { timeframe in
+                Text(timeframe.description)
+                    .tag(timeframe)
+            }
+        }
+        .pickerStyle(SegmentedPickerStyle())
+    }
 }
 
-enum TimeFrame: String, CaseIterable, Identifiable {
-    case day = "24H"
-    case week = "7D"
-    case month = "30D"
-    case year = "1Y"
+struct QuickActionButton: View {
+    let title: String
+    let icon: String
+    let action: () -> Void
     
-    var id: String { rawValue }
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Image(systemName: icon)
+                Text(title)
+            }
+            .padding()
+            .background(Color(.systemBackground))
+            .cornerRadius(8)
+            .shadow(radius: 2)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct InsightsCarousel: View {
+    let insights: [AIInsight]
     
-    var description: String {
-        switch self {
-        case .day: return "24 Hours"
-        case .week: return "Week"
-        case .month: return "Month"
-        case .year: return "Year"
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text("AI Insights")
+                .font(.headline)
+            
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 16) {
+                    ForEach(insights) { insight in
+                        InsightCard(insight: insight)
+                    }
+                }
+            }
         }
     }
 }
 
-// MARK: - Preview
-
-struct InsightsDashboardView_Previews: PreviewProvider {
-    static var previews: some View {
-        InsightsDashboardView(aiService: AIIntegrationService())
-            .environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+struct InsightCard: View {
+    let insight: AIInsight
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: insight.icon)
+                    .foregroundColor(insight.color)
+                Text(insight.title)
+                    .font(.headline)
+            }
+            
+            Text(insight.description)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding()
+        .frame(width: 300)
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .shadow(radius: 2)
     }
 }

@@ -1,9 +1,5 @@
 {
-    "editor.quickSuggestions": {
-        "comments": "on",
-        "strings": "on",
-        "other": "on"
-    },
+    "editor.quickSuggestions": false,
     "swift.path.swift_driver_bin": "/usr/bin/swift",
     "swift.languageServerPath": "/usr/local/bin/sourcekit-lsp",
     "lldb.executable": "/usr/bin/lldb",
@@ -11,7 +7,7 @@
     "editor.rulers": [100],
     "editor.suggestSelection": "first",
     "editor.codeActionsOnSave": {
-        "source.fixAll.swiftlint": true
+        "source.fixAll.swiftlint": "explicit"
     },
     "swift.formatOnBuild": true,
     "swift.interfaces.enableSnippets": true,

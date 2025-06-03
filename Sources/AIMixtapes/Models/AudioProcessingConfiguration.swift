@@ -2,39 +2,88 @@ import Foundation
 import AVFoundation
 import Combine
 
-public class AudioProcessingConfiguration: ObservableObject {
+final class AudioProcessingConfiguration: ObservableObject {
+    static let shared = AudioProcessingConfiguration()
+    
+    // MARK: - Platform-specific defaults
+    
+    private static let defaultMemoryUsage: UInt64 = {
+        #if os(macOS)
+        return min(100 * 1024 * 1024, ProcessInfo.processInfo.physicalMemory / 20) // 5% of RAM or 100MB
+        #else
+        return min(50 * 1024 * 1024, ProcessInfo.processInfo.physicalMemory / 40) // 2.5% of RAM or 50MB
+        #endif
+    }()
+    
+    private static let defaultBufferSize: UInt32 = {
+        let processorCount = ProcessInfo.processInfo.processorCount
+        #if os(macOS)
+        return UInt32(min(8192, max(2048, processorCount * 512)))
+        #else
+        return UInt32(min(4096, max(1024, processorCount * 256)))
+        #endif
+    }()
+    
+    private static let defaultLatency: TimeInterval = {
+        #if os(macOS)
+        return 0.15 // 150ms for macOS
+        #else 
+        return 0.10 // 100ms for iOS
+        #endif
+    }()
+    private static let defaultMaxLatency: TimeInterval = {
+        #if os(macOS)
+        return 0.15  // 150ms for macOS
+        #else
+        return 0.10  // 100ms for iOS
+        #endif
+    }()
+    
+    // Default frame size per platform
+    private static let defaultFrameSize: UInt32 = {
+        #if os(macOS)
+        return 8192  // Larger frames for macOS
+        #else
+        return 4096  // Smaller frames for iOS
+        #endif
+    }()
+    
     // MARK: - Published Properties
     
     // Core Settings
     @Published var sampleRate: Double = MLConfig.FeatureExtraction.sampleRate
-    @Published var bufferSize: Int = MLConfig.FeatureExtraction.fftSize
-    @Published var hopSize: Int = MLConfig.FeatureExtraction.hopSize
-    @Published var frameSize: Int = MLConfig.FeatureExtraction.windowSize
-    
-    // Feature Analysis Settings
-    @Published var analysisEnabled: Bool = true
-    @Published var realTimeAnalysisEnabled: Bool = true
-    @Published var spectralAnalysisEnabled: Bool = true
-    @Published var tempoDetectionEnabled: Bool = true
-    @Published var onsetDetectionEnabled: Bool = true
+    @Published var bufferSize: UInt32 = defaultBufferSize
+    @Published var hopSize: UInt32
+    @Published var frameSize: UInt32
+    @Published var maxMemoryUsage: UInt64 = defaultMemoryUsage
+    @Published var targetFPS: Double
     
     // Performance Settings
-    @Published var maxProcessingLatency: TimeInterval = MLConfig.Performance.maxProcessingLatency
-    @Published var maxMemoryUsage: UInt64 = UInt64(MLConfig.Performance.maxMemoryUsage)
-    @Published var targetFPS: Double = MLConfig.Performance.targetFPS
-    @Published var enablePerformanceMonitoring: Bool = true
+    @Published var optimizationPreset: OptimizationPreset = .balanced {
+        didSet { applyPresetSettings() }
+    }
+    @Published var adaptiveProcessingEnabled: Bool = true
+    @Published var autoAdjustQuality: Bool = true
     
-    // Mood Detection Settings
-    @Published var moodDetectionEnabled: Bool = true
-    @Published var moodUpdateInterval: TimeInterval = MLConfig.Analysis.moodUpdateInterval
-    @Published var moodConfidenceThreshold: Float = MLConfig.Analysis.confidenceThreshold
-    @Published var useCoreMLForMoodDetection: Bool = true
-    @Published var moodStabilityFactor: Float = MLConfig.Analysis.moodStabilityFactor
+    // New adaptive thresholds
+    private var memoryPressureThresholds: [MemoryPressureLevel: Double] = [
+        .low: 0.6,
+        .moderate: 0.75,
+        .high: 0.85,
+        .critical: 0.95
+    ]
     
-    // Device Adaptation
-    @Published var adaptToDeviceCapabilities: Bool = MLConfig.DeviceAdaptation.adaptToDeviceCapabilities
-    @Published var lowPowerModeEnabled: Bool = MLConfig.DeviceAdaptation.lowPowerModeEnabled
-    @Published var backgroundProcessingEnabled: Bool = MLConfig.DeviceAdaptation.backgroundProcessingEnabled
+    enum MemoryPressureLevel: Int {
+        case low, moderate, high, critical
+    }
+    
+    enum OptimizationPreset {
+        case ultraLowLatency
+        case balanced
+        case highQuality
+        case powerSaving
+        case custom
+    }
     
     // MARK: - Private Properties
     private let configurationChanged = PassthroughSubject<Void, Never>()
@@ -43,145 +92,134 @@ public class AudioProcessingConfiguration: ObservableObject {
     // MARK: - Initialization
     
     init() {
-        setupDefaults()
-        setupObservers()
-        
-        if adaptToDeviceCapabilities {
-            adaptToCurrentDevice()
-        }
+        self.hopSize = Self.defaultBufferSize / 2
+        self.frameSize = Self.defaultBufferSize
+        self.targetFPS = Self.defaultTargetFPS()
+        setupAdaptiveConfiguration()
     }
     
     // MARK: - Configuration Methods
     
-    private func setupDefaults() {
-        let defaults = UserDefaults.standard
+    private func setupAdaptiveConfiguration() {
+        // Monitor system conditions
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleMemoryWarning),
+            name: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil
+        )
         
-        // Load saved settings or use defaults
-        sampleRate = defaults.double(forKey: "audio.sampleRate")
-        bufferSize = defaults.integer(forKey: "audio.bufferSize")
-        hopSize = defaults.integer(forKey: "audio.hopSize")
-        frameSize = defaults.integer(forKey: "audio.frameSize")
-        
-        analysisEnabled = defaults.bool(forKey: "analysis.enabled")
-        realTimeAnalysisEnabled = defaults.bool(forKey: "analysis.realTime")
-        spectralAnalysisEnabled = defaults.bool(forKey: "analysis.spectral")
-        tempoDetectionEnabled = defaults.bool(forKey: "analysis.tempo")
-        
-        maxProcessingLatency = defaults.double(forKey: "performance.maxLatency")
-        targetFPS = defaults.double(forKey: "performance.targetFPS")
-        
-        moodConfidenceThreshold = defaults.float(forKey: "mood.confidenceThreshold")
-        moodUpdateInterval = defaults.double(forKey: "mood.updateInterval")
-        useCoreMLForMoodDetection = defaults.bool(forKey: "mood.useCoreML")
-    }
-    
-    private func setupObservers() {
-        // Monitor device state changes
-        NotificationCenter.default.publisher(for: NSProcessInfo.thermalStateDidChangeNotification)
-            .sink { [weak self] _ in
-                self?.adaptToThermalState()
-            }
-            .store(in: &cancellables)
-        
-        NotificationCenter.default.publisher(for: NSProcessInfo.powerStateDidChangeNotification)
-            .sink { [weak self] _ in
-                self?.adaptToPowerState()
-            }
-            .store(in: &cancellables)
-    }
-    
-    // MARK: - Device Adaptation
-    
-    private func adaptToCurrentDevice() {
-        let device = UIDevice.current
-        let processorCount = ProcessInfo.processInfo.processorCount
-        
-        // Adapt buffer size based on device capability
-        if processorCount >= 6 {
-            bufferSize = 4096  // High-end devices
-        } else if processorCount >= 4 {
-            bufferSize = 2048  // Mid-range devices
-        } else {
-            bufferSize = 1024  // Lower-end devices
-        }
-        
-        // Adjust hop size
-        hopSize = bufferSize / 2
-        
-        // Adjust target FPS
-        if device.userInterfaceIdiom == .phone {
-            targetFPS = device.modelIdentifier.contains("iPhone14") ? 30 : 20
-        } else {
-            targetFPS = 30  // iPad and other devices
+        // Start periodic optimization checks
+        Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            self?.updateAdaptiveSettings()
         }
     }
     
-    private func adaptToThermalState() {
+    private func updateAdaptiveSettings() {
+        guard adaptiveProcessingEnabled else { return }
+        
+        // Check system conditions
+        let memoryUsage = getCurrentMemoryUsage()
         let thermalState = ProcessInfo.processInfo.thermalState
+        let batteryLevel = getBatteryLevel()
         
-        switch thermalState {
-        case .nominal:
-            restoreDefaultSettings()
+        // Adjust settings based on conditions
+        adjustForMemoryPressure(memoryUsage)
+        adjustForThermalState(thermalState)
+        adjustForBatteryLevel(batteryLevel)
+    }
+    
+    private func adjustForMemoryPressure(_ usage: Double) {
+        var newPreset = optimizationPreset
+        
+        switch usage {
+        case memoryPressureThresholds[.critical]!...:
+            newPreset = .ultraLowLatency
+            performEmergencyCleanup()
+        case memoryPressureThresholds[.high]!...:
+            newPreset = .powerSaving
+        case memoryPressureThresholds[.moderate]!...:
+            newPreset = .balanced
+        default:
+            // Maintain current preset if memory usage is low
+            break
+        }
+        
+        if newPreset != optimizationPreset {
+            optimizationPreset = newPreset
+        }
+    }
+    
+    private func getCurrentMemoryUsage() -> Double {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
+        
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                task_info(mach_task_self_,
+                         task_flavor_t(MACH_TASK_BASIC_INFO),
+                         $0,
+                         &count)
+            }
+        }
+        
+        guard result == KERN_SUCCESS else { return 0.0 }
+        return Double(info.resident_size) / Double(maxMemoryUsage)
+    }
+    
+    private static func defaultTargetFPS() -> Double {
+        #if os(macOS)
+        return 60.0
+        #else
+        return ProcessInfo.processInfo.processorCount >= 4 ? 30.0 : 20.0
+        #endif
+    }
+    
+    private func performEmergencyCleanup() {
+        // Notify observers of critical memory situation
+        NotificationCenter.default.post(
+            name: Notification.Name("AudioProcessingEmergencyCleanup"),
+            object: nil
+        )
+        
+        // Reset to minimum settings
+        bufferSize = 1024
+        hopSize = 512
+        targetFPS = 15.0
+    }
+    
+    // Battery level monitoring
+    private func getBatteryLevel() -> Float {
+        #if os(iOS)
+        return UIDevice.current.batteryLevel
+        #else
+        return 1.0 // Always plugged in on macOS
+        #endif
+    }
+    
+    private func adjustForBatteryLevel(_ level: Float) {
+        guard autoAdjustQuality else { return }
+        
+        if level < 0.2 {
+            optimizationPreset = .powerSaving
+        } else if level < 0.5 && optimizationPreset == .highQuality {
+            optimizationPreset = .balanced
+        }
+    }
+    
+    private func adjustForThermalState(_ state: ProcessInfo.ThermalState) {
+        switch state {
+        case .critical:
+            optimizationPreset = .ultraLowLatency
+        case .serious:
+            optimizationPreset = .powerSaving
         case .fair:
-            applyModeratePowerSaving()
-        case .serious, .critical:
-            applyAggressivePowerSaving()
-        @unknown default:
-            restoreDefaultSettings()
+            if optimizationPreset == .highQuality {
+                optimizationPreset = .balanced
+            }
+        default:
+            break
         }
-    }
-    
-    private func adaptToPowerState() {
-        if ProcessInfo.processInfo.isLowPowerModeEnabled {
-            applyLowPowerMode()
-        } else {
-            restoreDefaultSettings()
-        }
-    }
-    
-    // MARK: - Power Management
-    
-    private func applyLowPowerMode() {
-        bufferSize = 4096
-        hopSize = 2048
-        targetFPS = 15
-        maxProcessingLatency = 0.2
-        moodUpdateInterval = 1.0
-        backgroundProcessingEnabled = false
-        enablePerformanceMonitoring = false
-    }
-    
-    private func applyModeratePowerSaving() {
-        bufferSize = 3072
-        hopSize = 1536
-        targetFPS = 20
-        maxProcessingLatency = 0.15
-        moodUpdateInterval = 0.75
-    }
-    
-    private func applyAggressivePowerSaving() {
-        bufferSize = 4096
-        hopSize = 2048
-        targetFPS = 10
-        maxProcessingLatency = 0.3
-        moodUpdateInterval = 1.5
-        spectralAnalysisEnabled = false
-        backgroundProcessingEnabled = false
-    }
-    
-    private func restoreDefaultSettings() {
-        adaptToCurrentDevice()
-        
-        spectralAnalysisEnabled = true
-        tempoDetectionEnabled = true
-        onsetDetectionEnabled = true
-        
-        maxProcessingLatency = MLConfig.Performance.maxProcessingLatency
-        targetFPS = MLConfig.Performance.targetFPS
-        
-        moodUpdateInterval = MLConfig.Analysis.moodUpdateInterval
-        useCoreMLForMoodDetection = true
-        backgroundProcessingEnabled = true
     }
     
     // MARK: - Presets

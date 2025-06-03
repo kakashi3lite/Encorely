@@ -419,6 +419,177 @@ class OptimizedSiriIntentServiceTests: XCTestCase {
         
         return result == KERN_SUCCESS ? Int(info.resident_size) : 0
     }
+    
+    // MARK: - Comprehensive Performance Benchmarks
+    
+    func testSiriKitPerformanceUnderLoad() {
+        measure {
+            let group = DispatchGroup()
+            var responseTimesMs: [Double] = []
+            let lock = NSLock()
+            
+            // Simulate 10 concurrent requests
+            for i in 0..<10 {
+                group.enter()
+                let intent = createMockPlayIntent(phrase: "play music \(i)")
+                let startTime = CFAbsoluteTimeGetCurrent()
+                
+                siriService.handlePlayMediaIntent(intent) { response in
+                    let elapsedMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+                    lock.lock()
+                    responseTimesMs.append(elapsedMs)
+                    lock.unlock()
+                    group.leave()
+                }
+            }
+            
+            group.wait()
+            
+            // Verify performance targets
+            let avgResponseTime = responseTimesMs.reduce(0, +) / Double(responseTimesMs.count)
+            XCTAssertLessThan(avgResponseTime, 500, "Average response time should be under 500ms")
+            
+            let maxResponseTime = responseTimesMs.max() ?? 0
+            XCTAssertLessThan(maxResponseTime, 1000, "Maximum response time should be under 1000ms")
+            
+            let p95ResponseTime = responseTimesMs.sorted()[Int(Double(responseTimesMs.count) * 0.95)]
+            XCTAssertLessThan(p95ResponseTime, 800, "95th percentile response time should be under 800ms")
+        }
+    }
+    
+    func testCachePerformance() {
+        let intent = createMockPlayIntent(phrase: "play happy music")
+        
+        // Prime the cache
+        let primeExpectation = XCTestExpectation(description: "Cache priming")
+        siriService.handlePlayMediaIntent(intent) { _ in
+            primeExpectation.fulfill()
+        }
+        wait(for: [primeExpectation], timeout: 2.0)
+        
+        // Test cached performance
+        measure {
+            let expectation = XCTestExpectation(description: "Cached response")
+            let startTime = CFAbsoluteTimeGetCurrent()
+            
+            siriService.handlePlayMediaIntent(intent) { response in
+                let elapsedMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+                XCTAssertLessThan(elapsedMs, 100, "Cached responses should be under 100ms")
+                expectation.fulfill()
+            }
+            
+            wait(for: [expectation], timeout: 2.0)
+        }
+    }
+    
+    func testMemoryConstraints() {
+        let initialMemory = getCurrentMemoryUsage()
+        var memoryReadings: [Int] = []
+        
+        measure {
+            // Generate high load
+            let expectation = XCTestExpectation(description: "Memory test")
+            expectation.expectedFulfillmentCount = 20
+            
+            for i in 0..<20 {
+                let intent = createMockPlayIntent(phrase: "play \(Mood.allCases[i % Mood.allCases.count].rawValue) music")
+                siriService.handlePlayMediaIntent(intent) { _ in
+                    expectation.fulfill()
+                }
+            }
+            
+            wait(for: [expectation], timeout: 5.0)
+            
+            // Record memory usage
+            let currentMemory = getCurrentMemoryUsage()
+            memoryReadings.append(currentMemory - initialMemory)
+        }
+        
+        // Verify memory constraints
+        let avgMemoryIncrease = memoryReadings.reduce(0, +) / memoryReadings.count
+        XCTAssertLessThan(Double(avgMemoryIncrease) / 1024 / 1024, 20.0, "Average memory increase should be under 20MB")
+        
+        let peakMemoryIncrease = memoryReadings.max() ?? 0
+        XCTAssertLessThan(Double(peakMemoryIncrease) / 1024 / 1024, 50.0, "Peak memory increase should be under 50MB")
+    }
+    
+    func testConcurrentPerformance() {
+        let concurrentUsers = 5
+        let requestsPerUser = 10
+        let totalRequests = concurrentUsers * requestsPerUser
+        
+        measure {
+            let expectation = XCTestExpectation(description: "Concurrent performance")
+            expectation.expectedFulfillmentCount = totalRequests
+            
+            var responseTimes: [(index: Int, time: Double)] = []
+            let lock = NSLock()
+            
+            // Simulate multiple users making requests
+            for userIndex in 0..<concurrentUsers {
+                DispatchQueue.global(qos: .userInitiated).async {
+                    for requestIndex in 0..<requestsPerUser {
+                        let globalIndex = userIndex * requestsPerUser + requestIndex
+                        let intent = self.createMockPlayIntent(phrase: "play music \(globalIndex)")
+                        let startTime = CFAbsoluteTimeGetCurrent()
+                        
+                        self.siriService.handlePlayMediaIntent(intent) { response in
+                            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+                            lock.lock()
+                            responseTimes.append((globalIndex, elapsed))
+                            lock.unlock()
+                            expectation.fulfill()
+                        }
+                        
+                        // Add small delay between requests from same user
+                        Thread.sleep(forTimeInterval: 0.1)
+                    }
+                }
+            }
+            
+            wait(for: [expectation], timeout: 15.0)
+            
+            // Sort by request index to analyze performance degradation
+            responseTimes.sort { $0.index < $1.index }
+            
+            // Verify performance remains consistent
+            let firstHalfAvg = responseTimes[0..<totalRequests/2].map { $0.time }.reduce(0, +) / Double(totalRequests/2)
+            let secondHalfAvg = responseTimes[totalRequests/2..<totalRequests].map { $0.time }.reduce(0, +) / Double(totalRequests/2)
+            
+            XCTAssertLessThan(secondHalfAvg/firstHalfAvg, 1.5, "Performance should not degrade more than 50% under sustained load")
+        }
+    }
+    
+    // MARK: - Cache Validation Tests
+    
+    func testCacheInvalidation() {
+        // Test cache expiration
+        let testPhrase = "play test music"
+        let intent = createMockPlayIntent(phrase: testPhrase)
+        
+        // Prime cache
+        let primeExpectation = XCTestExpectation(description: "Cache priming")
+        siriService.handlePlayMediaIntent(intent) { _ in
+            primeExpectation.fulfill()
+        }
+        wait(for: [primeExpectation], timeout: 2.0)
+        
+        // Wait for cache to expire (cache expires after 5 minutes)
+        // Simulate by triggering manual cache cleanup
+        siriService.performCacheCleanup()
+        
+        // Verify cache was invalidated
+        let expectation = XCTestExpectation(description: "Cache invalidation")
+        let startTime = CFAbsoluteTimeGetCurrent()
+        
+        siriService.handlePlayMediaIntent(intent) { response in
+            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+            XCTAssertGreaterThan(elapsed, 0.1, "Response after cache invalidation should not be cached")
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 2.0)
+    }
 }
 
 // MARK: - Mock Classes

@@ -14,6 +14,7 @@ import Combine
 import os.log
 import Domain
 import SwiftUI
+import os.signpost
 
 /// Custom errors for audio analysis operations
 enum AudioAnalysisError: LocalizedError {
@@ -165,6 +166,17 @@ enum AIError: Error, LocalizedError {
 
 /// Enhanced audio analysis service with proper memory management
 class AudioAnalysisService: ObservableObject {
+    // Performance monitoring
+    private let signposter = OSSignposter(subsystem: "com.aimixtapes", category: "AudioAnalysis")
+    private static let audioProcessingInterval = OSSignpostInterval(name: "Audio Processing")
+    private static let fftInterval = OSSignpostInterval(name: "FFT Analysis")
+    private static let bufferInterval = OSSignpostInterval(name: "Buffer Management")
+    
+    // High-priority audio queue
+    private let realTimeQueue = DispatchQueue(label: "com.aimixtapes.realtime",
+                                            qos: .userInteractive,
+                                            attributes: .concurrent)
+    
     // MARK: - Properties
     
     @Published private(set) var isAnalyzing = false
@@ -422,6 +434,34 @@ class AudioAnalysisService: ObservableObject {
         return file
     }
     
+    private func extractFeaturesFromBuffer(_ buffer: AVAudioPCMBuffer) -> AudioFeatures {
+        guard let channelData = buffer.floatChannelData?[0] else {
+            return AudioFeatures()
+        }
+        
+        // Get spectral features using FFT
+        guard let spectralFeatures = fftProcessor.analyzeSpectralFeatures(buffer) else {
+            return AudioFeatures()
+        }
+        
+        // Calculate RMS energy
+        var rms: Float = 0
+        vDSP_rmsqv(channelData, 1, &rms, vDSP_Length(buffer.frameLength))
+        
+        // Find peak value for dynamic range
+        var peak: Float = 0
+        vDSP_maxv(channelData, 1, &peak, vDSP_Length(buffer.frameLength))
+        
+        // Convert spectral features to audio features
+        var features = AudioFeatures.from(spectralFeatures: spectralFeatures)
+        
+        // Set energy and dynamic range
+        features.energy = rms
+        features.dynamicRange = 20 * log10f(peak / (rms + Float.ulpOfOne))
+        
+        return features
+    }
+    
     private func processAudioChunks(audioFile: AVAudioFile, options: AnalysisOptions) throws -> AudioFeatures {
         let format = audioFile.processingFormat
         let channelCount = format.channelCount
@@ -438,46 +478,33 @@ class AudioAnalysisService: ObservableObject {
         var energyValues: [Float] = []
         var peakValues: [Float] = []
         
-        // Check if we have enough audio to analyze
-        if frameCount < bufferSize {
-            throw AudioAnalysisError.insufficientAudioData
-        }
-        
-        // Process audio in chunks
+        // Process audio in chunks with managed memory
         while totalFrames < frameCount {
             try autoreleasepool {
-                // Reset buffer
                 buffer.frameLength = 0
                 
                 // Read chunk
-                do {
-                    try audioFile.read(into: buffer)
-                } catch {
-                    throw AudioAnalysisError.bufferProcessingFailed("Failed to read audio chunk: \(error.localizedDescription)")
-                }
+                try audioFile.read(into: buffer)
                 
-                // Process spectral features
-                if options.contains(.spectralAnalysis) {
-                    if let features = fftProcessor.analyzeSpectralFeatures(buffer) {
-                        allSpectralFeatures.append(features)
-                    }
+                // Track buffer for memory management
+                trackBuffer(buffer)
+                
+                if let features = fftProcessor.analyzeSpectralFeatures(buffer) {
+                    allSpectralFeatures.append(features)
                 }
                 
                 // Process energy features
                 if let channelData = buffer.floatChannelData {
-                    let rms = processAudioRMS(channelData, channelCount: channelCount, frameLength: buffer.frameLength)
+                    var rms: Float = 0
+                    vDSP_rmsqv(channelData[0], 1, &rms, vDSP_Length(buffer.frameLength))
                     energyValues.append(rms)
                     
-                    // Find peak value
                     var peak: Float = 0
                     vDSP_maxv(channelData[0], 1, &peak, vDSP_Length(buffer.frameLength))
                     peakValues.append(peak)
                 }
                 
-                // Track memory usage
-                sampleMemoryUsage()
-                
-                // Update progress
+                untrackBuffer(buffer)
                 totalFrames += buffer.frameLength
                 updateProgress(Double(totalFrames) / Double(frameCount))
             }
@@ -486,12 +513,15 @@ class AudioAnalysisService: ObservableObject {
         // Return buffer to pool
         returnBufferToPool(buffer)
         
-        // Combine all features into final result
+        // Combine all features
         return createFinalFeatures(
-            spectralFeatures: allSpectralFeatures,
+            spectralFeatures: allSpectralFeatures, 
             energyValues: energyValues,
             peakValues: peakValues,
-            tempo: options.contains(.tempoAnalysis) ? estimateTempo(energyValues: energyValues, sampleRate: Float(format.sampleRate), bufferSize: Int(bufferSize)) : nil
+            tempo: options.contains(.tempoAnalysis) ? 
+                   estimateTempo(energyValues: energyValues, 
+                               sampleRate: Float(format.sampleRate), 
+                               bufferSize: Int(bufferSize)) : nil
         )
     }
     
@@ -764,7 +794,6 @@ class AudioAnalysisService: ObservableObject {
     }
     
     private func extractFeaturesFromFile(_ audioFile: AVAudioFile) throws -> AudioFeatures {
-        // Configure and allocate buffers
         let format = audioFile.processingFormat
         let channelCount = format.channelCount
         
@@ -772,150 +801,185 @@ class AudioAnalysisService: ObservableObject {
         let bufferSize = AVAudioFrameCount(analysisBufferSize)
         let buffer = getOrCreateBuffer(with: format, frameCapacity: bufferSize)
         
-        var totalFrames: AVAudioFrameCount = 0
-        let frameCount = audioFile.length
-        
         // Initialize result containers
         var allSpectralFeatures: [SpectralFeatures] = []
         var energyValues: [Float] = []
         var peakValues: [Float] = []
-        
-        // Check if we have enough audio to analyze
-        if frameCount < bufferSize {
-            throw AudioAnalysisError.insufficientAudioData
-        }
+        var onsetStrengths: [Float] = []
         
         // Process audio in chunks
-        while totalFrames < frameCount {
-            try autoreleasepool {
-                // Reset buffer
-                buffer.frameLength = 0
-                
+        var totalFrames: AVAudioFrameCount = 0
+        while totalFrames < audioFile.length {
+            autoreleasepool {
                 // Read chunk
-                do {
-                    try audioFile.read(into: buffer)
-                } catch {
-                    throw AudioAnalysisError.bufferProcessingFailed("Failed to read audio chunk: \(error.localizedDescription)")
-                }
+                try audioFile.read(into: buffer)
                 
                 // Process spectral features
                 if let features = fftProcessor.analyzeSpectralFeatures(buffer) {
                     allSpectralFeatures.append(features)
                 }
                 
-                // Process energy features
-                if let channelData = buffer.floatChannelData {
-                    let rms = processAudioRMS(channelData, channelCount: channelCount, frameLength: buffer.frameLength)
+                // Process energy and onset features
+                if let channelData = buffer.floatChannelData?[0] {
+                    // RMS energy
+                    var rms: Float = 0
+                    vDSP_rmsqv(channelData, 1, &rms, vDSP_Length(buffer.frameLength))
                     energyValues.append(rms)
                     
-                    // Find peak value
+                    // Peak detection
                     var peak: Float = 0
-                    vDSP_maxv(channelData[0], 1, &peak, vDSP_Length(buffer.frameLength))
+                    vDSP_maxv(channelData, 1, &peak, vDSP_Length(buffer.frameLength))
                     peakValues.append(peak)
+                    
+                    // Onset detection
+                    let onsetStrength = calculateOnsetStrength(channelData, frameLength: Int(buffer.frameLength))
+                    onsetStrengths.append(onsetStrength)
                 }
                 
-                // Track memory usage
-                sampleMemoryUsage()
-                
-                // Update progress
                 totalFrames += buffer.frameLength
-                updateProgress(Double(totalFrames) / Double(frameCount))
             }
         }
         
-        // Return buffer to pool
-        returnBufferToPool(buffer)
-        
-        // Combine all features into final result
+        // Create final features
         return createFinalFeatures(
             spectralFeatures: allSpectralFeatures,
             energyValues: energyValues,
             peakValues: peakValues,
-            tempo: nil // Tempo analysis not performed in file analysis
+            tempo: estimateTempo(from: onsetStrengths, sampleRate: format.sampleRate)
         )
     }
     
-    private func extractFeaturesFromBuffer(_ buffer: AVAudioPCMBuffer) -> AudioFeatures {
-        // Process with FFT
-        guard let spectralFeatures = fftProcessor.analyzeSpectralFeatures(buffer) else {
-            return AudioFeatures()
+    private func calculateOnsetStrength(_ samples: UnsafePointer<Float>, frameLength: Int) -> Float {
+        var hfc: Float = 0  // High Frequency Content
+        
+        // Calculate weighted sum of spectrum magnitudes
+        for i in 0..<frameLength/2 {
+            let weight = Float(i)  // Linear weighting by frequency bin
+            let magnitude = samples[i]
+            hfc += weight * magnitude * magnitude
         }
         
-        // Create audio features from spectral features
-        let features = AudioFeatures.from(spectralFeatures: spectralFeatures)
+        return hfc
+    }
+    
+    private func estimateTempo(from onsetStrengths: [Float], sampleRate: Double) -> Float {
+        // Find peaks in onset strength signal
+        var peaks: [Int] = []
+        for i in 1..<onsetStrengths.count-1 {
+            if onsetStrengths[i] > onsetStrengths[i-1] && onsetStrengths[i] > onsetStrengths[i+1] {
+                peaks.append(i)
+            }
+        }
+        
+        // Calculate inter-onset intervals
+        var intervals: [Int] = []
+        for i in 1..<peaks.count {
+            intervals.append(peaks[i] - peaks[i-1])
+        }
+        
+        // Convert to tempo using most common interval
+        if let mostCommonInterval = intervals.mostCommon {
+            let framesPerSecond = Float(sampleRate) / Float(analysisBufferSize)
+            let tempo = (framesPerSecond * 60.0) / Float(mostCommonInterval)
+            return max(min(tempo, 240.0), 40.0) // Clamp to reasonable range
+        }
+        
+        return 120.0 // Default tempo if detection fails
+    }
+    
+    private func convertToAudioFeatures(from spectralFeatures: SpectralFeatures) -> AudioFeatures {
+        // Calculate core features
+        let energy = calculateEnergy(
+            bassEnergy: spectralFeatures.bassEnergy,
+            midEnergy: spectralFeatures.midEnergy,
+            trebleEnergy: spectralFeatures.trebleEnergy,
+            brightness: spectralFeatures.brightness
+        )
+        
+        let valence = calculateValence(
+            brightness: spectralFeatures.brightness,
+            harmonicRatio: spectralFeatures.harmonicRatio,
+            spectralContrast: spectralFeatures.spectralContrast,
+            energy: energy
+        )
+        
+        // Create AudioFeatures instance with calculated values
+        var features = AudioFeatures()
+        features.tempo = spectralFeatures.estimatedTempo > 0 ? spectralFeatures.estimatedTempo : 120.0
+        features.energy = energy
+        features.valence = valence
+        features.danceability = calculateDanceability(
+            tempo: features.tempo,
+            energy: energy,
+            flux: spectralFeatures.flux
+        )
+        features.acousticness = calculateAcousticness(
+            centroid: spectralFeatures.centroid,
+            spread: spectralFeatures.spread,
+            flatness: spectralFeatures.flatness
+        )
+        features.instrumentalness = calculateInstrumentalness(
+            harmonicRatio: spectralFeatures.harmonicRatio,
+            spectralContrast: spectralFeatures.spectralContrast
+        )
+        features.speechiness = calculateSpeechiness(
+            zeroCrossingRate: spectralFeatures.zeroCrossingRate,
+            spectralFlatness: spectralFeatures.flatness
+        )
+        features.liveness = calculateLiveness(
+            dynamicRange: spectralFeatures.dynamicRange,
+            crest: spectralFeatures.crest
+        )
         
         return features
     }
     
-    // MARK: - Buffer Management
-    
-    private func getOrCreateBuffer(with format: AVAudioFormat, frameCapacity: AVAudioFrameCount) -> AVAudioPCMBuffer {
-        if let buffer = bufferPool.first {
-            bufferPool.removeFirst()
-            return buffer
-        }
-        
-        return AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity)!
+    private func calculateEnergy(bassEnergy: Float, midEnergy: Float, trebleEnergy: Float, brightness: Float) -> Float {
+        let weightedSum = bassEnergy * 0.3 + midEnergy * 0.5 + trebleEnergy * 0.2
+        return min(1.0, weightedSum * (1.0 + brightness * 0.2))
     }
     
-    private func returnBufferToPool(_ buffer: AVAudioPCMBuffer) {
-        if bufferPool.count < maxBufferPoolSize {
-            buffer.frameLength = 0
-            bufferPool.append(buffer)
-        }
+    private func calculateValence(brightness: Float, harmonicRatio: Float, spectralContrast: Float, energy: Float) -> Float {
+        return min(1.0, (
+            brightness * 0.3 +
+            harmonicRatio * 0.3 +
+            spectralContrast * 0.2 +
+            energy * 0.2
+        ))
     }
     
-    // MARK: - Performance Monitoring
-    
-    private func sampleMemoryUsage() {
-        let memoryUsage = getMemoryUsage()
-        memorySamples.append(memoryUsage)
+    private func calculateDanceability(tempo: Float, energy: Float, flux: Float) -> Float {
+        let tempoFactor = 1.0 - abs(tempo - 120.0) / 120.0 // Peak at 120 BPM
+        return min(1.0, (tempoFactor * 0.4 + energy * 0.3 + flux * 0.3))
     }
     
-    private func getMemoryUsage() -> Int {
-        var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
-        
-        let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
-            }
-        }
-        
-        return kerr == KERN_SUCCESS ? Int(info.resident_size) : 0
+    private func calculateAcousticness(centroid: Float, spread: Float, flatness: Float) -> Float {
+        // Lower centroid and spread, higher flatness suggest acoustic sound
+        let centroidFactor = max(0, 1.0 - (centroid / 5000.0))
+        let spreadFactor = max(0, 1.0 - (spread / 2000.0))
+        return min(1.0, (centroidFactor * 0.4 + spreadFactor * 0.3 + flatness * 0.3))
     }
     
-    private func updatePerformanceReport() {
-        DispatchQueue.main.async {
-            self.performanceReport = self.performanceMetrics.generateReport()
-        }
+    private func calculateInstrumentalness(harmonicRatio: Float, spectralContrast: Float) -> Float {
+        return min(1.0, (harmonicRatio * 0.6 + spectralContrast * 0.4))
     }
     
-    // MARK: - Error Handling
-    
-    private func handleAnalysisError(_ error: AudioAnalysisError, retryBlock: @escaping () -> Void, promise: @escaping (Result<AudioFeatures, Error>) -> Void) {
-        logger.error("Audio analysis error: \(error.localizedDescription)")
-        
-        switch error {
-        case .deviceResourcesUnavailable, .networkUnavailable, .analysisTimeout:
-            // These errors are retriable
-            retryBlock()
-        default:
-            promise(.failure(error))
-        }
+    private func calculateSpeechiness(zeroCrossingRate: Float, spectralFlatness: Float) -> Float {
+        // Higher zero-crossing rate and spectral flatness suggest speech
+        return min(1.0, (zeroCrossingRate * 0.6 + spectralFlatness * 0.4))
     }
     
-    private func logSuccessMetrics(audioFile: AVAudioFile, processingTime: TimeInterval) {
-        // Calculate average memory usage
-        let avgMemory = memorySamples.reduce(0, +) / max(1, memorySamples.count)
-        memorySamples = []
-        
-        performanceMetrics.recordAnalysis(
-            duration: audioFile.duration,
-            format: audioFile.processingFormat.description,
-            processingTime: processingTime,
-            memoryUsed: avgMemory
-        )
+    private func calculateLiveness(dynamicRange: Float, crest: Float) -> Float {
+        // Higher dynamic range and crest factor suggest live recording
+        return min(1.0, (dynamicRange * 0.5 + crest * 0.5))
+    }
+}
+
+extension Array where Element == Int {
+    var mostCommon: Element? {
+        var counts = [Element: Int]()
+        self.forEach { counts[$0, default: 0] += 1 }
+        return counts.max(by: { $0.value < $1.value })?.key
     }
 }
 

@@ -161,43 +161,36 @@ class FFTProcessor {
     /// - Returns: Magnitude spectrum
     /// - Throws: FFTError if processing fails
     func getMagnitudeSpectrum(from buffer: UnsafePointer<Float>, frameCount: Int) throws -> [Float] {
-        guard let fftSetup = fftSetup else {
-            throw FFTError.setupNotInitialized
-        }
-        
-        // Determine frame size to process (use power of 2 <= frameCount)
         let frameSize = determineFrameSize(frameCount)
-        guard frameSize > 0 else {
-            throw FFTError.invalidFrameSize
+        var realPart = [Float](repeating: 0, count: maxFrameSize)
+        var imagPart = [Float](repeating: 0, count: maxFrameSize)
+        
+        // Copy samples and apply window
+        buffer.withMemoryRebound(to: Float.self, capacity: frameCount) { ptr in
+            realPart.withUnsafeMutableBufferPointer { realPtr in
+                realPtr.baseAddress?.initialize(from: ptr, count: min(frameCount, maxFrameSize))
+            }
         }
         
-        // Create input and output buffers
-        var realInput = [Float](repeating: 0, count: frameSize)
-        var imagInput = [Float](repeating: 0, count: frameSize)
-        var realOutput = [Float](repeating: 0, count: frameSize)
-        var imagOutput = [Float](repeating: 0, count: frameSize)
+        // Apply Hanning window
+        vDSP_vmul(realPart, 1, window, 1, &realPart, 1, vDSP_Length(frameSize))
         
-        // Copy audio data to processing buffer with windowing
-        let framesToCopy = min(frameCount, frameSize)
-        for i in 0..<framesToCopy {
-            realInput[i] = buffer[i] * window[i]
+        // Perform real-to-complex FFT
+        var splitComplex = DSPSplitComplex(realp: &realPart, imagp: &imagPart)
+        guard let fftSetup = fftSetup else {
+            throw AudioAnalysisError.bufferProcessingFailed("FFT setup not initialized")
         }
         
-        // Perform FFT
-        vDSP_DFT_Execute(fftSetup,
-                         &realInput, &imagInput,
-                         &realOutput, &imagOutput)
+        vDSP_DFT_Execute(fftSetup, &realPart, &imagPart, &splitComplex.realp, &splitComplex.imagp)
         
-        // Calculate magnitude spectrum (only need first half due to symmetry)
-        let usefulBins = frameSize / 2
+        // Calculate magnitude spectrum
+        let usefulBins = frameSize / 2  // Only use positive frequencies
         var magnitudes = [Float](repeating: 0, count: usefulBins)
         
-        for i in 0..<usefulBins {
-            // Magnitude = sqrt(real^2 + imag^2)
-            let real = realOutput[i]
-            let imag = imagOutput[i]
-            magnitudes[i] = sqrt(real * real + imag * imag) * magnitudeNormalizationFactor
-        }
+        // Compute magnitude: sqrt(real^2 + imag^2)
+        vDSP_zvmags(&splitComplex, 1, &magnitudes, 1, vDSP_Length(usefulBins))
+        vDSP_vsqrt(magnitudes, 1, &magnitudes, 1, vDSP_Length(usefulBins))
+        vDSP_vsmul(magnitudes, 1, &magnitudeNormalizationFactor, &magnitudes, 1, vDSP_Length(usefulBins))
         
         return magnitudes
     }
@@ -223,346 +216,167 @@ class FFTProcessor {
     /// - Parameter magnitudes: Magnitude spectrum from FFT
     /// - Returns: Extracted spectral features 
     private func extractSpectralFeatures(from magnitudes: [Float]) -> SpectralFeatures {
-        // Frequency resolution
-        let freqResolution = sampleRate / Float(2 * magnitudes.count)
+        let binCount = vDSP_Length(magnitudes.count)
+        let frequencyResolution = sampleRate / Float(maxFrameSize)
+        
+        var features = SpectralFeatures()
         
         // Calculate band energies
-        let (bassEnergy, midEnergy, trebleEnergy) = calculateBandEnergies(magnitudes, freqResolution)
+        let bandRanges = [
+            (0, Int(250.0 / frequencyResolution)), // Bass: 0-250 Hz
+            (Int(250.0 / frequencyResolution), Int(4000.0 / frequencyResolution)), // Mid: 250-4000 Hz
+            (Int(4000.0 / frequencyResolution), magnitudes.count) // Treble: 4000+ Hz
+        ]
         
-        // Calculate spectral centroid and derived brightness
-        let centroid = calculateSpectralCentroid(magnitudes, freqResolution)
-        let brightness = normalizeToRange(centroid, min: 500, max: 5000)
+        // Calculate band energies
+        features.bassEnergy = calculateBandEnergy(magnitudes, range: bandRanges[0])
+        features.midEnergy = calculateBandEnergy(magnitudes, range: bandRanges[1])
+        features.trebleEnergy = calculateBandEnergy(magnitudes, range: bandRanges[2])
+        
+        // Calculate spectral centroid (brightness)
+        features.centroid = calculateSpectralCentroid(magnitudes, frequencyResolution: frequencyResolution)
+        features.brightness = normalizeToRange(features.centroid, min: 500, max: 5000)
         
         // Calculate spectral spread
-        let spread = calculateSpectralSpread(magnitudes, freqResolution, centroid)
-        
-        // Calculate spectral roll-off
-        let rolloff = calculateSpectralRolloff(magnitudes, freqResolution)
-        
-        // Calculate spectral flux if previous magnitudes exist
-        let flux = calculateSpectralFlux(current: magnitudes)
+        features.spread = calculateSpectralSpread(magnitudes, centroid: features.centroid, frequencyResolution: frequencyResolution)
         
         // Calculate spectral flatness
-        let flatness = calculateSpectralFlatness(magnitudes)
+        features.flatness = calculateSpectralFlatness(magnitudes)
+        
+        // Calculate spectral rolloff
+        features.rolloff = calculateSpectralRolloff(magnitudes, frequencyResolution: frequencyResolution)
+        
+        // Calculate spectral flux if we have previous magnitudes
+        if let prev = previousMagnitudes {
+            features.flux = calculateSpectralFlux(current: magnitudes, previous: prev)
+        }
         
         // Calculate spectral irregularity
-        let irregularity = calculateSpectralIrregularity(magnitudes)
+        features.irregularity = calculateSpectralIrregularity(magnitudes)
         
         // Calculate spectral crest
-        let crest = calculateSpectralCrest(magnitudes)
+        features.crest = calculateSpectralCrest(magnitudes)
         
-        // Calculate harmonic ratio (approximation)
-        let harmonicRatio = 1.0 - flatness // Inverse relationship with flatness
+        // Calculate higher order statistics
+        calculateHigherOrderStats(&features, magnitudes)
         
-        // Calculate spectral contrast (approximation)
-        let spectralContrast = crest * 20.0 // Scale up for better range
-        
-        // Estimate tempo and beat strength from sub-band energy fluctuations
-        let (estimatedTempo, beatStrength) = estimateTempoFeatures(flux: flux, bassEnergy: bassEnergy)
-        
-        // Calculate zero crossing rate (approximation from spectral properties)
-        let zeroCrossingRate = calculateZeroCrossingRate(centroid, brightness)
-        
-        // Calculate dynamic range
-        let dynamicRange = calculateDynamicRange(magnitudes)
-        
-        // Calculate spectral skewness
-        let skewness = calculateSpectralSkewness(magnitudes, freqResolution, centroid, spread)
-        
-        // Calculate spectral kurtosis
-        let kurtosis = calculateSpectralKurtosis(magnitudes, freqResolution, centroid, spread)
-        
-        return SpectralFeatures(
-            bassEnergy: bassEnergy,
-            midEnergy: midEnergy,
-            trebleEnergy: trebleEnergy,
-            brightness: brightness,
-            centroid: centroid,
-            spread: spread,
-            rolloff: rolloff,
-            flux: flux,
-            flatness: flatness,
-            irregularity: irregularity,
-            crest: crest,
-            skewness: skewness,
-            kurtosis: kurtosis,
-            harmonicRatio: harmonicRatio,
-            spectralContrast: spectralContrast,
-            zeroCrossingRate: zeroCrossingRate,
-            dynamicRange: dynamicRange,
-            estimatedTempo: estimatedTempo,
-            beatStrength: beatStrength
-        )
+        return features
     }
     
-    // MARK: - Spectral Calculations
-    
-    /// Calculates energy in bass, mid and treble frequency bands
-    private func calculateBandEnergies(_ magnitudes: [Float], _ freqResolution: Float) -> (bass: Float, mid: Float, treble: Float) {
-        let size = magnitudes.count
-        var bassSum: Float = 0
-        var midSum: Float = 0
-        var trebleSum: Float = 0
-        var totalSum: Float = 0
-        
-        for i in 0..<size {
-            let freq = Float(i) * freqResolution
-            let magnitude = magnitudes[i]
-            let energy = magnitude * magnitude // Energy is magnitude squared
-            
-            totalSum += energy
-            
-            if freq < bassUpperLimit {
-                bassSum += energy
-            } else if freq < midUpperLimit {
-                midSum += energy
-            } else {
-                trebleSum += energy
-            }
-        }
-        
-        // Normalize by total energy to get relative distribution
-        if totalSum > 0 {
-            bassSum /= totalSum
-            midSum /= totalSum
-            trebleSum /= totalSum
-        }
-        
-        return (bassSum, midSum, trebleSum)
-    }
-    
-    /// Helper to normalize a value to 0.0-1.0 range
-    private func normalizeToRange(_ value: Float, min: Float, max: Float) -> Float {
-        return min(1.0, max(0.0, (value - min) / (max - min)))
-    }
-    
-    /// Estimates tempo and beat strength from spectral flux
-    private func estimateTempoFeatures(flux: Float, bassEnergy: Float) -> (tempo: Float, beatStrength: Float) {
-        // This is a simple approximation
-        // A real tempo detection would require tempo tracking over time
-        let estimatedTempo = 60.0 + flux * 120.0 // Map to 60-180 BPM range
-        let beatStrength = bassEnergy * 0.7 + flux * 0.3 // Weight bass energy more for beat strength
-        
-        return (estimatedTempo, beatStrength)
-    }
-    
-    /// Calculates zero crossing rate approximation
-    private func calculateZeroCrossingRate(_ centroid: Float, _ brightness: Float) -> Float {
-        // Zero crossing rate correlates with centroid and brightness
-        return centroid * 0.5 + brightness * 1500.0
-    }
-    
-    /// Calculates dynamic range from magnitude spectrum
-    private func calculateDynamicRange(_ magnitudes: [Float]) -> Float {
-        guard !magnitudes.isEmpty else { return 0 }
-        
-        var max: Float = -Float.greatestFiniteMagnitude
-        var min: Float = Float.greatestFiniteMagnitude
-        
-        for magnitude in magnitudes where magnitude > 0 {
-            let db = 20 * log10(magnitude)
-            max = Swift.max(max, db)
-            min = Swift.min(min, db)
-        }
-        
-        return max - min
-    }
-    
-    /// Calculates spectral flux compared to previous frame
-    private func calculateSpectralFlux(current: [Float]) -> Float {
-        guard let previous = previousMagnitudes else {
-            return 0
-        }
-        
-        let minSize = min(current.count, previous.count)
+    private func calculateBandEnergy(_ magnitudes: [Float], range: (Int, Int)) -> Float {
         var sum: Float = 0
+        let validStart = max(0, range.0)
+        let validEnd = min(range.1, magnitudes.count)
         
-        for i in 0..<minSize {
-            let diff = current[i] - previous[i]
-            // Only positive changes contribute to flux (half-wave rectification)
-            sum += diff > 0 ? diff : 0
+        if validEnd > validStart {
+            vDSP_sve(magnitudes + validStart, 1, &sum, vDSP_Length(validEnd - validStart))
+            return sum / Float(magnitudes.count) // Normalize by total energy
         }
-        
-        return sum / Float(minSize)
+        return 0
     }
     
-    /// Calculates the spectral centroid (weighted mean of frequencies)
-    private func calculateSpectralCentroid(_ magnitudes: [Float], _ freqResolution: Float) -> Float {
-        let size = magnitudes.count
-        guard size > 0 else { return 0 }
+    private func calculateSpectralCentroid(magnitudes: [Float]) -> Float {
+        let binCount = vDSP_Length(magnitudes.count)
+        let freqResolution = sampleRate / (2.0 * Float(magnitudes.count))
         
+        // Create frequency array (each bin's center frequency)
+        var frequencies = [Float](repeating: 0, count: magnitudes.count)
+        vDSP_vramp(Float(0), freqResolution, &frequencies, 1, binCount)
+        
+        // Calculate weighted sum (frequencies * magnitudes)
         var weightedSum: Float = 0
-        var sum: Float = 0
+        vDSP_dotpr(frequencies, 1, magnitudes, 1, &weightedSum, binCount)
         
-        for i in 0..<size {
-            let frequency = Float(i) * freqResolution
-            let magnitude = magnitudes[i]
-            
-            weightedSum += frequency * magnitude
-            sum += magnitude
-        }
+        // Calculate total magnitude
+        var totalMagnitude: Float = 0
+        vDSP_sve(magnitudes, 1, &totalMagnitude, binCount)
         
-        // Avoid division by zero
-        guard sum > 0 else { return 0 }
-        
-        return weightedSum / sum
+        // Centroid = weighted sum / total magnitude
+        return totalMagnitude > 0 ? weightedSum / totalMagnitude : 0
     }
     
-    /// Calculates the spectral spread around the centroid
-    private func calculateSpectralSpread(_ magnitudes: [Float], _ freqResolution: Float, _ centroid: Float) -> Float {
-        let size = magnitudes.count
-        guard size > 0 else { return 0 }
-        
+    private func calculateSpectralSpread(_ magnitudes: [Float], centroid: Float, frequencyResolution: Float) -> Float {
         var variance: Float = 0
-        var sum: Float = 0
-        
-        for i in 0..<size {
-            let frequency = Float(i) * freqResolution
-            let magnitude = magnitudes[i]
-            let deviation = frequency - centroid
-            
-            variance += deviation * deviation * magnitude
-            sum += magnitude
-        }
-        
-        // Avoid division by zero
-        guard sum > 0 else { return 0 }
-        
-        return sqrt(variance / sum)
-    }
-    
-    /// Calculates the spectral rolloff (frequency below which 85% of energy lies)
-    private func calculateSpectralRolloff(_ magnitudes: [Float], _ freqResolution: Float, percentile: Float = 0.85) -> Float {
-        let size = magnitudes.count
-        guard size > 0 else { return 0 }
-        
-        // Calculate total energy
         var totalEnergy: Float = 0
-        for magnitude in magnitudes {
-            totalEnergy += magnitude * magnitude
+        
+        for i in 0..<magnitudes.count {
+            let frequency = Float(i) * frequencyResolution
+            let magnitude = magnitudes[i]
+            let diff = frequency - centroid
+            variance += diff * diff * magnitude
+            totalEnergy += magnitude
         }
         
-        // Find rolloff point
-        var cumulativeEnergy: Float = 0
-        let threshold = totalEnergy * percentile
-        
-        for i in 0..<size {
-            let energy = magnitudes[i] * magnitudes[i]
-            cumulativeEnergy += energy
-            
-            if cumulativeEnergy >= threshold {
-                return Float(i) * freqResolution
-            }
-        }
-        
-        return sampleRate / 2 // Nyquist frequency
+        return totalEnergy > 0 ? sqrt(variance / totalEnergy) : 0
     }
     
-    /// Calculates spectral flatness (ratio of geometric to arithmetic mean)
     private func calculateSpectralFlatness(_ magnitudes: [Float]) -> Float {
-        let size = magnitudes.count
-        guard size > 0 else { return 0 }
-        
-        // Filter out near-zero values to avoid log(0)
-        let filteredMags = magnitudes.filter { $0 > 1e-10 }
-        guard filteredMags.count > 0 else { return 0 }
+        let count = vDSP_Length(magnitudes.count)
         
         // Calculate geometric mean
         var logSum: Float = 0
-        for magnitude in filteredMags {
-            logSum += log(magnitude)
-        }
-        let geometricMean = exp(logSum / Float(filteredMags.count))
+        vDSP_vlog(magnitudes, 1, &self.tempBuffer, 1, count)
+        vDSP_sve(self.tempBuffer, 1, &logSum, count)
+        let geometricMean = exp(logSum / Float(count))
         
         // Calculate arithmetic mean
-        var sum: Float = 0
-        for magnitude in filteredMags {
-            sum += magnitude
-        }
-        let arithmeticMean = sum / Float(filteredMags.count)
+        var arithmeticMean: Float = 0
+        vDSP_meanv(magnitudes, 1, &arithmeticMean, count)
         
-        // Avoid division by zero
-        guard arithmeticMean > 0 else { return 0 }
-        
-        // Return flatness (ratio of geometric to arithmetic mean)
-        return geometricMean / arithmeticMean
+        return arithmeticMean > 0 ? geometricMean / arithmeticMean : 0
     }
     
-    /// Calculates spectral irregularity (measure of variation between adjacent bins)
-    private func calculateSpectralIrregularity(_ magnitudes: [Float]) -> Float {
-        let size = magnitudes.count
-        guard size > 2 else { return 0 }
+    private func calculateSpectralRolloff(magnitudes: [Float]) -> Float {
+        let threshold: Float = 0.85  // 85% of total energy
+        var totalEnergy: Float = 0
+        vDSP_svesq(magnitudes, 1, &totalEnergy, vDSP_Length(magnitudes.count))
         
-        var sum: Float = 0
-        for i in 1..<(size-1) {
-            // Jensen method: squared difference from the mean of three adjacent values
-            let meanAmplitude = (magnitudes[i-1] + magnitudes[i] + magnitudes[i+1]) / 3
-            let diff = magnitudes[i] - meanAmplitude
-            sum += diff * diff
+        let targetEnergy = totalEnergy * threshold
+        var cumulativeEnergy: Float = 0
+        
+        for (i, magnitude) in magnitudes.enumerated() {
+            cumulativeEnergy += magnitude * magnitude
+            if cumulativeEnergy >= targetEnergy {
+                return Float(i) * sampleRate / Float(2 * magnitudes.count)
+            }
         }
         
-        return sqrt(sum) / Float(size - 2)
+        return sampleRate / 2.0  // Nyquist frequency as default
     }
     
-    /// Calculates spectral crest factor (ratio of peak to mean)
-    private func calculateSpectralCrest(_ magnitudes: [Float]) -> Float {
-        let size = magnitudes.count
-        guard size > 0 else { return 0 }
-        
-        // Find peak value
-        var peak: Float = 0
-        for magnitude in magnitudes {
-            peak = max(peak, magnitude)
-        }
+    private func calculateSpectralFlux(current: [Float], previous: [Float]) -> Float {
+        var diff: Float = 0
+        vDSP_vsub(previous, 1, current, 1, &self.tempBuffer, 1, vDSP_Length(min(current.count, previous.count)))
+        vDSP_svesq(self.tempBuffer, 1, &diff, vDSP_Length(min(current.count, previous.count)))
+        return sqrt(diff) / Float(current.count)
+    }
+    
+    private func calculateHigherOrderStats(_ features: inout SpectralFeatures, _ magnitudes: [Float]) {
+        var mean: Float = 0
+        var m2: Float = 0
+        var m3: Float = 0
+        var m4: Float = 0
         
         // Calculate mean
-        var sum: Float = 0
+        vDSP_meanv(magnitudes, 1, &mean, vDSP_Length(magnitudes.count))
+        
+        // Calculate central moments
         for magnitude in magnitudes {
-            sum += magnitude
-        }
-        let mean = sum / Float(size)
-        
-        // Avoid division by zero
-        guard mean > 0 else { return 0 }
-        
-        // Return crest factor
-        return peak / mean
-    }
-    
-    /// Calculates spectral skewness (measure of asymmetry)
-    private func calculateSpectralSkewness(_ magnitudes: [Float], _ freqResolution: Float, _ centroid: Float, _ spread: Float) -> Float {
-        let size = magnitudes.count
-        guard size > 0, spread > 0 else { return 0 }
-        
-        var skewness: Float = 0
-        var sum: Float = 0
-        
-        for i in 0..<size {
-            let frequency = Float(i) * freqResolution
-            let magnitude = magnitudes[i]
-            let deviation = (frequency - centroid) / spread
-            
-            skewness += deviation * deviation * deviation * magnitude
-            sum += magnitude
+            let diff = magnitude - mean
+            let diff2 = diff * diff
+            m2 += diff2
+            m3 += diff2 * diff
+            m4 += diff2 * diff2
         }
         
-        // Avoid division by zero
-        guard sum > 0 else { return 0 }
+        let n = Float(magnitudes.count)
+        m2 /= n
+        m3 /= n
+        m4 /= n
         
-        return skewness / sum
+        // Calculate skewness and kurtosis
+        let stdDev = sqrt(m2)
+        features.skewness = m2 > 0 ? m3 / pow(stdDev, 3) : 0
+        features.kurtosis = m2 > 0 ? m4 / (m2 * m2) : 0
     }
-    
-    /// Calculates spectral kurtosis (measure of "peakedness")
-    private func calculateSpectralKurtosis(_ magnitudes: [Float], _ freqResolution: Float, _ centroid: Float, _ spread: Float) -> Float {
-        let size = magnitudes.count
-        guard size > 0, spread > 0 else { return 0 }
-        
-        var kurtosis: Float = 0
-        var sum: Float = 0
-        
-        for i in 0..<size {
-            let frequency = Float(i) * freqResolution
-            let magnitude = magnitudes[i]
-            let deviation = (frequency - centroid) / spread
-            
-            kurtosis += deviation * deviation * deviation *
+}

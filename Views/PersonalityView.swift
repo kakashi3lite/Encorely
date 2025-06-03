@@ -11,6 +11,8 @@ import SwiftUI
 struct PersonalityView: View {
     @StateObject private var transitionManager = ColorTransitionManager()
     @ObservedObject var personalityEngine: PersonalityEngine
+    @ObservedObject var mcpService = MCPSocketService()
+    @State private var hoveredPersonality: PersonalityType?
     
     var body: some View {
         VStack(spacing: 24) {
@@ -30,17 +32,43 @@ struct PersonalityView: View {
             ForEach(PersonalityType.allCases, id: \.rawValue) { personality in
                 PersonalityCard(
                     personality: personality,
-                    isSelected: personality == personalityEngine.currentPersonality
+                    isSelected: personality == personalityEngine.currentPersonality,
+                    isHovered: personality == hoveredPersonality
                 )
+                .onHover { isHovered in
+                    hoveredPersonality = isHovered ? personality : nil
+                    mcpService.emitPersonalityHover(
+                        type: personality.rawValue,
+                        hovered: isHovered
+                    )
+                }
                 .onTapGesture {
                     selectPersonality(personality)
+                    mcpService.emitPersonalitySelect(type: personality.rawValue)
                 }
             }
         }
         .onChange(of: personalityEngine.currentPersonality) { newPersonality in
             transitionManager.updatePersonality(newPersonality)
         }
+        .onChange(of: mcpService.personalityState) { newState in
+            guard let newState = newState else { return }
+            if let personality = PersonalityType(rawValue: newState.type) {
+                if newState.active == true {
+                    selectPersonality(personality)
+                }
+                if let isHovered = newState.hovered {
+                    hoveredPersonality = isHovered ? personality : nil
+                }
+            }
+        }
         .animation(.easeInOut, value: personalityEngine.currentPersonality)
+        .onAppear {
+            mcpService.connect()
+        }
+        .onDisappear {
+            mcpService.disconnect()
+        }
     }
     
     private var personalityDescription: String {
@@ -59,40 +87,133 @@ struct PersonalityView: View {
     }
 }
 
-struct PersonalityCard: View {
-    let personality: Asset.PersonalityColor
+private struct PersonalityCard: View {
+    let personality: PersonalityType
     let isSelected: Bool
+    let isHovered: Bool
     
     var body: some View {
-        HStack {
-            VStack(alignment: .leading) {
+        VStack(spacing: 12) {
+            // Icon
+            PersonalityIcon(personality: personality)
+                .frame(width: 60, height: 60)
+            
+            // Title and Traits
+            VStack(spacing: 8) {
                 Text(personality.rawValue)
-                    .font(.headline)
-                Text(personalityTraits)
-                    .font(.subheadline)
-                    .opacity(0.8)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                
+                HStack(spacing: 8) {
+                    ForEach(personality.traits.prefix(3), id: \.self) { trait in
+                        Text(trait)
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(12)
+                    }
+                }
             }
-            Spacer()
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+            
+            // Strength Indicator
+            GeometryReader { geometry in
+                Rectangle()
+                    .fill(personalityColor)
+                    .frame(width: geometry.size.width * personalityStrength)
+                    .frame(height: 4)
+                    .cornerRadius(2)
+            }
+            .frame(height: 4)
         }
         .padding()
-        .background(personality.color.opacity(0.1))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(personality.color, lineWidth: isSelected ? 2 : 1)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.secondarySystemBackground))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(personalityColor, lineWidth: isSelected ? 2 : 0)
+                )
         )
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .animation(.spring(), value: isSelected)
+        .scaleEffect(isHovered ? 1.05 : 1.0)
+        .animation(.spring(response: 0.3), value: isHovered)
     }
     
-    private var personalityTraits: String {
+    private var personalityColor: Color {
         switch personality {
         case .curator:
-            return "Organized • Selective • Detail-oriented"
+            return .purple
         case .enthusiast:
-            return "Passionate • Energetic • Social"
+            return .orange
         case .explorer:
-            return "Adventurous • Creative • Open-minded"
+            return .blue
+        case .social:
+            return .green
+        case .ambient:
+            return .teal
+        case .analyzer:
+            return .red
+        }
+    }
+    
+    private var personalityStrength: CGFloat {
+        switch personality {
+        case .curator:
+            return 0.8
+        case .enthusiast:
+            return 0.9
+        case .explorer:
+            return 0.7
+        case .social:
+            return 0.85
+        case .ambient:
+            return 0.75
+        case .analyzer:
+            return 0.95
+        }
+    }
+}
+
+private struct PersonalityIcon: View {
+    let personality: PersonalityType
+    
+    var body: some View {
+        Image(systemName: iconName)
+            .font(.system(size: 30))
+            .foregroundColor(iconColor)
+    }
+    
+    private var iconName: String {
+        switch personality {
+        case .curator:
+            return "star.circle.fill"
+        case .enthusiast:
+            return "heart.circle.fill"
+        case .explorer:
+            return "safari.fill"
+        case .social:
+            return "person.2.circle.fill"
+        case .ambient:
+            return "cloud.sun.fill"
+        case .analyzer:
+            return "chart.bar.xaxis"
+        }
+    }
+    
+    private var iconColor: Color {
+        switch personality {
+        case .curator:
+            return .purple
+        case .enthusiast:
+            return .orange
+        case .explorer:
+            return .blue
+        case .social:
+            return .green
+        case .ambient:
+            return .teal
+        case .analyzer:
+            return .red
         }
     }
 }

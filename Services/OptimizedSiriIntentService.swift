@@ -38,17 +38,33 @@ class OptimizedSiriIntentService: NSObject, ObservableObject {
     private let cacheExpiryInterval: TimeInterval = 300 // 5 minutes
     private let memoryCacheExpiryInterval: TimeInterval = 600 // 10 minutes
     
+    // MARK: - Parameter Validation
+    private struct ValidationConstants {
+        static let minSongCount = 1
+        static let maxSongCount = 50
+        static let minConfidence: Float = 0.6
+        static let searchTermMinLength = 2
+    }
+    private struct CacheStats {
+        var hits: Int = 0
+        var misses: Int = 0
+        var avgLatency: Double = 0
+    }
+    private var cacheStats = CacheStats()
+    
     // Memory-efficient cache structures
     private struct CachedMixtape {
         let mixtape: MixTape
         let timestamp: Date
-        let accessCount: Int
+        var accessCount: Int
+        var lastAccess: Date
     }
     
     private struct CachedMood {
         let mood: Mood
         let timestamp: Date
         let confidence: Float
+        var lastAccess: Date
     }
     
     // MARK: - Response Templates (Pre-computed)
@@ -149,17 +165,33 @@ class OptimizedSiriIntentService: NSObject, ObservableObject {
     private let cacheExpiryInterval: TimeInterval = 300 // 5 minutes
     private let memoryCacheExpiryInterval: TimeInterval = 600 // 10 minutes
     
+    // MARK: - Parameter Validation
+    private struct ValidationConstants {
+        static let minSongCount = 1
+        static let maxSongCount = 50
+        static let minConfidence: Float = 0.6
+        static let searchTermMinLength = 2
+    }
+    private struct CacheStats {
+        var hits: Int = 0
+        var misses: Int = 0
+        var avgLatency: Double = 0
+    }
+    private var cacheStats = CacheStats()
+    
     // Memory-efficient cache structures
     private struct CachedMixtape {
         let mixtape: MixTape
         let timestamp: Date
-        let accessCount: Int
+        var accessCount: Int
+        var lastAccess: Date
     }
     
     private struct CachedMood {
         let mood: Mood
         let timestamp: Date
         let confidence: Float
+        var lastAccess: Date
     }
     
     // MARK: - Response Templates (Pre-computed)
@@ -256,59 +288,69 @@ class OptimizedSiriIntentService: NSObject, ObservableObject {
             
             let startTime = CFAbsoluteTimeGetCurrent()
             
+            // Validate parameters
+            guard self.validateIntent(intent) else {
+                let response = INPlayMediaIntentResponse(code: .failure, userActivity: nil)
+                response.errorDescription = NSLocalizedString("Invalid request parameters. Please try again.", comment: "")
+                completion(response)
+                return
+            }
+            
             // Fast path for cached results
             if let cachedResponse = self.getCachedPlayResponse(for: intent) {
                 let elapsedTime = CFAbsoluteTimeGetCurrent() - startTime
-                print("SiriKit Play Intent handled in \(elapsedTime * 1000)ms (cached)")
+                self.cacheStats.hits += 1
+                self.updateLatencyStats(elapsedTime * 1000) // Convert to ms
                 completion(cachedResponse)
                 return
             }
             
-            // Process intent with optimized flow
-            self.processPlayMediaIntent(intent) { response in
+            self.cacheStats.misses += 1
+            
+            // Process intent with optimized flow and timeout
+            let timeoutTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
+                let response = INPlayMediaIntentResponse(code: .failure, userActivity: nil)
+                response.errorDescription = NSLocalizedString("Request timed out. Please try again.", comment: "")
+                self?.logLatencyViolation()
+                completion(response)
+            }
+            
+            self.processPlayMediaIntent(intent) { [weak self] response in
+                timeoutTimer.invalidate()
+                
                 let elapsedTime = CFAbsoluteTimeGetCurrent() - startTime
-                print("SiriKit Play Intent handled in \(elapsedTime * 1000)ms")
+                self?.updateLatencyStats(elapsedTime * 1000)
+                
+                // Cache successful responses
+                if response.code == .success {
+                    self?.cachePlayResponse(response, for: intent)
+                }
+                
                 completion(response)
             }
         }
     }
     
-    /// Fast search media intent handler
-    func handleSearchMediaIntent(_ intent: INSearchForMediaIntent, completion: @escaping (INSearchForMediaIntentResponse) -> Void) {
-        intentQueue.async { [weak self] in
-            guard let self = self else {
-                completion(INSearchForMediaIntentResponse(code: .failure, userActivity: nil))
-                return
-            }
+    private func updateLatencyStats(_ latencyMs: Double) {
+        performanceQueue.async {
+            let total = self.cacheStats.hits + self.cacheStats.misses
+            self.cacheStats.avgLatency = ((self.cacheStats.avgLatency * Double(total - 1)) + latencyMs) / Double(total)
             
-            let startTime = CFAbsoluteTimeGetCurrent()
-            
-            self.processSearchMediaIntent(intent) { response in
-                let elapsedTime = CFAbsoluteTimeGetCurrent() - startTime
-                print("SiriKit Search Intent handled in \(elapsedTime * 1000)ms")
-                completion(response)
+            // Log violation if above threshold
+            if latencyMs > 2000 { // 2 seconds
+                self.logLatencyViolation()
             }
         }
     }
     
-    /// Fast add media intent handler
-    func handleAddMediaIntent(_ intent: INAddMediaIntent, completion: @escaping (INAddMediaIntentResponse) -> Void) {
-        intentQueue.async { [weak self] in
-            guard let self = self else {
-                completion(INAddMediaIntentResponse(code: .failure, userActivity: nil))
-                return
-            }
-            
-            let startTime = CFAbsoluteTimeGetCurrent()
-            
-            self.processAddMediaIntent(intent) { response in
-                let elapsedTime = CFAbsoluteTimeGetCurrent() - startTime
-                print("SiriKit Add Intent handled in \(elapsedTime * 1000)ms")
-                completion(response)
-            }
-        }
+    private func logLatencyViolation() {
+        NotificationCenter.default.post(
+            name: Notification.Name("SiriIntentLatencyViolation"),
+            object: nil,
+            userInfo: ["avgLatency": self.cacheStats.avgLatency]
+        )
     }
-    
+
     // MARK: - Optimized Processing Methods
     
     private func processPlayMediaIntent(_ intent: INPlayMediaIntent, completion: @escaping (INPlayMediaIntentResponse) -> Void) {
@@ -417,7 +459,8 @@ class OptimizedSiriIntentService: NSObject, ObservableObject {
             moodCache[spokenPhrase] = CachedMood(
                 mood: bestMatch.mood,
                 timestamp: Date(),
-                confidence: bestMatch.confidence
+                confidence: bestMatch.confidence,
+                lastAccess: Date()
             )
             return bestMatch
         }
@@ -430,7 +473,8 @@ class OptimizedSiriIntentService: NSObject, ObservableObject {
         moodCache[spokenPhrase] = CachedMood(
             mood: defaultResult.0,
             timestamp: Date(),
-            confidence: defaultResult.1
+            confidence: defaultResult.1,
+            lastAccess: Date()
         )
         
         return defaultResult
@@ -480,7 +524,7 @@ class OptimizedSiriIntentService: NSObject, ObservableObject {
                 
                 // Cache the result
                 if let mixtape = mixtape {
-                    self?.mixtapeCache[cacheKey] = CachedMixtape(mixtape: mixtape, timestamp: Date(), accessCount: 1)
+                    self?.mixtapeCache[cacheKey] = CachedMixtape(mixtape: mixtape, timestamp: Date(), accessCount: 1, lastAccess: Date())
                 }
                 
                 DispatchQueue.main.async {
@@ -611,7 +655,7 @@ class OptimizedSiriIntentService: NSObject, ObservableObject {
                     if let mood = Mood(rawValue: moodTag) {
                         let cacheKey = "mood_\(mood.rawValue)"
                         if mixtapeCache[cacheKey] == nil {
-                            mixtapeCache[cacheKey] = CachedMixtape(mixtape: mixtape, timestamp: Date(), accessCount: 1)
+                            mixtapeCache[cacheKey] = CachedMixtape(mixtape: mixtape, timestamp: Date(), accessCount: 1, lastAccess: Date())
                         }
                     }
                 }
@@ -667,40 +711,67 @@ class OptimizedSiriIntentService: NSObject, ObservableObject {
             self?.responseCacheSignatures.removeAll()
         }
     }
-
+    
+    // MARK: - Enhanced Performance Monitoring
+    private struct PerformanceMetrics {
+        var cacheHitRate: Double = 0
+        var averageResponseTime: Double = 0
+        var p95ResponseTime: Double = 0
+        var p99ResponseTime: Double = 0
+        var cacheSize: Int = 0
+        var memoryUsage: Int64 = 0
+        var errorCount: Int = 0
+        var totalRequests: Int = 0
+        var activeRequests: Int = 0
+        
+        mutating func updateResponseTimes(_ times: [TimeInterval]) {
+            guard !times.isEmpty else { return }
+            let sortedTimes = times.sorted()
+            averageResponseTime = times.reduce(0, +) / Double(times.count)
+            p95ResponseTime = sortedTimes[Int(Double(times.count) * 0.95)]
+            p99ResponseTime = sortedTimes[Int(Double(times.count) * 0.99)]
+        }
+        
+        var description: String {
+            """
+            SiriKit Performance Metrics:
+            - Requests: \(totalRequests) (Active: \(activeRequests))
+            - Cache Hit Rate: \(String(format: "%.1f%%", cacheHitRate * 100))
+            - Response Times (ms):
+              • Average: \(String(format: "%.2f", averageResponseTime * 1000))
+              • P95: \(String(format: "%.2f", p95ResponseTime * 1000))
+              • P99: \(String(format: "%.2f", p99ResponseTime * 1000))
+            - Cache Size: \(cacheSize) items
+            - Memory Usage: \(memoryUsage / 1024 / 1024)MB
+            - Errors: \(errorCount)
+            """
+        }
+    }
+    
+    // MARK: - Enhanced Cache Management
     private func performCacheCleanup() {
         cacheQueue.async(flags: .barrier) { [weak self] in
             guard let self = self else { return }
             
+            let now = Date()
+            
             // Clear expired items
             self.clearExpiredCaches()
             
-            // Maintain cache size limit
-            if self.mixtapeCache.count > self.maxCacheSize {
+            // Enforce memory limits
+            let currentMemory = self.getCurrentMemoryUsage()
+            if Double(currentMemory) / 1024 / 1024 > 50 { // Over 50MB
+                self.reduceCacheSize(targetSize: self.maxCacheSize / 2)
+            } else if self.mixtapeCache.count > self.maxCacheSize {
                 self.reduceCacheSize(targetSize: self.maxCacheSize)
             }
+            
+            // Update metrics
+            self.performanceMetrics.cacheSize = self.mixtapeCache.count
+            self.updateMemoryUsage()
         }
     }
-
-    private func clearExpiredCaches() {
-        let now = Date()
-        
-        // Clear expired mixtapes
-        mixtapeCache = mixtapeCache.filter { key, value in
-            now.timeIntervalSince(value.timestamp) < memoryCacheExpiryInterval
-        }
-        
-        // Clear expired moods
-        moodCache = moodCache.filter { key, value in
-            now.timeIntervalSince(value.timestamp) < memoryCacheExpiryInterval
-        }
-        
-        // Clear expired response signatures
-        responseCacheSignatures = responseCacheSignatures.filter { key, value in
-            now.timeIntervalSince(value.timestamp) < cacheExpiryInterval
-        }
-    }
-
+    
     private func reduceCacheSize(targetSize: Int) {
         // Sort items by access count and recency
         let sortedItems = mixtapeCache.sorted { item1, item2 in
@@ -708,14 +779,16 @@ class OptimizedSiriIntentService: NSObject, ObservableObject {
             if item1.value.accessCount != item2.value.accessCount {
                 return item1.value.accessCount > item2.value.accessCount
             }
-            // If equal access counts, compare timestamps
-            return item1.value.timestamp > item2.value.timestamp
+            // If equal access counts, compare last access time
+            return item1.value.lastAccess > item2.value.lastAccess
         }
         
-        // Keep only the most relevant items
+        // Keep only most relevant items
         if sortedItems.count > targetSize {
-            let itemsToKeep = Array(sortedItems.prefix(targetSize))
-            mixtapeCache = Dictionary(uniqueKeysWithValues: itemsToKeep)
+            let itemsToKeep = Dictionary(
+                uniqueKeysWithValues: sortedItems.prefix(targetSize)
+            )
+            mixtapeCache = itemsToKeep
         }
         
         // Update tracking
@@ -724,71 +797,7 @@ class OptimizedSiriIntentService: NSObject, ObservableObject {
         }
     }
     
-    // MARK: - Performance Monitoring
-    
-    struct PerformanceMetrics {
-        var cacheHitRate: Double
-        var averageResponseTime: TimeInterval
-        var cacheSize: Int
-        var memoryUsage: Int64
-        var errorCount: Int
-        
-        var description: String {
-            """
-            SiriKit Performance Metrics:
-            - Cache Hit Rate: \(String(format: "%.1f%%", cacheHitRate * 100))
-            - Avg Response Time: \(String(format: "%.2fms", averageResponseTime * 1000))
-            - Cache Size: \(cacheSize) items
-            - Memory Usage: \(memoryUsage / 1024 / 1024)MB
-            - Error Count: \(errorCount)
-            """
-        }
-    }
-
-    private var performanceMetrics = PerformanceMetrics(
-        cacheHitRate: 0,
-        averageResponseTime: 0,
-        cacheSize: 0,
-        memoryUsage: 0,
-        errorCount: 0
-    )
-
-    private var totalRequests: Int = 0
-    private var cacheHits: Int = 0
-    private var responseTimes: [TimeInterval] = []
-    private let maxResponseTimes = 100 // Keep last 100 response times
-
-    private func trackPerformance(operation: String, startTime: CFAbsoluteTime, cacheHit: Bool) {
-        let endTime = CFAbsoluteTimeGetCurrent()
-        let responseTime = endTime - startTime
-        
-        performanceQueue.async { [weak self] in
-            guard let self = self else { return }
-            
-            // Update metrics
-            self.totalRequests += 1
-            if cacheHit { self.cacheHits += 1 }
-            
-            // Update response times
-            self.responseTimes.append(responseTime)
-            if self.responseTimes.count > self.maxResponseTimes {
-                self.responseTimes.removeFirst()
-            }
-            
-            // Update performance metrics
-            self.performanceMetrics.cacheHitRate = Double(self.cacheHits) / Double(self.totalRequests)
-            self.performanceMetrics.averageResponseTime = self.responseTimes.reduce(0, +) / Double(self.responseTimes.count)
-            self.performanceMetrics.cacheSize = self.mixtapeCache.count + self.moodCache.count
-            
-            // Get memory usage
-            self.updateMemoryUsage()
-            
-            // Log operation performance
-            print("SiriKit \(operation) completed in \(String(format: "%.2fms", responseTime * 1000)) (Cache: \(cacheHit ? "HIT" : "MISS"))")
-        }
-    }
-
-    private func updateMemoryUsage() {
+    private func getCurrentMemoryUsage() -> Int {
         var info = mach_task_basic_info()
         var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
         
@@ -801,13 +810,51 @@ class OptimizedSiriIntentService: NSObject, ObservableObject {
             }
         }
         
-        if kerr == KERN_SUCCESS {
-            performanceMetrics.memoryUsage = Int64(info.resident_size)
+        return kerr == KERN_SUCCESS ? Int(info.resident_size) : 0
+    }
+    
+    private func logPerformanceMetrics() -> String {
+        performanceQueue.sync {
+            return performanceMetrics.description
         }
     }
-
-    func logPerformanceMetrics() -> String {
-        return performanceMetrics.description
+    
+    private func updateMemoryUsage() {
+        let memory = getCurrentMemoryUsage()
+        performanceQueue.async {
+            self.performanceMetrics.memoryUsage = Int64(memory)
+        }
+    }
+    
+    // MARK: - Enhanced Request Tracking
+    private func trackRequestStart() {
+        performanceQueue.async {
+            self.performanceMetrics.totalRequests += 1
+            self.performanceMetrics.activeRequests += 1
+        }
+    }
+    
+    private func trackRequestEnd(responseTime: TimeInterval, cacheHit: Bool) {
+        performanceQueue.async {
+            self.performanceMetrics.activeRequests -= 1
+            
+            // Update response times
+            self.responseTimes.append(responseTime)
+            if self.responseTimes.count > self.maxResponseTimes {
+                self.responseTimes.removeFirst()
+            }
+            
+            // Update cache stats
+            if cacheHit {
+                self.cacheStats.hits += 1
+            } else {
+                self.cacheStats.misses += 1
+            }
+            
+            let total = Double(self.cacheStats.hits + self.cacheStats.misses)
+            self.performanceMetrics.cacheHitRate = Double(self.cacheStats.hits) / total
+            self.performanceMetrics.updateResponseTimes(self.responseTimes)
+        }
     }
 }
 
@@ -845,5 +892,78 @@ extension OptimizedSiriIntentService: INAddMediaIntentHandling {
     
     func handle(intent: INAddMediaIntent, completion: @escaping (INAddMediaIntentResponse) -> Void) {
         handleAddMediaIntent(intent, completion: completion)
+    }
+}
+
+// MARK: - Localized Error Handling
+    
+private struct LocalizedError {
+    static let invalidParameters = NSLocalizedString("The request parameters are invalid. Please try adjusting your command.", comment: "")
+    static let timeout = NSLocalizedString("The request took too long to process. Please try again.", comment: "")
+    static let noMixtapes = NSLocalizedString("No mixtapes found matching your mood.", comment: "")
+    static let systemError = NSLocalizedString("Something went wrong. Please try again.", comment: "")
+    static let cacheMiss = NSLocalizedString("Unable to find matching music quickly. Generating new recommendations.", comment: "")
+}
+
+private func createErrorResponse(_ error: Error) -> INPlayMediaIntentResponse {
+    let response = INPlayMediaIntentResponse(code: .failure, userActivity: nil)
+    
+    switch error {
+    case let intentError as IntentError:
+        response.errorDescription = getLocalizedDescription(for: intentError)
+    case let validationError as ValidationError:
+        response.errorDescription = getLocalizedDescription(for: validationError)
+    default:
+        response.errorDescription = LocalizedError.systemError
+    }
+    
+    return response
+}
+
+private func getLocalizedDescription(for error: IntentError) -> String {
+    switch error {
+    case .invalidParameters:
+        return LocalizedError.invalidParameters
+    case .processingTimeout:
+        return LocalizedError.timeout
+    case .noResults:
+        return LocalizedError.noMixtapes
+    case .systemError:
+        return LocalizedError.systemError
+    }
+}
+
+private func getLocalizedDescription(for error: ValidationError) -> String {
+    switch error {
+    case .invalidSongCount:
+        return NSLocalizedString("Please request between 1 and 50 songs.", comment: "")
+    case .invalidMood:
+        return NSLocalizedString("I didn't understand that mood. Try something like happy, relaxed, or energetic.", comment: "")
+    case .invalidSearchTerm:
+        return NSLocalizedString("Please provide a longer search term.", comment: "")
+    }
+}
+
+enum IntentError: Error {
+    case invalidParameters
+    case processingTimeout
+    case noResults
+    case systemError
+}
+
+enum ValidationError: Error {
+    case invalidSongCount
+    case invalidMood
+    case invalidSearchTerm
+}
+
+// MARK: - Memory Management
+    
+private func handleMemoryPressure(_ notification: Notification) {
+    // Aggressively clear caches under memory pressure
+    intentQueue.async(flags: .barrier) {
+        self.mixtapeCache.removeAll()
+        self.moodCache.removeAll()
+        self.responseCacheSignatures.removeAll()
     }
 }

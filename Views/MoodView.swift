@@ -11,6 +11,7 @@ import SwiftUI
 struct MoodView: View {
     @StateObject private var colorTransitionManager = ColorTransitionManager()
     @ObservedObject var moodEngine: MoodEngine
+    @ObservedObject var mcpService = MCPSocketService()
     
     var body: some View {
         VStack(spacing: 20) {
@@ -34,7 +35,10 @@ struct MoodView: View {
                     MoodCard(
                         mood: mood,
                         isSelected: mood == moodEngine.currentMood,
-                        onSelect: { selectMood(mood) }
+                        onSelect: {
+                            selectMood(mood)
+                            mcpService.emitMoodSelect(type: mood.rawValue)
+                        }
                     )
                     .moodColored(colorTransitionManager)
                 }
@@ -48,9 +52,18 @@ struct MoodView: View {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 colorTransitionManager.transition(to: newMood)
             }
-            
-            // Haptic feedback
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        }
+        .onChange(of: mcpService.moodState) { newState in
+            guard let newState = newState,
+                  let mood = Asset.MoodColor(rawValue: newState.type),
+                  newState.active == true else { return }
+            selectMood(mood)
+        }
+        .onAppear {
+            mcpService.connect()
+        }
+        .onDisappear {
+            mcpService.disconnect()
         }
     }
     
@@ -81,36 +94,78 @@ struct CircularProgressView: View {
     }
 }
 
-struct MoodCard: View {
+private struct MoodCard: View {
     let mood: Asset.MoodColor
     let isSelected: Bool
     let onSelect: () -> Void
+    @State private var isAnimating = false
     
     var body: some View {
         Button(action: onSelect) {
-            VStack {
-                Text(mood.rawValue)
+            VStack(spacing: 12) {
+                // Color Circle
+                Circle()
+                    .fill(mood.color)
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Circle()
+                            .stroke(isSelected ? mood.color : Color.clear, lineWidth: 3)
+                            .scaleEffect(isAnimating ? 1.2 : 1.0)
+                            .opacity(isAnimating ? 0 : 1)
+                    )
+                
+                // Mood Label
+                Text(mood.name)
                     .font(.headline)
-                    .foregroundColor(.white)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(mood.color)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .shadow(radius: isSelected ? 5 : 0)
-                    .scaleEffect(isSelected ? 1.05 : 1)
+                    .foregroundColor(.primary)
+                
+                // Intensity Bar
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(mood.color)
+                        .frame(width: geometry.size.width * moodIntensity)
+                        .frame(height: 4)
+                        .cornerRadius(2)
+                }
+                .frame(height: 4)
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(.secondarySystemBackground))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(isSelected ? mood.color : Color.clear, lineWidth: 2)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .onChange(of: isSelected) { newValue in
+            if newValue {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7).repeatCount(1)) {
+                    isAnimating = true
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    isAnimating = false
+                }
             }
         }
-        .buttonStyle(MoodButtonStyle())
-        .accessibilityLabel("\(mood.rawValue) mood")
-        .accessibilityHint(isSelected ? "Currently selected" : "Double tap to select")
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
-}
-
-struct MoodButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .animation(.spring(), value: configuration.isPressed)
+    
+    private var moodIntensity: CGFloat {
+        switch mood {
+        case .energetic:
+            return 0.9
+        case .relaxed:
+            return 0.6
+        case .focused:
+            return 0.8
+        case .upbeat:
+            return 0.85
+        case .melancholic:
+            return 0.7
+        case .balanced:
+            return 0.75
+        }
     }
 }

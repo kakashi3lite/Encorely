@@ -15,6 +15,24 @@ class AudioProcessingConfiguration: ObservableObject {
     // MARK: - Static Configuration
     static let shared = AudioProcessingConfiguration()
     
+    // Default memory limits per platform
+    private static let defaultMemoryUsage: UInt64 = {
+        #if os(macOS)
+        return 100 * 1024 * 1024  // 100MB for macOS
+        #else
+        return 50 * 1024 * 1024   // 50MB for iOS
+        #endif
+    }()
+    
+    // Default latency targets per platform
+    private static let defaultMaxLatency: TimeInterval = {
+        #if os(macOS)
+        return 0.15  // 150ms for macOS
+        #else
+        return 0.10  // 100ms for iOS
+        #endif
+    }()
+    
     // MARK: - Audio Engine Settings
     @Published var sampleRate: Double = 44100.0 {
         didSet { validateAndNotify() }

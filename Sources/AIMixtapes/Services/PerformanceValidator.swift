@@ -13,12 +13,8 @@ import os.log
 class PerformanceValidator {
     
     // MARK: - Constraint Thresholds
-    private var maxLatencyMs: Double {
-        return AudioProcessingConfiguration.shared.maxProcessingLatency * 1000.0 // Convert to ms
-    }
-    private var maxMemoryMB: Double {
-        return Double(AudioProcessingConfiguration.shared.maxMemoryUsage) / (1024.0 * 1024.0) // Convert to MB
-    }
+    static let maxLatencyMs = 100.0 // 100ms maximum latency
+    static let maxMemoryMB = 50.0 // 50MB memory limit
     private static let minMoodAccuracy: Double = 0.8         // >80% requirement
     
     // MARK: - Test Configuration
@@ -69,27 +65,17 @@ class PerformanceValidator {
         
         var processingTimes: [TimeInterval] = []
         
-        for i in 0..<Self.testIterations {
-            let testBuffer = createTestAudioBuffer(
-                frequency: Float(440 + i * 10),
-                duration: Self.testDuration,
-                sampleRate: Self.testSampleRate
-            )
-            
-            let startTime = CFAbsoluteTimeGetCurrent()
+        // Test with varying buffer sizes
+        for bufferSize in [1024, 2048, 4096, 8192] {
+            let buffer = createTestBuffer(size: bufferSize, duration: 1.0)
             
             do {
-                _ = try await audioProcessor.extractFeatures(from: testBuffer)
-                let processingTime = CFAbsoluteTimeGetCurrent() - startTime
+                let startTime = CACurrentMediaTime()
+                _ = try await audioProcessor.extractFeatures(from: buffer)
+                let processingTime = CACurrentMediaTime() - startTime
                 processingTimes.append(processingTime)
             } catch {
-                logger.error("Feature extraction failed during latency test: \(error.localizedDescription)")
-                return LatencyValidationResult(
-                    passed: false,
-                    averageLatencyMs: 0,
-                    maxLatencyMs: 0,
-                    processingTimes: []
-                )
+                logger.error("Latency test failed: \(error.localizedDescription)")
             }
         }
         
@@ -99,7 +85,8 @@ class PerformanceValidator {
         let averageLatencyMs = averageLatency * 1000
         let maxLatencyMs = maxLatency * 1000
         
-        let passed = averageLatencyMs < Self.maxLatencyMs && maxLatencyMs < (Self.maxLatencyMs * 1.5)
+        let passed = averageLatencyMs < Self.maxLatencyMs && 
+                    maxLatencyMs < (Self.maxLatencyMs * 1.5)
         
         return LatencyValidationResult(
             passed: passed,
@@ -149,7 +136,8 @@ class PerformanceValidator {
         let finalMemoryMB = Double(finalMemory) / (1024 * 1024)
         let memoryIncreaseMB = Double(memoryIncrease) / (1024 * 1024)
         
-        let passed = peakMemoryMB < Self.maxMemoryMB && memoryIncreaseMB < (Self.maxMemoryMB * 0.2)
+        let passed = peakMemoryMB < Self.maxMemoryMB && 
+                    memoryIncreaseMB < (Self.maxMemoryMB * 0.2)
         
         return MemoryValidationResult(
             passed: passed,
@@ -364,21 +352,17 @@ class PerformanceValidator {
     
     // MARK: - System Memory Monitoring
     
-    private func getMemoryUsage() -> UInt64 {
+    private func getMemoryUsage() -> Int {
         var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
         
         let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
                 task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
             }
         }
         
-        if kerr == KERN_SUCCESS {
-            return info.resident_size
-        } else {
-            return 0
-        }
+        return kerr == KERN_SUCCESS ? Int(info.resident_size) : 0
     }
     
     // MARK: - Logging

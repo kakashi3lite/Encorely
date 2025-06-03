@@ -1,0 +1,79 @@
+name: AI-Mixtapes
+options:
+  bundleIdPrefix: com.swanand
+  createIntermediateGroups: true
+  xcodeVersion: "15.0"
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
+    SWIFT_VERSION: "5.9"
+    ENABLE_BITCODE: NO
+
+configs:
+  Debug:
+    settings:
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+    xcconfig: Debug.xcconfig
+  Release:
+    settings:
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
+      SWIFT_COMPILATION_MODE: wholemodule
+    xcconfig: Release.xcconfig
+
+targets:
+  AI-Mixtapes:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      - Sources
+      - Models
+      - ViewModels
+      - Views
+      - Services
+      - utils
+      - Modules
+      - Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.swanand.aimixtapes
+        INFOPLIST_FILE: Info.plist
+        MARKETING_VERSION: 0.9.0
+        CURRENT_PROJECT_VERSION: 1
+        CODE_SIGN_STYLE: Automatic
+    dependencies:
+      - package: AudioKit
+      - package: SoundpipeAudioKit
+    preBuildScripts:
+      - name: SwiftFormat
+        script: |
+          if which swiftformat >/dev/null; then
+            swiftformat .
+          else
+            echo "warning: SwiftFormat not installed"
+          fi
+      - name: SwiftLint
+        script: |
+          if which swiftlint >/dev/null; then
+            swiftlint lint --strict
+          else
+            echo "warning: SwiftLint not installed"
+          fi
+
+  AI-MixtapesTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests/UnitTests
+    dependencies:
+      - target: AI-Mixtapes
+
+  AI-MixtapesUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - Tests/UITests
+    dependencies:
+      - target: AI-Mixtapes

@@ -1,0 +1,15 @@
+// Development Team Configuration
+DEVELOPMENT_TEAM = PERSONAL_TEAM
+PRODUCT_BUNDLE_IDENTIFIER = com.swanand.aimixtapes
+
+// Signing
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = Apple Development
+
+// Deployment
+MACOSX_DEPLOYMENT_TARGET = 12.0
+IPHONEOS_DEPLOYMENT_TARGET = 15.0
+
+// Version
+MARKETING_VERSION = 0.9.0
+CURRENT_PROJECT_VERSION = 1

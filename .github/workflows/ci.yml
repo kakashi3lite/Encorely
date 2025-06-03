@@ -2,319 +2,793 @@ name: CI - AI Mixtapes Modules
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   workflow_dispatch:
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_15.2.app/Contents/Developer
   FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: 120
   FASTLANE_XCODEBUILD_SETTINGS_RETRIES: 3
+  WORKSPACE: AI-Mixtapes.xcworkspace
+  SCHEME: "AI Mixtapes"
+  ENABLE_TESTING: 1
+  DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+  ENABLE_TESTABILITY: YES
+  GCC_GENERATE_DEBUGGING_SYMBOLS: YES
+  ONLY_ACTIVE_ARCH: YES
+  SWIFT_OPTIMIZATION_LEVEL: -Onone
+  OTHER_SWIFT_FLAGS: "-D DEBUG"
+  CI_DEBUG: 1
+  # Add environment variables for authentication
+  MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+  KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+  APPLE_APP_ID: ${{ secrets.APPLE_APP_ID }}
+  APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+  APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+  APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+  FIREBASE_CLI_TOKEN: ${{ secrets.FIREBASE_CLI_TOKEN }}
+  FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+  CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+  MUSICKIT_DEVELOPER_TOKEN: ${{ secrets.MUSICKIT_DEVELOPER_TOKEN }}
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-    name: Build and Test
+  prepare:
+    name: Prepare Build Environment
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "15.2"
+
+      - name: Set up Ruby for Fastlane
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Install xcodegen
+        run: |
+          brew tap yonaskolb/XcodeGen https://github.com/yonaskolb/XcodeGen.git
+          brew install xcodegen
+
+      - name: Generate Xcode project
+        run: |
+          xcodegen generate
+        continue-on-error: true
+        id: generate_project
+
+      - name: Retry Generate Xcode project
+        if: steps.generate_project.outcome == 'failure'
+        run: |
+          rm -rf *.xcodeproj
+          rm -rf *.xcworkspace
+          xcodegen generate
+
+      - name: Install dependencies
+        run: |
+          gem install bundler
+          bundle config path vendor/bundle
+          bundle install --jobs 4 --retry 3
+          for i in {1..3}; do
+            bundle exec pod install --repo-update && break || sleep 5
+          done
+
+      - name: Cache build environment
+        uses: actions/cache@v3
+        with:
+          path: |
+            Pods
+            *.xcodeproj
+            *.xcworkspace
+            vendor/bundle
+          key: ${{ runner.os }}-build-env-${{ github.sha }}
+
+  build:
+    needs: prepare
+    name: Build
     runs-on: macos-latest
     strategy:
       matrix:
-        destination:
-          - "platform=iOS Simulator,name=iPhone 16 Pro,OS=18.1"
+        configuration: [Debug]
+      fail-fast: false
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Ruby for Fastlane
-        uses: ruby/setup-ruby@v1
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
         with:
-          ruby-version: "3.2"
-          bundler-cache: true
+          xcode-version: "15.2"
 
-      - name: Cache Pods
+      - name: Restore build environment
         uses: actions/cache@v3
         with:
-          path: Pods
-          key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-pods-
+          path: |
+            Pods
+            *.xcodeproj
+            *.xcworkspace
+            vendor/bundle
+          key: ${{ runner.os }}-build-env-${{ github.sha }}
 
-      - name: Install Dependencies
+      - name: Build
         run: |
-          bundle install
-          brew install xcodegen swiftlint
-          xcodegen generate
+          xcodebuild clean build \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration ${{ matrix.configuration }} \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty
 
-      - name: Install App Store Connect API Key
-        if: github.event_name != 'pull_request'
-        env:
-          APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
-          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-        run: |
-          echo "$APP_STORE_CONNECT_KEY" > AuthKey.p8
-          echo "APP_STORE_CONNECT_API_KEY_PATH=$(pwd)/AuthKey.p8" >> $GITHUB_ENV
-          echo "APP_STORE_CONNECT_API_KEY_ID=$APP_STORE_CONNECT_KEY_ID" >> $GITHUB_ENV
-          echo "APP_STORE_CONNECT_ISSUER_ID=$APP_STORE_CONNECT_ISSUER_ID" >> $GITHUB_ENV
-
-      - name: Install Code Signing Certificates
-        if: github.event_name != 'pull_request'
-        env:
-          CERTIFICATE_BASE64: ${{ secrets.IOS_DIST_SIGNING_KEY }}
-          P12_PASSWORD: ${{ secrets.IOS_DIST_SIGNING_KEY_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-          PROVISIONING_PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
-        run: |
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          echo -n "$CERTIFICATE_BASE64" | base64 --decode > certificate.p12
-          security import certificate.p12 -k $KEYCHAIN_PATH -P "$P12_PASSWORD" -T /usr/bin/codesign
-          security list-keychains -d user -s $KEYCHAIN_PATH
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo -n "$PROVISIONING_PROFILE" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
-
-      - name: Run Tests and Lint
-        env:
-          FASTLANE_SKIP_UPDATE_CHECK: true
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
-          FIREBASE_CLI_TOKEN: ${{ secrets.FIREBASE_CLI_TOKEN }}
-        run: |
-          bundle exec fastlane tests
-          bundle exec fastlane lint
-
-      - name: Upload Coverage
-        uses: codecov/codecov-action@v4
-        with:
-          xcode: true
-          xcode_derived_data: ./DerivedData
-          fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
-
-  deploy_testflight:
-    name: Deploy to TestFlight
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  test:
+    needs: build
+    name: Test
     runs-on: macos-latest
-    env:
-      APPLE_APP_ID: ${{ secrets.APPLE_APP_ID }}
+    strategy:
+      matrix:
+        configuration: [Debug]
+        test_suite:
+          - AIMixtapesTests/UnitTests
+          - AIMixtapesTests/IntegrationTests
+          - AIMixtapesTests/UITests
+          - AIMixtapesTests/AudioAnalysisTests
+          - AIMixtapesTests/MusicKitTests
+          - AIMixtapesTests/CoreDataTests
+      fail-fast: false
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
         with:
-          fetch-depth: 0
+          xcode-version: "15.2"
 
-      - name: Set up Ruby for Fastlane
-        uses: ruby/setup-ruby@v1
+      - name: Restore build environment
+        uses: actions/cache@v3
         with:
-          ruby-version: "3.2"
-          bundler-cache: true
+          path: |
+            Pods
+            *.xcodeproj
+            *.xcworkspace
+            vendor/bundle
+          key: ${{ runner.os }}-build-env-${{ github.sha }}
 
-      - name: Deploy to TestFlight
-        env:
-          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-        run: bundle exec fastlane beta
-
-  deploy_appstore:
-    name: Deploy to App Store
-    needs: test
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: macos-latest
-    env:
-      APPLE_APP_ID: ${{ secrets.APPLE_APP_ID }}
-
-    steps:
-      - uses: actions/checkout@v4
+      - name: Run tests
+        id: run_tests
+        uses: nick-fields/retry@v2
         with:
-          fetch-depth: 0
+          timeout_minutes: 20
+          max_attempts: 2
+          command: |
+            xcodebuild test \
+              -workspace "$WORKSPACE" \
+              -scheme "$SCHEME" \
+              -configuration ${{ matrix.configuration }} \
+              -destination "platform=iOS Simulator,name=iPhone 16 Pro,OS=18.1" \
+              -enableCodeCoverage YES \
+              -only-testing:${{ matrix.test_suite }} \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=NO \
+              | xcpretty --color --report junit
 
-      - name: Set up Ruby for Fastlane
-        uses: ruby/setup-ruby@v1
+      - name: Process test results
+        if: always()
+        run: |
+          mkdir -p test-results/${{ matrix.test_suite }}
+          mv build/reports/*.junit test-results/${{ matrix.test_suite }}/
+
+          # Generate test summary
+          echo "## Test Summary for ${{ matrix.test_suite }}" > test-results/${{ matrix.test_suite }}/summary.md
+          echo "\`\`\`" >> test-results/${{ matrix.test_suite }}/summary.md
+          xcrun xccov view --report --only-targets \
+            build/Logs/Test/*.xcresult >> test-results/${{ matrix.test_suite }}/summary.md
+          echo "\`\`\`" >> test-results/${{ matrix.test_suite }}/summary.md
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
         with:
-          ruby-version: "3.2"
-          bundler-cache: true
+          name: test-results-${{ matrix.test_suite }}
+          path: test-results/${{ matrix.test_suite }}
+          retention-days: 14
 
-      - name: Deploy to App Store
-        env:
-          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-        run: bundle exec fastlane release
-
-  benchmark:
-    name: Performance Benchmarks
-    needs: test
+  audio-analysis:
+    needs: [test]
+    name: Audio Analysis Tests
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
         with:
-          ruby-version: "3.2"
-          bundler-cache: true
+          xcode-version: "15.2"
+
+      - name: Restore build environment
+        uses: actions/cache@v3
+        with:
+          path: |
+            Pods
+            *.xcodeproj
+            *.xcworkspace
+            vendor/bundle
+          key: ${{ runner.os }}-build-env-${{ github.sha }}
+
+      - name: Run Audio Analysis Tests
+        run: |
+          xcodebuild test \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -only-testing:AIMixtapesTests/AudioAnalysisTests \
+            -destination "platform=iOS Simulator,name=iPhone 16 Pro,OS=18.1" \
+            | xcpretty
+
+      - name: Verify Audio Processing
+        run: |
+          mkdir -p Build/Reports
+
+          # Test audio buffer handling
+          xcodebuild test \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -only-testing:AIMixtapesTests/AudioBufferPoolTests \
+            | tee Build/Reports/AudioBufferPoolTests.txt
+
+          # Test audio feature extraction
+          xcodebuild test \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -only-testing:AIMixtapesTests/AudioFeaturesTests \
+            | tee Build/Reports/AudioFeaturesTests.txt
+
+      - name: Generate Audio Analysis Report
+        run: |
+          echo "# Audio Analysis Test Report" > audio_report.md
+          echo "## Buffer Pool Performance" >> audio_report.md
+          cat Build/Reports/AudioBufferPoolTests.txt >> audio_report.md
+          echo "## Feature Extraction Results" >> audio_report.md
+          cat Build/Reports/AudioFeaturesTests.txt >> audio_report.md
+
+      - name: Upload Audio Analysis Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: audio-analysis-results
+          path: |
+            Build/Reports
+            audio_report.md
+          retention-days: 14
+
+  musickit-integration:
+    needs: [test]
+    name: MusicKit Integration Tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "15.2"
+
+      - name: Restore build environment
+        uses: actions/cache@v3
+        with:
+          path: |
+            Pods
+            *.xcodeproj
+            *.xcworkspace
+            vendor/bundle
+          key: ${{ runner.os }}-build-env-${{ github.sha }}
+
+      - name: Run MusicKit Tests
+        run: |
+          mkdir -p Build/Reports
+
+          # Test playlist generation
+          xcodebuild test \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -only-testing:AIMixtapesTests/PlaylistGenerationTests \
+            | tee Build/Reports/PlaylistGenerationTests.txt
+
+          # Test music recommendations
+          xcodebuild test \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -only-testing:AIMixtapesTests/MusicRecommendationTests \
+            | tee Build/Reports/MusicRecommendationTests.txt
+
+      - name: Generate MusicKit Report
+        run: |
+          echo "# MusicKit Integration Report" > musickit_report.md
+          echo "## Playlist Generation Results" >> musickit_report.md
+          cat Build/Reports/PlaylistGenerationTests.txt >> musickit_report.md
+          echo "## Recommendation Engine Results" >> musickit_report.md
+          cat Build/Reports/MusicRecommendationTests.txt >> musickit_report.md
+
+      - name: Upload MusicKit Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: musickit-results
+          path: |
+            Build/Reports
+            musickit_report.md
+          retention-days: 14
+
+  code-quality:
+    needs: [test]
+    name: Code Quality Checks
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Install SwiftFormat
+        run: brew install swiftformat
+
+      - name: Run SwiftLint
+        run: |
+          mkdir -p Build/Reports/SwiftLint
+          swiftlint lint --reporter json > Build/Reports/SwiftLint/report.json
+          swiftlint lint --reporter junit > Build/Reports/SwiftLint/report.xml
+
+      - name: Run SwiftFormat Check
+        run: |
+          mkdir -p Build/Reports/SwiftFormat
+          swiftformat . --lint --config .swiftformat --reporter json > Build/Reports/SwiftFormat/report.json
+
+      - name: Check file organization
+        run: |
+          # Verify proper MVVM structure
+          for dir in "Models" "Views" "ViewModels"; do
+            if [ ! -d "$dir" ]; then
+              echo "Error: Missing $dir directory"
+              exit 1
+            fi
+          done
+
+          # Check for proper test organization
+          if [ ! -d "Tests" ]; then
+            echo "Error: Missing Tests directory"
+            exit 1
+          fi
+
+      - name: Static Analysis
+        run: |
+          xcodebuild analyze \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty --color --report json
+
+      - name: Generate Quality Report
+        run: |
+          echo "# Code Quality Report" > quality_report.md
+          echo "## SwiftLint Results" >> quality_report.md
+          jq -r '.[] | "- \(.file):\(.line) - \(.reason)"' Build/Reports/SwiftLint/report.json >> quality_report.md
+          echo "## SwiftFormat Results" >> quality_report.md
+          jq -r '.[] | "- \(.file) - \(.message)"' Build/Reports/SwiftFormat/report.json >> quality_report.md
+
+      - name: Upload Quality Reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: code-quality-reports
+          path: |
+            Build/Reports/SwiftLint
+            Build/Reports/SwiftFormat
+            quality_report.md
+          retention-days: 14
+
+  validate-assets:
+    needs: [prepare]
+    name: Validate Assets
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "15.2"
+
+      - name: Parse Asset Manifest
+        run: |
+          if [ -f "ASSET_MANIFEST.json" ]; then
+            echo "Found asset manifest, validating assets..."
+            jq '.' ASSET_MANIFEST.json > /dev/null
+          else
+            echo "No asset manifest found, creating one..."
+            echo '{"version": "1.0", "lastUpdated": "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'"}' > ASSET_MANIFEST.json
+          fi
+
+      - name: Validate Asset Catalog
+        run: |
+          mkdir -p Build/AssetValidation
+          xcrun actool \
+            --output-format human-readable-text \
+            --notices --warnings --errors \
+            --filter-for-device-model "iPhone16,1" \
+            --filter-for-device-os-version 18.1 \
+            --target-device iphone \
+            --platform iphonesimulator \
+            --minimum-deployment-target 16.0 \
+            --compile Build/AssetValidation \
+            Assets.xcassets 2>&1 | tee Build/AssetValidation/validation.log
+
+      - name: Check Image Asset Sizes
+        run: |
+          echo "Checking image asset sizes and formats..."
+          find Assets.xcassets -type f \( -name "*.png" -o -name "*.jpg" -o -name "*.jpeg" \) -exec sh -c '
+            file={}
+            size=$(stat -f%z "$file")
+            dimensions=$(sips -g pixelWidth -g pixelHeight "$file" | grep pixel)
+            echo "$file: $size bytes, $dimensions" >> Build/AssetValidation/size_report.txt
+          ' \;
+
+          # Check for oversized assets
+          awk '
+            $2 ~ /bytes,/ && $2 > 1000000 {
+              print "⚠️ Warning: Large asset detected:", $0
+              exit 1
+            }
+          ' Build/AssetValidation/size_report.txt || true
+
+      - name: Validate Color Assets
+        run: |
+          echo "Validating color assets..."
+          find Assets.xcassets -name "Contents.json" -path "*/Colors/*" -exec sh -c '
+            for file do
+              echo "Checking $file..."
+              # Verify color space and format
+              jq -e ".colors[].color.color-space" "$file" > /dev/null
+              jq -e ".colors[].idiom" "$file" > /dev/null
+            done
+          ' sh {} + > Build/AssetValidation/colors_report.txt 2>&1
+
+      - name: Check Dark Mode Support
+        run: |
+          echo "Checking Dark Mode support..."
+          find Assets.xcassets -name "Contents.json" -exec sh -c '
+            for file do
+              if jq -e ".appearances[] | select(.appearance == \"luminosity\")" "$file" > /dev/null; then
+                echo "✓ Dark mode support found in $(dirname "$file")"
+              fi
+            done
+          ' sh {} + > Build/AssetValidation/dark_mode_report.txt
+
+      - name: Generate Validation Report
+        run: |
+          {
+            echo "# Asset Validation Report"
+            echo "## Asset Sizes"
+            cat Build/AssetValidation/size_report.txt
+            echo -e "\n## Color Assets"
+            cat Build/AssetValidation/colors_report.txt
+            echo -e "\n## Dark Mode Support"
+            cat Build/AssetValidation/dark_mode_report.txt
+            echo -e "\n## Validation Warnings"
+            grep "warning:" Build/AssetValidation/validation.log || echo "No warnings found"
+          } > Build/AssetValidation/report.md
+
+      - name: Upload Validation Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: asset-validation
+          path: Build/AssetValidation
+          retention-days: 14
+
+      - name: Check for Critical Issues
+        run: |
+          if grep -q "error:" Build/AssetValidation/validation.log; then
+            echo "❌ Critical asset validation errors found"
+            grep "error:" Build/AssetValidation/validation.log
+            exit 1
+          fi
+
+  performance:
+    needs: [build, test]
+    name: Performance Tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "15.2"
+
+      - name: Restore build environment
+        uses: actions/cache@v3
+        with:
+          path: |
+            Pods
+            *.xcodeproj
+            *.xcworkspace
+            vendor/bundle
+          key: ${{ runner.os }}-build-env-${{ github.sha }}
 
       - name: Run Performance Tests
         run: |
-          echo "[$(date '+%Y-%m-%d %H:%M')] feat(PERF-001): Running performance benchmarks" >> ci_updates.log
-          bundle exec fastlane ios benchmark
+          mkdir -p Build/PerformanceResults
 
-      - name: Upload Benchmark Results
+          # Audio Processing Performance
+          xcodebuild test \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -only-testing:AIMixtapesTests/AudioProcessingPerformanceTests \
+            -destination "platform=iOS Simulator,name=iPhone 16 Pro,OS=18.1" \
+            | tee Build/PerformanceResults/audio_processing.txt
+
+          # Core Data Performance
+          xcodebuild test \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -only-testing:AIMixtapesTests/CoreDataPerformanceTests \
+            | tee Build/PerformanceResults/core_data.txt
+
+          # UI Performance
+          xcodebuild test \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -only-testing:AIMixtapesTests/UIPerformanceTests \
+            | tee Build/PerformanceResults/ui_performance.txt
+
+      - name: Analyze Performance Results
+        run: |
+          echo "# Performance Test Results" > performance_report.md
+
+          # Check Audio Processing Performance
+          AUDIO_TIME=$(grep "Time:" Build/PerformanceResults/audio_processing.txt | awk '{print $2}')
+          echo "## Audio Processing" >> performance_report.md
+          echo "Processing Time: $AUDIO_TIME seconds" >> performance_report.md
+          if (( $(echo "$AUDIO_TIME > 0.1" | bc -l) )); then
+            echo "⚠️ Audio processing exceeds threshold" >> performance_report.md
+          fi
+
+          # Check Core Data Performance
+          COREDATA_TIME=$(grep "Time:" Build/PerformanceResults/core_data.txt | awk '{print $2}')
+          echo "## Core Data Operations" >> performance_report.md
+          echo "Operation Time: $COREDATA_TIME seconds" >> performance_report.md
+          if (( $(echo "$COREDATA_TIME > 0.05" | bc -l) )); then
+            echo "⚠️ Core Data operations exceed threshold" >> performance_report.md
+          fi
+
+          # Check UI Performance
+          UI_TIME=$(grep "Time:" Build/PerformanceResults/ui_performance.txt | awk '{print $2}')
+          echo "## UI Rendering" >> performance_report.md
+          echo "Render Time: $UI_TIME seconds" >> performance_report.md
+          if (( $(echo "$UI_TIME > 0.016" | bc -l) )); then
+            echo "⚠️ UI rendering exceeds 60 FPS threshold" >> performance_report.md
+          fi
+
+      - name: Generate Performance Charts
+        run: |
+          echo "## Performance Trends" >> performance_report.md
+          echo "\`\`\`" >> performance_report.md
+          echo "Audio Processing: [${AUDIO_TIME}s] $({'#' * (AUDIO_TIME * 100)})" >> performance_report.md
+          echo "Core Data: [${COREDATA_TIME}s] $({'#' * (COREDATA_TIME * 100)})" >> performance_report.md
+          echo "UI Rendering: [${UI_TIME}s] $({'#' * (UI_TIME * 100)})" >> performance_report.md
+          echo "\`\`\`" >> performance_report.md
+
+      - name: Upload Performance Results
         uses: actions/upload-artifact@v3
         with:
-          name: benchmark-results
-          path: Build/Reports/**/PerformanceTestReport.md
+          name: performance-results
+          path: |
+            Build/PerformanceResults
+            performance_report.md
+          retention-days: 30
 
-  mbti-test:
-    name: MBTI Matching Tests
-    needs: test
+      - name: Check Performance Thresholds
+        run: |
+          # Fail if any performance metrics exceed thresholds
+          if grep -q "⚠️" performance_report.md; then
+            echo "Performance thresholds exceeded"
+            exit 1
+          fi
+
+  documentation:
+    needs: [test, code-quality]
+    name: Generate Documentation
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
         with:
-          ruby-version: "3.2"
-          bundler-cache: true
+          xcode-version: "15.2"
 
-      - name: Run MBTI Tests
+      - name: Install Documentation Tools
         run: |
-          echo "[$(date '+%Y-%m-%d %H:%M')] feat(MBTI-008): Running MBTI matching tests" >> ci_updates.log
-          bundle exec fastlane ios mbti_tests
+          gem install jazzy
+          pip3 install mkdocs mkdocs-material
 
-      - name: Upload MBTI Test Results
+      - name: Generate Swift Documentation
+        run: |
+          mkdir -p Build/Documentation
+
+          # Generate Swift API documentation
+          jazzy \
+            --clean \
+            --author "AI-Mixtapes Team" \
+            --author_url https://github.com/ai-mixtapes \
+            --github_url https://github.com/ai-mixtapes \
+            --xcodebuild-arguments -scheme,"$SCHEME" \
+            --module AIMixtapes \
+            --output Build/Documentation/API
+
+      - name: Generate Module Documentation
+        run: |
+          # Audio Analysis Module
+          if [ -f "README_AUDIO_ANALYSIS.md" ]; then
+            cp README_AUDIO_ANALYSIS.md Build/Documentation/audio-analysis.md
+          fi
+
+          # Performance Documentation
+          if [ -f "README_PERFORMANCE_VALIDATION.md" ]; then
+            cp README_PERFORMANCE_VALIDATION.md Build/Documentation/performance.md
+          fi
+
+          # Testing Documentation
+          if [ -f "README_TESTING.md" ]; then
+            cp README_TESTING.md Build/Documentation/testing.md
+          fi
+
+      - name: Generate Development Guides
+        run: |
+          mkdir -p Build/Documentation/guides
+
+          # Combine development guides
+          {
+            echo "# AI Mixtapes Development Guide"
+            echo
+            echo "## Table of Contents"
+            echo
+            if [ -f "CONTRIBUTING.md" ]; then
+              echo "- [Contributing](#contributing)"
+              echo
+              echo "## Contributing"
+              cat CONTRIBUTING.md
+            fi
+            if [ -f "DEVELOPMENT_LOG.md" ]; then
+              echo "- [Development Log](#development-log)"
+              echo
+              echo "## Development Log"
+              cat DEVELOPMENT_LOG.md
+            fi
+            if [ -f "BUILD_DEBUG.md" ]; then
+              echo "- [Build Debugging](#build-debugging)"
+              echo
+              echo "## Build Debugging"
+              cat BUILD_DEBUG.md
+            fi
+          } > Build/Documentation/guides/development.md
+
+      - name: Generate Architecture Documentation
+        run: |
+          mkdir -p Build/Documentation/architecture
+
+          # Generate architecture diagrams from code structure
+          {
+            echo "# AI Mixtapes Architecture"
+            echo
+            echo "## Project Structure"
+            echo "\`\`\`"
+            tree -L 3 -I "Build|*.xcodeproj|*.xcworkspace|Pods" . >> Build/Documentation/architecture/structure.md
+            echo "\`\`\`"
+            
+            echo
+            echo "## Module Dependencies"
+            echo "\`\`\`mermaid"
+            echo "graph TD"
+            # Extract module dependencies from import statements
+            find . -name "*.swift" -exec grep -H "^import" {} \; | \
+              sort -u | \
+              awk -F: '{print $2}' | \
+              sed 's/import //' | \
+              sort -u | \
+              awk '{print "    " $1 " --> AIMixtapes"}' \
+              >> Build/Documentation/architecture/structure.md
+            echo "\`\`\`"
+          } >> Build/Documentation/architecture/structure.md
+
+      - name: Build Documentation Site
+        run: |
+          # Create mkdocs configuration
+          cat > mkdocs.yml << EOF
+          site_name: AI Mixtapes Documentation
+          theme:
+            name: material
+            palette:
+              scheme: slate
+          nav:
+            - Home: index.md
+            - API Reference: API/index.md
+            - Guides: guides/development.md
+            - Architecture: architecture/structure.md
+            - Audio Analysis: audio-analysis.md
+            - Performance: performance.md
+            - Testing: testing.md
+          EOF
+
+          # Build the documentation site
+          cd Build/Documentation
+          mkdocs build
+
+      - name: Upload Documentation
         uses: actions/upload-artifact@v3
         with:
-          name: mbti-test-results
-          path: Build/Reports/**/MBTITestReport.md
+          name: documentation
+          path: Build/Documentation
+          retention-days: 30
 
-  musickit-test:
-    name: MusicKit Integration Tests
-    needs: test
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: Build/Documentation/site
+
+  deploy:
+    needs: [test, code-quality, validate-assets, performance, documentation]
+    name: Deploy
     runs-on: macos-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    environment: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+      - name: Setup Xcode version
+        uses: maxim-lobanov/setup-xcode@v1
         with:
-          ruby-version: "3.2"
-          bundler-cache: true
+          xcode-version: "15.2"
 
-      - name: Run MusicKit Tests
-        env:
-          MUSICKIT_TOKEN: ${{ secrets.MUSICKIT_DEVELOPER_TOKEN }}
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Prepare Release Notes
         run: |
-          echo "[$(date '+%Y-%m-%d %H:%M')] feat(MKT-001): Running MusicKit integration tests" >> ci_updates.log
-          bundle exec fastlane ios musickit_tests
+          echo "## Build Details" > release_notes.md
+          echo "Branch: ${GITHUB_REF#refs/heads/}" >> release_notes.md
+          echo "Commit: $GITHUB_SHA" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## Test Results" >> release_notes.md
+          cat artifacts/test-results-*/test_report.txt >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## Performance Metrics" >> release_notes.md
+          cat artifacts/performance-results/performance_metrics.txt >> release_notes.md
 
-      - name: Upload Test Results
-        uses: actions/upload-artifact@v3
+      - name: Create Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v1
         with:
-          name: musickit-test-results
-          path: Build/Reports/**/MusicKitTestReport.md
-
-  visualization-test:
-    name: Visualization Tests
-    needs: test
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.2"
-          bundler-cache: true
-
-      - name: Run Visualization Tests
-        run: |
-          echo "[$(date '+%Y-%m-%d %H:%M')] feat(VIS-002): Running visualization component tests" >> ci_updates.log
-          bundle exec fastlane ios visualization_tests
-
-      - name: Upload Test Results
-        uses: actions/upload-artifact@v3
-        with:
-          name: visualization-test-results
-          path: Build/Reports/**/VisualizationTestReport.md
-
-  voice-test:
-    name: Voice Recognition Tests
-    needs: test
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.2"
-          bundler-cache: true
-
-      - name: Run Voice Tests
-        run: |
-          echo "[$(date '+%Y-%m-%d %H:%M")] feat(VOI-003): Running voice recognition tests" >> ci_updates.log
-          bundle exec fastlane ios voice_tests
-
-      - name: Upload Test Results
-        uses: actions/upload-artifact@v3
-        with:
-          name: voice-test-results
-          path: Build/Reports/**/VoiceTestReport.md
-
-  offline-cache-test:
-    name: Offline Cache Tests
-    needs: test
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.2"
-          bundler-cache: true
-
-      - name: Run Offline Cache Tests
-        run: |
-          echo "[$(date '+%Y-%m-%d %H:%M')] feat(OFF-004): Running offline cache validation" >> ci_updates.log
-          bundle exec fastlane ios offline_cache_tests
-
-      - name: Upload Test Results
-        uses: actions/upload-artifact@v3
-        with:
-          name: offline-cache-results
-          path: Build/Reports/**/OfflineCacheReport.md
-
-  collaboration-test:
-    name: Collaboration Feature Tests
-    needs: test
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.2"
-          bundler-cache: true
-
-      - name: Run Collaboration Tests
-        run: |
-          echo "[$(date '+%Y-%m-%d %H:%M')] feat(COL-005): Running collaboration feature tests" >> ci_updates.log
-          bundle exec fastlane ios collaboration_tests
-
-      - name: Upload Test Results
-        uses: actions/upload-artifact@v3
-        with:
-          name: collaboration-test-results
-          path: Build/Reports/**/CollaborationTestReport.md
+          files: |
+            artifacts/**/*
+          body_path: release_notes.md
+          draft: false
+          prerelease: false

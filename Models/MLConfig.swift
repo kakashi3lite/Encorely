@@ -10,21 +10,23 @@ enum MLConfig {
     static let personalityModelVersion = "v1.0.0"
     
     // MARK: - Performance Settings
-    static let computeUnits: MLComputeUnits = .all
-    static let preferredMemoryFootprint: MLModelConfiguration.PreferredMemoryFootprint = .reduced
-    static let allowLowPrecisionAccumulationOnGPU = true
-    static let allowBackgroundProcessing = true
-    
-    // MARK: - Thresholds
-    struct Thresholds {
-        static let minimumEmotionConfidence: Float = 0.7
-        static let minimumFeatureConfidence: Float = 0.5
-        static let minimumSampleLength: Int = 1024
-        static let minimumAudioDuration: TimeInterval = 10.0
-        static let maximumInferenceTime: TimeInterval = 0.1 // seconds
+    struct Performance {
+        #if os(macOS)
+        static let maxProcessingLatency: TimeInterval = 0.04  // 40ms target for macOS
+        static let maxMemoryUsage: Int = 50 * 1024 * 1024    // 50MB for macOS
+        static let targetFPS: Double = 30.0                   // Higher FPS target for macOS
+        #else
+        static let maxProcessingLatency: TimeInterval = 0.04  // 40ms target for iOS
+        static let maxMemoryUsage: Int = 5 * 1024 * 1024     // 5MB for iOS
+        static let targetFPS: Double = 20.0                   // Standard FPS for iOS
+        #endif
+        
+        static let computeUnits: MLComputeUnits = .all
+        static let preferredMetalDevice = MTLCreateSystemDefaultDevice()
+        static let allowLowPrecisionAccumulationOnGPU = true
+        static let preferredMemoryFootprint: MLModelConfiguration.PreferredMemoryFootprint = .smallest
         static let minimumPersonalityConfidence: Float = 0.6
         static let minimumRecommendationScore: Float = 0.5
-        static let maxMemoryUsage: UInt64 = 512 * 1024 * 1024  // 512MB
         static let maxCPUUsage: Double = 80.0  // 80%
         static let maxDiskUsage: Double = 90.0  // 90%
         static let maxErrorsBeforeAlert = 5
@@ -74,9 +76,15 @@ enum MLConfig {
         case emotionClassifier = "EmotionClassifier"
         case audioFeatures = "AudioFeatures"
         case personalityPredictor = "PersonalityPredictor"
+        case emotionClassifierOptimized = "EmotionClassifier_optimized"
         
         var url: URL? {
-            Bundle.main.url(forResource: rawValue, withExtension: "mlmodelc")
+            // Try to load optimized model first
+            if self == .emotionClassifier,
+               let optimizedUrl = Bundle.main.url(forResource: ModelAsset.emotionClassifierOptimized.rawValue, withExtension: "mlmodelc") {
+                return optimizedUrl
+            }
+            return Bundle.main.url(forResource: rawValue, withExtension: "mlmodelc")
         }
         
         var fallbackURL: URL? {
@@ -164,6 +172,18 @@ enum MLConfig {
         static let enableModelCaching = true
         static let enableAutoRecovery = true
         static let enableDetailedLogging = true
+    }
+    
+    // MARK: - Mood Detection Configuration
+    enum Analysis {
+        static let confidenceThreshold: Float = 0.80
+        static let moodTransitionThreshold: Float = 0.65
+        static let moodHistorySize = 10
+        static let consecutiveLowConfidenceLimit = 3
+        static let moodUpdateInterval: TimeInterval = 2.0
+        static let moodStabilityFactor: Float = 0.7
+        static let probabilityHistorySize = 5
+        static let neutralFallbackThreshold: Float = 0.5
     }
 }
 
