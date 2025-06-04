@@ -1,7 +1,7 @@
 import XCTest
 import AVFoundation
 import Combine
-@testable import AIMixtapes
+@testable import App
 
 /// Tests for the enhanced AudioAnalysisService with focus on memory management and buffer handling
 class AudioAnalysisServiceTests: XCTestCase {

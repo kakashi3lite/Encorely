@@ -1,6 +1,6 @@
 import XCTest
 import SwiftUI
-@testable import AIMixtapes
+@testable import App
 
 extension XCTestCase {
     /// Helper function to verify color asset exists and loads correctly

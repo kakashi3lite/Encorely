@@ -1,7 +1,7 @@
 import XCTest
 import CoreML
 import Vision
-@testable import AIMixtapes
+@testable import App
 
 class AITests: XCTestCase {
     var colorTransitionManager: ColorTransitionManager!

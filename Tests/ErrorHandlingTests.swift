@@ -1,6 +1,6 @@
 import XCTest
 import SwiftUI
-@testable import AIMixtapes
+@testable import App
 
 class ErrorHandlingTests: XCTestCase {
     var aiService: AIIntegrationService!

@@ -1,6 +1,6 @@
 import XCTest
 import CoreData
-@testable import AIMixtapes
+@testable import App
 
 class CoreDataMigrationTests: XCTestCase {
     var testStoreURL: URL!

@@ -1,5 +1,5 @@
 import XCTest
-@testable import AIMixtapes
+@testable import App
 
 class MBTIRecommendationTests: XCTestCase {
     

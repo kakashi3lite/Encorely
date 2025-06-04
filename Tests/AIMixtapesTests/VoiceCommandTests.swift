@@ -1,6 +1,6 @@
 import XCTest
 import Speech
-@testable import AIMixtapes
+@testable import App
 
 class VoiceCommandTests: XCTestCase {
     var processor: VoiceCommandProcessor!

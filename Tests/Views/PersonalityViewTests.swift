@@ -1,7 +1,7 @@
 import XCTest
 import SwiftUI
 import ViewInspector
-@testable import AIMixtapes
+@testable import App
 
 class PersonalityViewTests: XCTestCase {
     var personalityEngine: PersonalityEngine!

@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import AIMixtapes
+@testable import App
 
 final class PerformanceValidatorTests: XCTestCase {
     var validator: PerformanceValidator!

@@ -1,7 +1,7 @@
 import XCTest
 import ViewInspector
 import SwiftUI
-@testable import AIMixtapes
+@testable import App
 
 extension AnimatedVisualizationView: Inspectable {}
 

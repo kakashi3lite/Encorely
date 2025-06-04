@@ -1,6 +1,6 @@
 import XCTest
 import AVFoundation
-@testable import AIMixtapes
+@testable import App
 
 class BackgroundProcessingTests: XCTestCase {
     var audioService: AudioAnalysisService!

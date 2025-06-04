@@ -1,5 +1,5 @@
 import XCTest
-@testable import AIMixtapes
+@testable import App
 
 final class MoodTransitionTests: XCTestCase {
     var moodService: MoodDetectionService!

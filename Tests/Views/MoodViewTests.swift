@@ -1,7 +1,7 @@
 import XCTest
 import SwiftUI
 import ViewInspector
-@testable import AIMixtapes
+@testable import App
 
 class MoodViewTests: XCTestCase {
     var moodEngine: MoodEngine!

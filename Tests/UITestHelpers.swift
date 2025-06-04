@@ -1,7 +1,7 @@
 import XCTest
 import SwiftUI
 import ViewInspector
-@testable import AIMixtapes
+@testable import App
 
 extension View {
     func inspect() throws -> InspectableView<ViewType.ViewHosting> {

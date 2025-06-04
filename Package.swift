@@ -10,19 +10,18 @@ let package = Package(
         .macOS(.v12)
     ],
     products: [
-        .executable(
-            name: "AI-Mixtapes",
-            targets: ["App"]
-        ),
-        .library(
-            name: "SharedTypes",
-            targets: ["SharedTypes"]
-        )
+        .executable(name: "AI-Mixtapes", targets: ["App"]),
+        .library(name: "SharedTypes", targets: ["SharedTypes"]),
+        .library(name: "MCPClient", targets: ["MCPClient"])
     ],
     dependencies: [
         // Local Modules
         .package(path: "Modules/MusicKitModule"),
         .package(path: "Modules/AudioAnalysisModule"),
+        .package(path: "Modules/VisualizationModule"),
+        .package(path: "Modules/AIModule"),
+        .package(path: "Modules/CoreDataModule"),
+        .package(path: "Modules/UtilitiesModule"),
         
         // External Dependencies
         .package(url: "https://github.com/apple/swift-algorithms", from: "1.2.0"),
@@ -34,42 +33,63 @@ let package = Package(
         .package(url: "https://github.com/socketio/socket.io-client-swift", from: "16.0.1")
     ],
     targets: [
-        .target(
-            name: "SharedTypes",
-            dependencies: []
-        ),
+        // Main App Target
         .executableTarget(
             name: "App",
             dependencies: [
                 "SharedTypes",
-                // Local Modules
+                "MCPClient",
                 .product(name: "MusicKitModule", package: "MusicKitModule"),
+                .product(name: "AIModule", package: "AIModule"),
                 .product(name: "AudioAnalysisModule", package: "AudioAnalysisModule"),
+                .product(name: "CoreDataModule", package: "CoreDataModule"),
+                .product(name: "UtilitiesModule", package: "UtilitiesModule"),
                 .product(name: "VisualizationModule", package: "VisualizationModule"),
-                
-                // External Dependencies
                 .product(name: "Algorithms", package: "swift-algorithms"),
                 .product(name: "Collections", package: "swift-collections"),
                 .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
                 .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
                 .product(name: "AudioKit", package: "AudioKit"),
-                .product(name: "SoundpipeAudioKit", package: "SoundpipeAudioKit"),
-                .product(name: "SocketIO", package: "socket.io-client-swift")
+                .product(name: "SoundpipeAudioKit", package: "SoundpipeAudioKit")
             ],
             path: "Sources/App",
             resources: [
-                .process("Resources/Assets.xcassets"),
-                .process("Resources/LaunchScreen.storyboard"),
-                .process("Resources/AI_Mixtapes.xcdatamodeld"),
-                .process("Resources/Intents.intentdefinition"),
-                .process("Resources/MLModels"),
-                .process("Resources/Audio")
+                .copy("Resources")
+            ],
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency"),
+                .enableUpcomingFeature("ActorDataRaceChecks")
+            ]
+        ),
+        
+        // MCP Client
+        .target(
+            name: "MCPClient",
+            dependencies: [
+                "SharedTypes",
+                .product(name: "SocketIO", package: "socket.io-client-swift")
+            ],
+            path: "Sources/MCPClient",
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency"),
+                .enableUpcomingFeature("ActorDataRaceChecks")
+            ]
+        ),
+        
+        // Shared Types
+        .target(
+            name: "SharedTypes",
+            dependencies: [],
+            path: "Sources/SharedTypes",
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency"),
+                .enableUpcomingFeature("ActorDataRaceChecks")
             ]
         ),
         
         // Test Targets
         .testTarget(
-            name: "AppTests",
+            name: "AIMixtapesTests",
             dependencies: [
                 "App",
                 .product(name: "MusicKitModule", package: "MusicKitModule"),
@@ -78,134 +98,42 @@ let package = Package(
                 .product(name: "CoreDataModule", package: "CoreDataModule"),
                 .product(name: "UtilitiesModule", package: "UtilitiesModule")
             ],
-            path: "Tests/AppTests"
-        ),
-        
-        .testTarget(
-            name: "AIModuleTests",
-            dependencies: [
-                .product(name: "AIModule", package: "AIModule"),
-                .product(name: "UtilitiesModule", package: "UtilitiesModule")
-            ],
-            path: "Tests/AIModuleTests"
-        ),
-        
-        .testTarget(
-            name: "AudioAnalysisModuleTests",
-            dependencies: [
-                .product(name: "AudioAnalysisModule", package: "AudioAnalysisModule"),
-                .product(name: "UtilitiesModule", package: "UtilitiesModule"),
-                .product(name: "AudioKit", package: "AudioKit")
-            ],
-            path: "Tests/AudioAnalysisModuleTests"
-        ),
-        
-        .testTarget(
-            name: "IntegrationTests",
-            dependencies: [
-                "App",
-                .product(name: "MusicKitModule", package: "MusicKitModule"),
-                .product(name: "AIModule", package: "AIModule"),
-                .product(name: "AudioAnalysisModule", package: "AudioAnalysisModule"),
-                .product(name: "CoreDataModule", package: "CoreDataModule")
-            ],
-            path: "Tests/IntegrationTests",
+            path: "Tests/AI-MixtapesTests",
             resources: [
-                .process("TestData")
+                .copy("TestData")
+            ]
+        ),
+        
+        .testTarget(
+            name: "UITests",
+            dependencies: [
+                "App"
+            ],
+            path: "Tests/UITests",
+            resources: [
+                .copy("TestUtils")
             ]
         )
     ]
 )
-
-// MARK: - Swift Settings
-
-extension SwiftSetting {
-    static let enableStrictConcurrency = SwiftSetting.enableExperimentalFeature("StrictConcurrency")
-    static let enableActorDataRaceChecks = SwiftSetting.enableExperimentalFeature("ActorDataRaceChecks")
-}
-
-// MARK: - Platform-specific configurations
 
 #if os(iOS)
 package.targets.append(
     .target(
         name: "WatchKitExtension",
         dependencies: [
+            "SharedTypes",
             .product(name: "UtilitiesModule", package: "UtilitiesModule"),
             .product(name: "AIModule", package: "AIModule")
         ],
-        path: "Sources/WatchKitExtension"
+        path: "Sources/WatchKitExtension",
+        swiftSettings: [
+            .enableUpcomingFeature("StrictConcurrency"),
+            .enableUpcomingFeature("ActorDataRaceChecks")
+        ]
     )
 )
 #endif
-
-    // MCP packages
-    .target(
-        name: "MCPClient",
-        dependencies: [
-            .product(name: "SocketIO", package: "socket.io-client-swift")
-        ]
-    ),
-    .target(
-        name: "MCPServer",
-        dependencies: [
-            .product(name: "Express", package: "express"),
-            .product(name: "SocketIO", package: "socket.io")
-        ]
-    )
-)
-
-let package = Package(
-    name: "AI-Mixtapes",
-    platforms: [
-        .iOS(.v15),
-        .macOS(.v12)
-    ],
-    products: [
-        .library(name: "MCPClient", targets: ["MCPClient"]),
-        .library(name: "MCPServer", targets: ["MCPServer"])
-    ],
-    dependencies: [
-        .package(url: "https://github.com/socketio/socket.io-client-swift.git", from: "16.0.0"),
-        .package(url: "https://github.com/expressjs/express.git", from: "4.18.2"),
-        .package(url: "https://github.com/socketio/socket.io.git", from: "4.7.1")
-    ],
-    targets: allTargets
-)
-
-// MARK: - Build Configuration
-
-extension Target {
-    static func appTarget() -> Target {
-        return .executableTarget(
-            name: "App",
-            dependencies: [
-                .target(name: "MCPClient"),
-                // All module dependencies listed above
-            ],
-            path: "Sources/App",
-            swiftSettings: [
-                .enableStrictConcurrency,
-                .enableActorDataRaceChecks,
-                .define("AI_MIXTAPES_PRODUCTION", .when(configuration: .release)),
-                .define("AI_MIXTAPES_DEBUG", .when(configuration: .debug))
-            ],
-            linkerSettings: [
-                .linkedFramework("AVFoundation"),
-                .linkedFramework("CoreML"),
-                .linkedFramework("Vision"),
-                .linkedFramework("SoundAnalysis"),
-                .linkedFramework("MusicKit"),
-                .linkedFramework("Intents"),
-                .linkedFramework("IntentsUI"),
-                .linkedFramework("CoreData"),
-                .linkedFramework("Combine"),
-                .linkedFramework("SwiftUI"),
-                .linkedFramework("UIKit")
-            ]
-        )
-    }
-}
 
 // MARK: - Module Descriptions
 

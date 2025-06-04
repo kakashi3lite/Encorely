@@ -1,7 +1,7 @@
 import XCTest
 import SwiftUI
 import SnapshotTesting
-@testable import AIMixtapes
+@testable import App
 
 final class VisualizationSnapshotTests: XCTestCase {
     override func setUp() {

@@ -1,5 +1,5 @@
 import Foundation
-@testable import AIMixtapes
+@testable import App
 
 class NetworkStateManager {
     static let shared = NetworkStateManager()

@@ -64,3 +64,40 @@ public struct AudioFeatures: Codable {
         self.mood = mood
     }
 }
+
+public enum ServiceState {
+    case initializing
+    case ready
+    case reducedFunctionality
+    case error
+}
+
+public enum ResourceUtilization {
+    case normal
+    case heavy
+    case critical
+}
+
+public struct MixtapeGenerationOptions {
+    public let duration: TimeInterval
+    public let includeMoodTransitions: Bool
+    public let personalityInfluence: Double
+    
+    public init(duration: TimeInterval, includeMoodTransitions: Bool, personalityInfluence: Double) {
+        self.duration = duration
+        self.includeMoodTransitions = includeMoodTransitions
+        self.personalityInfluence = personalityInfluence
+    }
+}
+
+public struct AudioAnalysisResult {
+    public let features: AudioFeatures
+    public let dominantMood: Mood
+    public let personalityTraits: [PersonalityType]
+    
+    public init(features: AudioFeatures, dominantMood: Mood, personalityTraits: [PersonalityType]) {
+        self.features = features
+        self.dominantMood = dominantMood
+        self.personalityTraits = personalityTraits
+    }
+}
