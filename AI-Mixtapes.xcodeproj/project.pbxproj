@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 63;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -161,7 +161,7 @@
 
 /* Begin PBXFileReference section */
 		014FC90FA272242017DF5D1B /* AIMixtapesApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIMixtapesApp.swift; sourceTree = "<group>"; };
-		03121AB322AB363EC438CC9A /* AI-MixtapesUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "AI-MixtapesUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		03121AB322AB363EC438CC9A /* AI-MixtapesUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "AI-MixtapesUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		07DA98107BF9F3C8A3F4E8FB /* SiriIntegrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiriIntegrationService.swift; sourceTree = "<group>"; };
 		085F5CF2E98730E15353A5C9 /* AIGeneratedMixtapeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIGeneratedMixtapeView.swift; sourceTree = "<group>"; };
 		09CE776A012CCAF7CCA02405 /* PerformanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceSettingsView.swift; sourceTree = "<group>"; };
@@ -190,7 +190,7 @@
 		36F44677D2B264CC6253DD61 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		39C1F98289313DD40BE29054 /* Color+Audio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Audio.swift"; sourceTree = "<group>"; };
 		39E61F8CFE7ED08DF35BB8FE /* MoodEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodEngine.swift; sourceTree = "<group>"; };
-		3A2D480AE28EFFBB8F6734B4 /* AI-MixtapesTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = "AI-MixtapesTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		3A2D480AE28EFFBB8F6734B4 /* AI-MixtapesTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "AI-MixtapesTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B21DCC0E057952D1CC162D3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		3C9A944B5C9E7A5C77EFD2F7 /* MoodDetectionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoodDetectionService.swift; sourceTree = "<group>"; };
 		3EED4B49084584E1D2753049 /* SongViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongViews.swift; sourceTree = "<group>"; };
@@ -266,7 +266,7 @@
 		C0CB5812064063E186D4AF69 /* OptimizedSiriIntentService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptimizedSiriIntentService.swift; sourceTree = "<group>"; };
 		C1FFD8211D7BCE9B62713B0C /* AILogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AILogger.swift; sourceTree = "<group>"; };
 		C42BAE147C80DC582BDD9E88 /* PersonalityEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalityEngine.swift; sourceTree = "<group>"; };
-		C77E072E94FFA86729D4A507 /* AI-Mixtapes.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "AI-Mixtapes.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C77E072E94FFA86729D4A507 /* AI-Mixtapes.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "AI-Mixtapes.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		CC7A7B3E537D043DA08A4D9F /* Song+CoreDataProperties.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Song+CoreDataProperties.swift"; sourceTree = "<group>"; };
 		CD3DB9312A1669C67F39FC5D /* MLConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLConfig.swift; sourceTree = "<group>"; };
 		CE9DF2E072B29CD5C060495B /* PersonalityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersonalityView.swift; sourceTree = "<group>"; };
@@ -696,8 +696,6 @@
 			buildConfigurationList = D29338C824E5A5EB7B746708 /* Build configuration list for PBXNativeTarget "AI-MixtapesTests" */;
 			buildPhases = (
 				2C1C865683D4634824B3F1FA /* Sources */,
-				067E721F2A1B3D4500E9B0D2 /* Frameworks */,
-				067E72202A1B3D4500E9B0D2 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -706,8 +704,6 @@
 			);
 			name = "AI-MixtapesTests";
 			packageProductDependencies = (
-				435F2A1B2A1B3D7C00B2C123 /* AudioKit */,
-				435F2A1C2A1B3D7C00B2C123 /* SoundpipeAudioKit */,
 			);
 			productName = "AI-MixtapesTests";
 			productReference = 3A2D480AE28EFFBB8F6734B4 /* AI-MixtapesTests.xctest */;
@@ -723,15 +719,10 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					869E03C6AE505D23C28DB3CF = {
-						DevelopmentTeam = "$(DEVELOPMENT_TEAM)";
 						TestTargetID = B8C754387E6BC6707B719957;
 					};
 					B8C754387E6BC6707B719957 = {
-						DevelopmentTeam = "$(DEVELOPMENT_TEAM)";
 						ProvisioningStyle = Automatic;
-					};
-					FB55C1259397BFFE0D5F3632 = {
-						DevelopmentTeam = "$(DEVELOPMENT_TEAM)";
 					};
 				};
 			};
@@ -750,7 +741,6 @@
 				C18DA3284409F6F9514CE425 /* XCRemoteSwiftPackageReference "SoundpipeAudioKit" */,
 				F1ECB8C0FBE41A93A9713ABC /* XCLocalSwiftPackageReference "Sources/Domain" */,
 			);
-			preferredProjectObjectVersion = 54;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -985,7 +975,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
+				DEVELOPMENT_TEAM = KPSY8883WT;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				INFOPLIST_FILE = Info.plist;
@@ -1005,6 +995,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				DEVELOPMENT_TEAM = KPSY8883WT;
 				INFOPLIST_FILE = Tests/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1014,6 +1006,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "com.swanand.AI-MixtapesTests";
 				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AI-Mixtapes.app/AI-Mixtapes";
 			};
@@ -1093,8 +1086,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
+				DEVELOPMENT_TEAM = KPSY8883WT;
 				ENABLE_TESTABILITY = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Tests/Info.plist;
@@ -1108,7 +1102,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos macosx";
-				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AI-Mixtapes.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/AI-Mixtapes";
@@ -1119,6 +1113,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				DEVELOPMENT_TEAM = KPSY8883WT;
 				INFOPLIST_FILE = Tests/UITests/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1137,6 +1133,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				DEVELOPMENT_TEAM = KPSY8883WT;
 				INFOPLIST_FILE = Tests/UITests/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -1158,7 +1156,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "$(DEVELOPMENT_TEAM)";
+				DEVELOPMENT_TEAM = KPSY8883WT;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = NO;
 				INFOPLIST_FILE = Info.plist;

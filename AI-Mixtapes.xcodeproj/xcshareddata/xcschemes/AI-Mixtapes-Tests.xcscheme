@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "6D8A4F2D2A1B3C1000E9B0D2"
+               BlueprintIdentifier = "B8C754387E6BC6707B719957"
                BuildableName = "AI-Mixtapes.app"
                BlueprintName = "AI-Mixtapes"
                ReferencedContainer = "container:AI-Mixtapes.xcodeproj">
@@ -33,7 +33,7 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "6D8A4F432A1B3C1100E9B0D2"
+               BlueprintIdentifier = "FB55C1259397BFFE0D5F3632"
                BuildableName = "AI-MixtapesTests.xctest"
                BlueprintName = "AI-MixtapesTests"
                ReferencedContainer = "container:AI-Mixtapes.xcodeproj">
@@ -43,7 +43,7 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "6D8A4F4D2A1B3C1100E9B0D2"
+               BlueprintIdentifier = "869E03C6AE505D23C28DB3CF"
                BuildableName = "AI-MixtapesUITests.xctest"
                BlueprintName = "AI-MixtapesUITests"
                ReferencedContainer = "container:AI-Mixtapes.xcodeproj">
@@ -65,7 +65,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "6D8A4F2D2A1B3C1000E9B0D2"
+            BlueprintIdentifier = "B8C754387E6BC6707B719957"
             BuildableName = "AI-Mixtapes.app"
             BlueprintName = "AI-Mixtapes"
             ReferencedContainer = "container:AI-Mixtapes.xcodeproj">
@@ -82,7 +82,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "6D8A4F2D2A1B3C1000E9B0D2"
+            BlueprintIdentifier = "B8C754387E6BC6707B719957"
             BuildableName = "AI-Mixtapes.app"
             BlueprintName = "AI-Mixtapes"
             ReferencedContainer = "container:AI-Mixtapes.xcodeproj">

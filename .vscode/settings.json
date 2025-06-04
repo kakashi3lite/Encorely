@@ -4,7 +4,9 @@
     "swift.languageServerPath": "/usr/local/bin/sourcekit-lsp",
     "lldb.executable": "/usr/bin/lldb",
     "editor.formatOnSave": true,
-    "editor.rulers": [100],
+    "editor.rulers": [
+        100
+    ],
     "editor.suggestSelection": "first",
     "editor.codeActionsOnSave": {
         "source.fixAll.swiftlint": "explicit"
@@ -31,7 +33,11 @@
         "editor.insertSpaces": true
     },
     "gitlens.codeLens.enabled": true,
-    "swiftformat.configSearchPaths": [".swiftformat"],
-    "swiftlint.configSearchPaths": [".swiftlint.yml"],
+    "swiftformat.configSearchPaths": [
+        ".swiftformat"
+    ],
+    "swiftlint.configSearchPaths": [
+        ".swiftlint.yml"
+    ],
     "swiftlint.enable": true
 }
