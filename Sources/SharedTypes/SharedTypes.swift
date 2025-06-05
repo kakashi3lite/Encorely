@@ -1,3 +1,28 @@
+import Foundation
+import SwiftUI
+
+public enum PersonalityType: String, Codable, CaseIterable {
+    case analyzer = "Analyzer" 
+    case explorer = "Explorer"
+    case curator = "Curator"
+    case enthusiast = "Enthusiast"
+    case social = "Social"
+    case ambient = "Ambient"
+    case balanced = "Balanced"
+    
+    public var themeColor: Color {
+        switch self {
+        case .analyzer: return .blue
+        case .explorer: return .purple
+        case .curator: return .orange
+        case .enthusiast: return .green
+        case .social: return .teal
+        case .ambient: return .mint
+        case .balanced: return .gray
+        }
+    }
+}
+
 public enum Mood: String, Codable {
     case energetic
     case relaxed

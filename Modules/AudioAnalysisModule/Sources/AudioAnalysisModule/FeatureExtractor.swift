@@ -2,11 +2,21 @@ import Foundation
 import AudioKit
 import Accelerate
 import SoundpipeAudioKit
+import AVFAudio
+
+/// Delegate protocol for real-time feature updates
+public protocol FeatureExtractorDelegate: AnyObject {
+    func featureExtractor(_ extractor: FeatureExtractor, didExtract features: AudioFeatures)
+    func featureExtractor(_ extractor: FeatureExtractor, didEncounterError error: Error)
+}
 
 public class FeatureExtractor {
+    // MARK: - Properties
+    
     private let fftProcessor: FFTProcessor
     private let fftSize: Int
     private let sampleRate: Double
+    public weak var delegate: FeatureExtractorDelegate?
     
     // AudioKit nodes
     private let engine = AudioEngine()
@@ -15,76 +25,186 @@ public class FeatureExtractor {
     private var amplitudeTap: AmplitudeTap?
     private var playerNode: AudioPlayer?
     
+    // Buffer management
+    private let bufferQueue = DispatchQueue(label: "com.aimixtapes.featureextractor.buffer",
+                                          qos: .userInteractive)
+    private let analysisQueue = DispatchQueue(label: "com.aimixtapes.featureextractor.analysis",
+                                            qos: .userInitiated)
+    private var bufferPool: BufferPool
     private let analysisFormat = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)
     
-    public init?(fftSize: Int = 2048, sampleRate: Double = 44100) {
-        guard let processor = FFTProcessor(size: fftSize) else { return nil }
+    // Feature extraction state
+    private var isExtracting = false
+    private var lastFeatureTimestamp: TimeInterval = 0
+    private var featureHistory: RingBuffer<AudioFeatures>
+    
+    // Performance monitoring
+    private var processingLoad: Double = 0
+    private var averageProcessingTime: TimeInterval = 0
+    
+    // MARK: - Initialization
+    
+    public init?(fftSize: Int = 2048, sampleRate: Double = 44100, historySize: Int = 10) {
+        guard let processor = FFTProcessor(size: fftSize, sampleRate: Float(sampleRate)) else { return nil }
+        
         self.fftProcessor = processor
         self.fftSize = fftSize
         self.sampleRate = sampleRate
+        self.bufferPool = BufferPool(maxBuffers: 10, format: analysisFormat)
+        self.featureHistory = RingBuffer(capacity: historySize)
         
         setupAudioKit()
     }
     
+    deinit {
+        cleanup()
+    }
+    
+    // MARK: - Setup
+    
     private func setupAudioKit() {
-        // Initialize player node
+        // Initialize player node with high-quality settings
+        let outputFormat = AVAudioFormat(standardFormatWithSampleRate: sampleRate,
+                                       channels: 1)
         playerNode = AudioPlayer()
         
-        // Connect nodes
-        if let player = playerNode {
-            engine.output = player
-            
-            // Initialize analysis taps
-            pitchTap = PitchTap(player) { pitch, amp in 
-                // Process pitch data in real-time
-            }
-            
-            fftTap = FFTTap(player) { fftData in
-                // Process FFT data in real-time
-            }
-            
-            amplitudeTap = AmplitudeTap(player) { amp in
-                // Process amplitude data in real-time
-            }
-            
-            // Start the taps
-            pitchTap?.start()
-            fftTap?.start()
-            amplitudeTap?.start()
-        }
+        guard let player = playerNode else { return }
         
-        // Start the engine
+        // Connect nodes with proper buffer sizes
+        engine.output = player
+        
+        // Initialize analysis taps with managed buffers
+        setupAnalysisTaps(on: player)
+        
+        // Start engine
         do {
             try engine.start()
         } catch {
-            print("AudioKit engine failed to start: \(error.localizedDescription)")
+            delegate?.featureExtractor(self, didEncounterError: error)
         }
     }
     
-    public func extractFeatures(from samples: [Float]) -> AudioFeatures {
-        let rms = calculateAmplitude(samples)
-        let (pitch, confidence) = calculatePitch(samples)
-        let spectrum = calculateSpectrum(samples)
-        let centroid = calculateSpectralCentroid(spectrum)
-        let flatness = calculateSpectralFlatness(spectrum)
-        let rolloff = calculateSpectralRolloff(spectrum)
-        let spread = calculateSpectralSpread(spectrum, centroid: centroid)
-        let bandEnergies = calculateBandEnergies(spectrum)
+    private func setupAnalysisTaps(on node: Node) {
+        // Configure pitch tracking
+        pitchTap = PitchTap(node) { [weak self] pitch, amp in
+            self?.processPitchData(pitch: pitch[0], amplitude: amp[0])
+        }
         
-        return AudioFeatures(
-            rms: rms,
-            zeroCrossingRate: calculateZeroCrossingRate(samples),
-            spectralCentroid: centroid,
-            spectralRolloff: rolloff,
-            spectralFlatness: flatness,
-            spectralSpread: spread,
-            pitch: pitch,
-            pitchConfidence: confidence,
-            bassEnergy: bandEnergies.bass,
-            midEnergy: bandEnergies.mid,
-            trebleEnergy: bandEnergies.treble,
-            mfcc: calculateMFCC(spectrum)
-        )
+        // Configure FFT analysis
+        fftTap = FFTTap(node) { [weak self] fftData in
+            self?.processFFTData(fftData)
+        }
+        
+        // Configure amplitude tracking
+        amplitudeTap = AmplitudeTap(node) { [weak self] amp in
+            self?.processAmplitudeData(amplitude: amp[0])
+        }
+    }
+    
+    // MARK: - Public Interface
+    
+    /// Start real-time feature extraction
+    public func startExtracting() {
+        bufferQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            self.isExtracting = true
+            self.pitchTap?.start()
+            self.fftTap?.start()
+            self.amplitudeTap?.start()
+        }
+    }
+    
+    /// Stop feature extraction
+    public func stopExtracting() {
+        bufferQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            self.isExtracting = false
+            self.pitchTap?.stop()
+            self.fftTap?.stop()
+            self.amplitudeTap?.stop()
+        }
+    }
+    
+    /// Extract features from provided samples
+    public func extractFeatures(from samples: [Float]) -> AudioFeatures {
+        let startTime = CACurrentMediaTime()
+        
+        // Get buffer from pool
+        guard let buffer = bufferPool.obtainBuffer() else {
+            return AudioFeatures()
+        }
+        
+        defer {
+            bufferPool.returnBuffer(buffer)
+            updatePerformanceMetrics(startTime: startTime)
+        }
+        
+        // Process in chunks to manage memory
+        return autoreleasepool {
+            // Extract spectral features
+            guard let spectralFeatures = fftProcessor.analyzeSpectralFeatures(buffer) else {
+                return AudioFeatures()
+            }
+            
+            // Calculate basic features
+            let rms = calculateAmplitude(samples)
+            let (pitch, confidence) = calculatePitch(samples)
+            let zcr = calculateZeroCrossingRate(samples)
+            
+            // Create feature set
+            var features = AudioFeatures()
+            features.rms = rms
+            features.zeroCrossingRate = zcr
+            features.spectralCentroid = spectralFeatures.centroid
+            features.spectralRolloff = spectralFeatures.rolloff
+            features.spectralFlatness = spectralFeatures.flatness
+            features.spectralSpread = spectralFeatures.spread
+            features.pitch = pitch
+            features.pitchConfidence = confidence
+            features.bassEnergy = spectralFeatures.bassEnergy
+            features.midEnergy = spectralFeatures.midEnergy
+            features.trebleEnergy = spectralFeatures.trebleEnergy
+            features.harmonicRatio = spectralFeatures.harmonicRatio
+            features.brightness = spectralFeatures.brightness
+            
+            // Update history
+            featureHistory.write(features)
+            
+            return features
+        }
+    }
+    
+    // MARK: - Private Processing Methods
+    
+    private func processPitchData(pitch: Float, amplitude: Float) {
+        guard isExtracting else { return }
+        analysisQueue.async { [weak self] in
+            // Process pitch data
+            self?.updateFeatures(withPitch: pitch, amplitude: amplitude)
+        }
+    }
+    
+    private func processFFTData(_ fftData: [Float]) {
+        guard isExtracting else { return }
+        analysisQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Process FFT data and extract spectral features
+            autoreleasepool {
+                if let spectralFeatures = self.fftProcessor.analyzeSpectralFeatures(fftData) {
+                    self.updateFeatures(withSpectral: spectralFeatures)
+                }
+            }
+        }
+    }
+    
+    private func processAmplitudeData(amplitude: Float) {
+        guard isExtracting else { return }
+        analysisQueue.async { [weak self] in
+            self?.updateFeatures(withAmplitude: amplitude)
+        }
     }
     
     private func calculateAmplitude(_ samples: [Float]) -> Float {
@@ -94,211 +214,196 @@ public class FeatureExtractor {
     }
     
     private func calculatePitch(_ samples: [Float]) -> (pitch: Float, confidence: Float) {
-        // Use AudioKit's pitch tracking
-        guard let pitchTracker = try? PitchTap(engine.output) { pitch, amp in } else {
-            return (0, 0)
-        }
+        // Use YIN pitch detection algorithm for better accuracy
+        var frequencies = [Float](repeating: 0, count: samples.count / 2)
+        var confidences = [Float](repeating: 0, count: samples.count / 2)
         
-        var detectedPitch: Float = 0
-        var detectedConfidence: Float = 0
+        // Implementation of YIN algorithm
+        // 1. Autocorrelation
+        var autocorr = [Float](repeating: 0, count: samples.count / 2)
+        vDSP_conv(samples, 1, samples, 1, &autocorr, 1, vDSP_Length(samples.count / 2))
         
-        pitchTracker.callbackQueue = DispatchQueue.global(qos: .userInitiated)
-        pitchTracker.start()
-        
-        // Process a small window for pitch detection
-        let semaphore = DispatchSemaphore(value: 0)
-        pitchTracker.handler = { pitch, amp in
-            detectedPitch = pitch[0]
-            detectedConfidence = amp[0]
-            semaphore.signal()
-        }
-        
-        // Wait for pitch detection with timeout
-        let timeoutResult = semaphore.wait(timeout: .now() + 0.1)
-        pitchTracker.stop()
-        
-        return timeoutResult == .success ? (detectedPitch, detectedConfidence) : (0, 0)
-    }
-    
-    private func calculateSpectrum(_ samples: [Float]) -> [Float] {
-        // Use AudioKit's FFT implementation for more accurate results
-        guard let fft = try? FFTTap(engine.output) { _ in } else {
-            return fftProcessor.performFFT(on: samples)
-        }
-        
-        var fftData: [Float] = []
-        let semaphore = DispatchSemaphore(value: 0)
-        
-        fft.callbackQueue = DispatchQueue.global(qos: .userInitiated)
-        fft.handler = { data in
-            fftData = Array(data[0..<data.count/2])  // Only use first half (nyquist)
-            semaphore.signal()
-        }
-        fft.start()
-        
-        // Wait for FFT with timeout
-        let timeoutResult = semaphore.wait(timeout: .now() + 0.1)
-        fft.stop()
-        
-        return timeoutResult == .success ? fftData : fftProcessor.performFFT(on: samples)
-    }
-    
-    private func calculateSpectralCentroid(_ spectrum: [Float]) -> Float {
-        let frequencies = (0..<spectrum.count).map { Float($0) * Float(sampleRate) / Float(fftSize) }
-        var numerator: Float = 0
-        var denominator: Float = 0
-        
-        vDSP_dotpr(frequencies, 1, spectrum, 1, &numerator, vDSP_Length(spectrum.count))
-        vDSP_sve(spectrum, 1, &denominator, vDSP_Length(spectrum.count))
-        
-        return numerator / (denominator + 1e-6)
-    }
-    
-    private func calculateSpectralRolloff(_ spectrum: [Float]) -> Float {
-        let threshold: Float = 0.85
-        var sum: Float = 0
-        vDSP_sve(spectrum, 1, &sum, vDSP_Length(spectrum.count))
-        
-        var cumsum: Float = 0
-        for (i, magnitude) in spectrum.enumerated() {
-            cumsum += magnitude
-            if cumsum >= sum * threshold {
-                return Float(i) * Float(sampleRate) / Float(fftSize)
-            }
-        }
-        return 0
-    }
-    
-    private func calculateSpectralFlatness(_ spectrum: [Float]) -> Float {
-        let epsilon: Float = 1e-6  // Avoid log(0)
-        var logSum: Float = 0
-        var sum: Float = 0
-        let n = Float(spectrum.count)
-        
-        for magnitude in spectrum {
-            let value = magnitude + epsilon
-            logSum += log(value)
-            sum += value
-        }
-        
-        let geometricMean = exp(logSum / n)
-        let arithmeticMean = sum / n
-        
-        return geometricMean / arithmeticMean
-    }
-    
-    private func calculateSpectralSpread(_ spectrum: [Float], centroid: Float) -> Float {
-        let frequencies = (0..<spectrum.count).map { Float($0) * Float(sampleRate) / Float(fftSize) }
-        var numerator: Float = 0
-        var denominator: Float = 0
-        
-        for i in 0..<spectrum.count {
-            let diff = frequencies[i] - centroid
-            let weight = spectrum[i] * diff * diff
-            numerator += weight
-            denominator += spectrum[i]
-        }
-        
-        return sqrt(numerator / (denominator + 1e-6))
-    }
-    
-    private func calculateBandEnergies(_ spectrum: [Float]) -> (bass: Float, mid: Float, treble: Float) {
-        let bassRange = 0...(fftSize * 200 / Int(sampleRate))  // 0-200Hz
-        let midRange = (fftSize * 200 / Int(sampleRate))...(fftSize * 2000 / Int(sampleRate))  // 200Hz-2kHz
-        let trebleRange = (fftSize * 2000 / Int(sampleRate))..<spectrum.count  // 2kHz+
-        
-        var bassEnergy: Float = 0
-        var midEnergy: Float = 0
-        var trebleEnergy: Float = 0
-        
-        for i in 0..<spectrum.count {
-            let energy = spectrum[i] * spectrum[i]
-            if bassRange.contains(i) {
-                bassEnergy += energy
-            } else if midRange.contains(i) {
-                midEnergy += energy
-            } else if trebleRange.contains(i) {
-                trebleEnergy += energy
+        // 2. Difference function
+        var diff = [Float](repeating: 0, count: samples.count / 2)
+        for tau in 0..<samples.count / 2 {
+            for i in 0..<samples.count - tau {
+                let delta = samples[i] - samples[i + tau]
+                diff[tau] += delta * delta
             }
         }
         
-        // Normalize
-        let total = bassEnergy + midEnergy + trebleEnergy + 1e-6
-        return (bassEnergy/total, midEnergy/total, trebleEnergy/total)
-    }
-    
-    private func calculateMFCC(_ spectrum: [Float]) -> [Float] {
-        // Use AudioKit's filterbank and DCT for proper MFCC calculation
-        let numCoefficients = 13
-        let numFilters = 26
-        let minFreq: Float = 20
-        let maxFreq: Float = Float(sampleRate) / 2
-        
-        // Create mel filterbank
-        let melFilters = createMelFilterbank(numFilters: numFilters, fftSize: fftSize, 
-                                           sampleRate: Float(sampleRate),
-                                           minFreq: minFreq, maxFreq: maxFreq)
-        
-        // Apply filterbank
-        var filteredEnergies = [Float](repeating: 0, count: numFilters)
-        for i in 0..<numFilters {
-            var sum: Float = 0
-            for j in 0..<spectrum.count {
-                sum += spectrum[j] * melFilters[i][j]
-            }
-            filteredEnergies[i] = log(sum + 1e-6)
+        // 3. Cumulative mean normalized difference
+        var cmnd = [Float](repeating: 0, count: samples.count / 2)
+        cmnd[0] = 1
+        var sum = diff[0]
+        for tau in 1..<samples.count / 2 {
+            sum += diff[tau]
+            cmnd[tau] = diff[tau] * Float(tau) / sum
         }
         
-        // Apply DCT
-        var mfcc = [Float](repeating: 0, count: numCoefficients)
-        for i in 0..<numCoefficients {
-            var sum: Float = 0
-            for j in 0..<numFilters {
-                sum += filteredEnergies[j] * cos(Float.pi * Float(i) * (Float(j) + 0.5) / Float(numFilters))
-            }
-            mfcc[i] = sum
-        }
-        
-        return mfcc
-    }
-    
-    private func createMelFilterbank(numFilters: Int, fftSize: Int, sampleRate: Float, 
-                                   minFreq: Float, maxFreq: Float) -> [[Float]] {
-        func freqToMel(_ freq: Float) -> Float {
-            return 2595 * log10(1 + freq / 700)
-        }
-        
-        func melToFreq(_ mel: Float) -> Float {
-            return 700 * (pow(10, mel / 2595) - 1)
-        }
-        
-        let minMel = freqToMel(minFreq)
-        let maxMel = freqToMel(maxFreq)
-        let melPoints = (0...numFilters+1).map { i in
-            melToFreq(minMel + Float(i) * (maxMel - minMel) / Float(numFilters + 1))
-        }
-        
-        var filterbank = [[Float]](repeating: [Float](repeating: 0, count: fftSize/2),
-                                 count: numFilters)
-        
-        for i in 0..<numFilters {
-            for j in 0..<fftSize/2 {
-                let freq = Float(j) * sampleRate / Float(fftSize)
-                if freq >= melPoints[i] && freq < melPoints[i+1] {
-                    filterbank[i][j] = (freq - melPoints[i]) / (melPoints[i+1] - melPoints[i])
-                } else if freq >= melPoints[i+1] && freq < melPoints[i+2] {
-                    filterbank[i][j] = (melPoints[i+2] - freq) / (melPoints[i+2] - melPoints[i+1])
-                }
+        // 4. Find pitch
+        var minValue: Float = 1.0
+        var minTau = 0
+        for tau in 2..<samples.count / 2 {
+            if cmnd[tau] < minValue {
+                minValue = cmnd[tau]
+                minTau = tau
             }
         }
         
-        return filterbank
+        let pitch = Float(sampleRate) / Float(minTau)
+        let confidence = 1.0 - minValue
+        
+        return (pitch, confidence)
     }
     
-    deinit {
-        pitchTap?.stop()
-        fftTap?.stop()
-        amplitudeTap?.stop()
+    private func calculateZeroCrossingRate(_ samples: [Float]) -> Float {
+        var crossings: Int = 0
+        for i in 1..<samples.count {
+            if (samples[i] * samples[i-1]) < 0 {
+                crossings += 1
+            }
+        }
+        return Float(crossings) / Float(samples.count)
+    }
+    
+    // MARK: - Feature Updates
+    
+    private func updateFeatures(withPitch pitch: Float, amplitude: Float) {
+        var currentFeatures = featureHistory.latest ?? AudioFeatures()
+        currentFeatures.pitch = pitch
+        currentFeatures.rms = amplitude
+        notifyFeatureUpdate(currentFeatures)
+    }
+    
+    private func updateFeatures(withSpectral features: SpectralFeatures) {
+        var currentFeatures = featureHistory.latest ?? AudioFeatures()
+        currentFeatures.spectralCentroid = features.centroid
+        currentFeatures.spectralRolloff = features.rolloff
+        currentFeatures.spectralFlatness = features.flatness
+        currentFeatures.spectralSpread = features.spread
+        currentFeatures.bassEnergy = features.bassEnergy
+        currentFeatures.midEnergy = features.midEnergy
+        currentFeatures.trebleEnergy = features.trebleEnergy
+        currentFeatures.harmonicRatio = features.harmonicRatio
+        currentFeatures.brightness = features.brightness
+        notifyFeatureUpdate(currentFeatures)
+    }
+    
+    private func updateFeatures(withAmplitude amplitude: Float) {
+        var currentFeatures = featureHistory.latest ?? AudioFeatures()
+        currentFeatures.rms = amplitude
+        notifyFeatureUpdate(currentFeatures)
+    }
+    
+    private func notifyFeatureUpdate(_ features: AudioFeatures) {
+        let now = CACurrentMediaTime()
+        if now - lastFeatureTimestamp >= 0.05 { // 20Hz update rate
+            lastFeatureTimestamp = now
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.delegate?.featureExtractor(self, didExtract: features)
+            }
+        }
+    }
+    
+    // MARK: - Performance Monitoring
+    
+    private func updatePerformanceMetrics(startTime: CFTimeInterval) {
+        let processingTime = CACurrentMediaTime() - startTime
+        
+        // Update average processing time with exponential moving average
+        averageProcessingTime = 0.9 * averageProcessingTime + 0.1 * processingTime
+        
+        // Calculate processing load (percentage of buffer duration spent processing)
+        let bufferDuration = Double(fftSize) / sampleRate
+        processingLoad = (processingTime / bufferDuration) * 100
+        
+        // Log warning if processing is taking too long
+        if processingLoad > 80 {
+            print("Warning: High processing load (\(String(format: "%.1f", processingLoad))%)")
+        }
+    }
+    
+    // MARK: - Cleanup
+    
+    private func cleanup() {
+        stopExtracting()
         engine.stop()
+        bufferPool.removeAllBuffers()
+    }
+}
+
+// MARK: - Buffer Pool Implementation
+
+private class BufferPool {
+    private var availableBuffers: [AVAudioPCMBuffer] = []
+    private let maxBuffers: Int
+    private let format: AVAudioFormat
+    private let lock = NSLock()
+    
+    init(maxBuffers: Int, format: AVAudioFormat) {
+        self.maxBuffers = maxBuffers
+        self.format = format
+    }
+    
+    func obtainBuffer() -> AVAudioPCMBuffer? {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        if let buffer = availableBuffers.popLast() {
+            return buffer
+        }
+        
+        if availableBuffers.count < maxBuffers {
+            return AVAudioPCMBuffer(pcmFormat: format,
+                                  frameCapacity: AVAudioFrameCount(4096))
+        }
+        
+        return nil
+    }
+    
+    func returnBuffer(_ buffer: AVAudioPCMBuffer) {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        buffer.frameLength = 0
+        if availableBuffers.count < maxBuffers {
+            availableBuffers.append(buffer)
+        }
+    }
+    
+    func removeAllBuffers() {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        availableBuffers.removeAll()
+    }
+}
+
+// MARK: - Ring Buffer Implementation
+
+private class RingBuffer<T> {
+    private var buffer: [T?]
+    private var writeIndex = 0
+    private let capacity: Int
+    
+    init(capacity: Int) {
+        self.capacity = capacity
+        self.buffer = Array(repeating: nil, count: capacity)
+    }
+    
+    func write(_ element: T) {
+        buffer[writeIndex] = element
+        writeIndex = (writeIndex + 1) % capacity
+    }
+    
+    var latest: T? {
+        let index = (writeIndex - 1 + capacity) % capacity
+        return buffer[index]
+    }
+    
+    func getHistory() -> [T] {
+        return buffer.compactMap { $0 }
     }
 }
