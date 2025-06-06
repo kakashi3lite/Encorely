@@ -53,6 +53,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Improved** Test reporting and documentation
 
 ### Changed
+
+- **Major Code Reorganization**
+  - Consolidated all app source files into `Sources/App/Consolidated` directory
+  - Improved project structure and modularity
+  - Updated Package.swift for new file organization
+  - Relocated models and services to their respective modules
+  - Enhanced code organization for better maintainability
+
+- **New Module Structure**
+  - Created clear separation between app and module code
+  - Enhanced dependency management between modules
+  - Improved build performance through better modularization
+
 - Reorganized project structure
 - Improved error handling
 - Enhanced build configuration

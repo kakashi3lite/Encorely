@@ -15,14 +15,6 @@ let package = Package(
         .library(name: "MCPClient", targets: ["MCPClient"])
     ],
     dependencies: [
-        // Local Modules
-        .package(path: "Modules/MusicKitModule"),
-        .package(path: "Modules/AudioAnalysisModule"),
-        .package(path: "Modules/VisualizationModule"),
-        .package(path: "Modules/AIModule"),
-        .package(path: "Modules/CoreDataModule"),
-        .package(path: "Modules/UtilitiesModule"),
-        
         // External Dependencies
         .package(url: "https://github.com/apple/swift-algorithms", from: "1.2.0"),
         .package(url: "https://github.com/apple/swift-collections", from: "1.0.0"),
@@ -39,27 +31,25 @@ let package = Package(
             dependencies: [
                 "SharedTypes",
                 "MCPClient",
-                .product(name: "MusicKitModule", package: "MusicKitModule"),
-                .product(name: "AIModule", package: "AIModule"),
-                .product(name: "AudioAnalysisModule", package: "AudioAnalysisModule"),
-                .product(name: "CoreDataModule", package: "CoreDataModule"),
-                .product(name: "UtilitiesModule", package: "UtilitiesModule"),
-                .product(name: "VisualizationModule", package: "VisualizationModule"),
-                .product(name: "Algorithms", package: "swift-algorithms"),
-                .product(name: "Collections", package: "swift-collections"),
-                .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
-                .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
                 .product(name: "AudioKit", package: "AudioKit"),
                 .product(name: "SoundpipeAudioKit", package: "SoundpipeAudioKit")
             ],
             path: "Sources/App",
-            resources: [
-                .copy("Resources")
+            exclude: [
+                "utils/install-hooks.sh",
+                "utils/pre-commit-hook.sh"
             ],
-            swiftSettings: [
-                .enableUpcomingFeature("StrictConcurrency"),
-                .enableUpcomingFeature("ActorDataRaceChecks")
+            sources: ["Consolidated"],
+            resources: [
+                .process("Resources")
             ]
+        ),
+        
+        // Shared Types
+        .target(
+            name: "SharedTypes",
+            dependencies: [],
+            path: "Sources/SharedTypes"
         ),
         
         // MCP Client
@@ -69,50 +59,15 @@ let package = Package(
                 "SharedTypes",
                 .product(name: "SocketIO", package: "socket.io-client-swift")
             ],
-            path: "Sources/MCPClient",
-            swiftSettings: [
-                .enableUpcomingFeature("StrictConcurrency"),
-                .enableUpcomingFeature("ActorDataRaceChecks")
-            ]
-        ),
-        
-        // Shared Types
-        .target(
-            name: "SharedTypes",
-            dependencies: [],
-            path: "Sources/SharedTypes",
-            swiftSettings: [
-                .enableUpcomingFeature("StrictConcurrency"),
-                .enableUpcomingFeature("ActorDataRaceChecks")
-            ]
+            path: "Sources/MCPClient"
         ),
         
         // Test Targets
         .testTarget(
             name: "AIMixtapesTests",
-            dependencies: [
-                "App",
-                .product(name: "MusicKitModule", package: "MusicKitModule"),
-                .product(name: "AIModule", package: "AIModule"),
-                .product(name: "AudioAnalysisModule", package: "AudioAnalysisModule"),
-                .product(name: "CoreDataModule", package: "CoreDataModule"),
-                .product(name: "UtilitiesModule", package: "UtilitiesModule")
-            ],
-            path: "Tests/AI-MixtapesTests",
-            resources: [
-                .copy("TestData")
-            ]
-        ),
-        
-        .testTarget(
-            name: "UITests",
-            dependencies: [
-                "App"
-            ],
-            path: "Tests/UITests",
-            resources: [
-                .copy("TestUtils")
-            ]
+            dependencies: ["App"],
+            path: "Tests/AIMixtapesTests",
+            resources: [.copy("TestResources")]
         )
     ]
 )
