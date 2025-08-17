@@ -24,6 +24,39 @@ swift test
 - GlassUI: Start with `GlassCard` for frosted UI blocks (Reduce Transparency supported).
 - AudioKitEncorely: Includes `DSP.rms(_:)` and a cross-platform-safe `AudioSessionManager` API.
 
+## Development Guidelines
+
+### Code Quality
+
+This project enforces strict code quality standards through automated tools:
+
+- **SwiftFormat**: Ensures consistent code formatting
+- **SwiftLint**: Enforces Swift style and conventions
+
+A pre-commit hook is installed to automatically check code quality before each commit.
+
+### Git Workflow
+
+1. Ensure all code passes SwiftFormat and SwiftLint checks
+2. Follow semantic commit messages:
+   - `feat:` for new features
+   - `fix:` for bug fixes
+   - `docs:` for documentation changes
+   - `style:` for formatting changes
+   - `refactor:` for code refactoring
+   - `test:` for adding or modifying tests
+   - `chore:` for maintenance tasks
+
+### Setup Development Environment
+
+```bash
+# Install required tools
+brew install swiftformat swiftlint
+
+# Verify pre-commit hook is installed
+ls -la .git/hooks/pre-commit
+```
+
 ## Next Steps (suggested)
 - Create an iOS app target that consumes these modules (Xcode project or XcodeGen).
 - Implement full AVAudioSession routing and interruptions inside `AudioSessionManager` (iOS only).

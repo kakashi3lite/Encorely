@@ -1,0 +1,53 @@
+# SwiftLint configuration file
+
+# Disabled rules
+disabled_rules:
+  - trailing_comma
+  - todo
+
+# Opt-in rules
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - fatal_error_message
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - missing_docs
+  - multiline_parameters
+  - vertical_whitespace_closing_braces
+
+# Customized rules
+line_length:
+  warning: 120
+  error: 150
+  ignores_comments: true
+  ignores_urls: true
+
+identifier_name:
+  min_length: 3
+  excluded:
+    - id
+    - URL
+    - x
+    - y
+    - z
+
+type_name:
+  min_length: 3
+  max_length: 50
+
+nesting:
+  type_level: 2
+
+# Paths to include/exclude
+included:
+  - Sources
+  - Tests
+
+excluded:
+  - .build
+  - Pods
+  - DerivedData
+
+# Reporter type
+reporter: "xcode"
