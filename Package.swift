@@ -9,7 +9,8 @@ let package = Package(
     ],
     products: [
         .library(name: "GlassUI", targets: ["GlassUI"]),
-        .library(name: "AudioKitEncorely", targets: ["AudioKitEncorely"]) // named to avoid confusion with external AudioKit
+        // named to avoid confusion with external AudioKit
+        .library(name: "AudioKitEncorely", targets: ["AudioKitEncorely"])
     ],
     dependencies: [
     ],

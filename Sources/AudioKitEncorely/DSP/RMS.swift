@@ -1,5 +1,5 @@
-import Foundation
 import Accelerate
+import Foundation
 
 public enum DSP {
     /// Compute root-mean-square of a float buffer.

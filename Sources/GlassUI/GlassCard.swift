@@ -1,8 +1,8 @@
 import SwiftUI
 #if os(iOS)
-import UIKit
+    import UIKit
 #elseif os(macOS)
-import AppKit
+    import AppKit
 #endif
 
 public struct GlassCard<Content: View>: View {
@@ -12,7 +12,11 @@ public struct GlassCard<Content: View>: View {
 
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
-    public init(cornerRadius: CGFloat = 16, tint: Color = Color.white.opacity(0.25), @ViewBuilder content: () -> Content) {
+    public init(
+        cornerRadius: CGFloat = 16,
+        tint: Color = Color.white.opacity(0.25),
+        @ViewBuilder content: () -> Content
+    ) {
         self.cornerRadius = cornerRadius
         self.tint = tint
         self.content = content()
@@ -20,11 +24,11 @@ public struct GlassCard<Content: View>: View {
 
     private var fallbackBackground: Color {
         #if os(iOS)
-        return Color(UIColor.systemBackground)
+            return Color(UIColor.systemBackground)
         #elseif os(macOS)
-        return Color(NSColor.windowBackgroundColor)
+            return Color(NSColor.windowBackgroundColor)
         #else
-        return Color.black.opacity(0.1)
+            return Color.black.opacity(0.1)
         #endif
     }
 
@@ -62,24 +66,24 @@ public struct GlassCard<Content: View>: View {
 }
 
 #if DEBUG
-struct GlassCard_Previews: PreviewProvider {
-    static var previews: some View {
-        VStack(spacing: 20) {
-            GlassCard {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Encorely")
-                        .font(.headline)
-                    Text("Premium glass card with fallbacks.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+    struct GlassCard_Previews: PreviewProvider {
+        static var previews: some View {
+            VStack(spacing: 20) {
+                GlassCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Encorely")
+                            .font(.headline)
+                        Text("Premium glass card with fallbacks.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .padding()
             }
             .padding()
+            .background(
+                LinearGradient(colors: [.purple, .black], startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
         }
-        .padding()
-        .background(
-            LinearGradient(colors: [.purple, .black], startPoint: .topLeading, endPoint: .bottomTrailing)
-        )
     }
-}
 #endif

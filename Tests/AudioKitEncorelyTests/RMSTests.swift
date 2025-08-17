@@ -3,9 +3,9 @@ import XCTest
 
 final class RMSTests: XCTestCase {
     func testRMSConstantSignal() {
-        let n = 1024
+        let sampleCount = 1024
         let amplitude: Float = 0.5
-        let samples = Array(repeating: amplitude, count: n)
+        let samples = Array(repeating: amplitude, count: sampleCount)
         let value = DSP.rms(samples)
         XCTAssertEqual(value, amplitude, accuracy: 1e-6)
     }
