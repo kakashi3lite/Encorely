@@ -1,31 +1,22 @@
 # Encorely
 
-Encorely is a Swift Package–first codebase with two core modules:
+Encorely is an iOS SwiftUI app with a Swift Package–first architecture. It is an app, not a background service.
 
 - GlassUI: SwiftUI components with modern glassmorphism and accessibility fallbacks.
-- AudioKitEncorely: Audio utility module with session management stubs and DSP helpers.
-
-This foundation compiles and tests on macOS runners in CI, and is ready to be embedded into an iOS app target.
+- AudioKitEncorely: Audio utilities with session management stubs and DSP helpers.
+- App target: SwiftUI entry (EncorelyApp) and a starter ContentView using GlassCard.
 
 ## Requirements
 - macOS 13+ with Xcode 15+ (Swift 5.9)
+- XcodeGen (to generate the Xcode project)
 
-## Build
-```bash
-swift build
-```
+## Quick Start (App)
+- Generate the Xcode project with XcodeGen, open, and run the "Encorely" scheme on Simulator or device.
 
-## Test
-```bash
-swift test
-```
+## Package: Build & Test (Modules)
+- Build with `swift build` and test with `swift test`.
 
-## Modules
-- GlassUI: Start with `GlassCard` for frosted UI blocks (Reduce Transparency supported).
-- AudioKitEncorely: Includes `DSP.rms(_:)` and a cross-platform-safe `AudioSessionManager` API.
-
-## Next Steps (suggested)
-- Create an iOS app target that consumes these modules (Xcode project or XcodeGen).
+## Next Steps
+- Expand the Glass UI Kit (Toolbar, ListRow, TactileButton) and add snapshot/UI tests.
 - Implement full AVAudioSession routing and interruptions inside `AudioSessionManager` (iOS only).
-- Grow the Glass UI Kit (Toolbar, ListRow, TactileButton) and add snapshot/UI tests.
 - Add CI linting (swift-format/SwiftLint) and code coverage reporting.

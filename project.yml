@@ -1,0 +1,36 @@
+name: Encorely
+options:
+  minimumXcodeGenVersion: 2.30.0
+  deploymentTarget:
+    iOS: '16.0'
+packages:
+  Encorely:
+    path: .
+schemes:
+  Encorely:
+    build:
+      targets:
+        Encorely: all
+    run:
+      config: Debug
+targets:
+  Encorely:
+    type: application
+    platform: iOS
+    deploymentTarget: '16.0'
+    sources:
+      - path: App
+    resources:
+      - path: App/Resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.Encorely
+        INFOPLIST_FILE: App/Info.plist
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 0.1.0
+        SWIFT_VERSION: 5.9
+    dependencies:
+      - package: Encorely
+        product: GlassUI
+      - package: Encorely
+        product: AudioKitEncorely
