@@ -4,7 +4,11 @@ import Foundation
     import AVFAudio
 #endif
 
+/// Manages audio session configuration across platforms
+/// Provides a safe API for configuring audio sessions on iOS
+/// while gracefully handling non-iOS platforms
 public final class AudioSessionManager: @unchecked Sendable {
+    /// Creates a new AudioSessionManager instance
     public init() {}
 
     /// Configure and activate the audio session if available on this platform.
@@ -27,8 +31,12 @@ public final class AudioSessionManager: @unchecked Sendable {
     }
 }
 
+/// Audio session categories supported by AudioSessionManager
 public enum SessionCategory {
+    /// Playback-only mode, optimized for audio playback
     case playback
+    /// Simultaneous audio playback and recording
     case playAndRecord
+    /// Recording-only mode, optimized for audio input
     case record
 }

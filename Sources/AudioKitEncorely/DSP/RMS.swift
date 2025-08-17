@@ -1,6 +1,7 @@
 import Accelerate
 import Foundation
 
+/// Digital Signal Processing utilities
 public enum DSP {
     /// Compute root-mean-square of a float buffer.
     /// - Parameter samples: Array of Float samples.
@@ -9,7 +10,9 @@ public enum DSP {
         guard !samples.isEmpty else { return 0 }
         var result: Float = 0
         samples.withUnsafeBufferPointer { ptr in
-            vDSP_rmsqv(ptr.baseAddress!, 1, &result, vDSP_Length(samples.count))
+            if let baseAddress = ptr.baseAddress {
+                vDSP_rmsqv(baseAddress, 1, &result, vDSP_Length(samples.count))
+            }
         }
         return result
     }
