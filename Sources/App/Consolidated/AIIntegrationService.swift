@@ -6,64 +6,52 @@
 //  Copyright © 2025 Swanand Tanavade. All rights reserved.
 //
 
-import Foundation
-import SwiftUI
+import AVKit
 import Combine
 import CoreData
-import AVKit 
 import CoreML
+import Foundation
 import NaturalLanguage
 import os.log
-import SharedTypes
 
-/// The state of the AI service
-public enum ServiceState {
-    case initializing
-    case ready
-    case reducedFunctionality
-    case error
-}
+import SwiftUI
 
-/// The current resource utilization level
-public enum ResourceUtilization {
-    case normal
-    case heavy
-    case critical
-}
+// Using types from SharedTypes module
 
 /// Central service that coordinates all AI features of the Mixtapes app
 public final class AIIntegrationService: ObservableObject {
     // MARK: - Published Properties
-    
+
     @Published public private(set) var isProcessing = false
     @Published public private(set) var serviceState: ServiceState = .initializing
     @Published public private(set) var resourceUtilization: ResourceUtilization = .normal
-    
+
     // MARK: - Services
-    
+
     private(set) var moodEngine: MoodEngine
     private(set) var personalityEngine: PersonalityEngine
     private(set) var recommendationEngine: RecommendationEngine
     private(set) var audioAnalysisService: AudioAnalysisService
     private let resourceMonitor = ResourceMonitor()
-    
+
     private var cancellables = Set<AnyCancellable>()
-    
+
     // MARK: - Initialization
-    
-    init(moodEngine: MoodEngine, personalityEngine: PersonalityEngine, 
-         recommendationEngine: RecommendationEngine, audioAnalysisService: AudioAnalysisService) {
+
+    init(moodEngine: MoodEngine, personalityEngine: PersonalityEngine,
+         recommendationEngine: RecommendationEngine, audioAnalysisService: AudioAnalysisService)
+    {
         self.moodEngine = moodEngine
         self.personalityEngine = personalityEngine
         self.recommendationEngine = recommendationEngine
         self.audioAnalysisService = audioAnalysisService
-        
+
         setupSubscriptions()
         monitorResources()
     }
-    
+
     // MARK: - Public Methods
-    
+
     /// Generate a personalized mixtape based on current mood and personality
     /// - Parameter options: Generation options
     /// - Returns: Publisher with generated mixtape or error
@@ -72,18 +60,18 @@ public final class AIIntegrationService: ObservableObject {
             return Fail(error: AppError.resourcesUnavailable)
                 .eraseToAnyPublisher()
         }
-        
+
         let operationId = UUID()
         activeOperations.insert(operationId)
-        
+
         return Deferred {
             Future { [weak self] promise in
-                guard let self = self else {
+                guard let self else {
                     promise(.failure(AppError.serviceUnavailable))
                     return
                 }
-                
-                self.queue.async {
+
+                queue.async {
                     self.generateMixtapeInternal(options: options, promise: promise)
                 }
             }
@@ -95,8 +83,8 @@ public final class AIIntegrationService: ObservableObject {
             receiveCompletion: { [weak self] completion in
                 self?.isProcessing = false
                 self?.activeOperations.remove(operationId)
-                
-                if case .failure(let error) = completion {
+
+                if case let .failure(error) = completion {
                     self?.handleError(error)
                 }
             }
@@ -104,7 +92,7 @@ public final class AIIntegrationService: ObservableObject {
         .receive(on: DispatchQueue.main)
         .eraseToAnyPublisher()
     }
-    
+
     /// Analyze audio for mood and personality traits
     /// - Parameter url: URL of the audio file
     /// - Returns: Publisher with analysis results or error
@@ -113,20 +101,20 @@ public final class AIIntegrationService: ObservableObject {
             return Fail(error: AppError.resourcesUnavailable)
                 .eraseToAnyPublisher()
         }
-        
+
         return audioAnalysisService.analyzeAudio(at: url)
             .flatMap { [weak self] features -> AnyPublisher<AudioAnalysisResult, Error> in
-                guard let self = self else {
+                guard let self else {
                     return Fail(error: AppError.serviceUnavailable).eraseToAnyPublisher()
                 }
-                
-                return self.processAudioFeatures(features)
+
+                return processAudioFeatures(features)
             }
             .eraseToAnyPublisher()
     }
-    
+
     // MARK: - Private Methods
-    
+
     private func setupSubscriptions() {
         // Monitor mood changes
         moodEngine.$currentMood
@@ -134,7 +122,7 @@ public final class AIIntegrationService: ObservableObject {
                 self?.handleMoodChange(mood)
             }
             .store(in: &cancellables)
-        
+
         // Monitor personality changes
         personalityEngine.$currentPersonality
             .sink { [weak self] personality in
@@ -142,56 +130,59 @@ public final class AIIntegrationService: ObservableObject {
             }
             .store(in: &cancellables)
     }
-    
+
     private func monitorResources() {
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             self?.updateResourceUtilization()
         }
     }
-    
-    private func generateMixtapeInternal(options: MixtapeGenerationOptions, promise: @escaping (Result<MixTape, Error>) -> Void) {
+
+    private func generateMixtapeInternal(
+        options _: MixtapeGenerationOptions,
+        promise _: @escaping (Result<MixTape, Error>) -> Void
+    ) {
         // Implementation
     }
-    
-    private func processAudioFeatures(_ features: AudioFeatures) -> AnyPublisher<AudioAnalysisResult, Error> {
+
+    private func processAudioFeatures(_: AudioFeatures) -> AnyPublisher<AudioAnalysisResult, Error> {
         // Implementation
-        return Empty().eraseToAnyPublisher()
+        Empty().eraseToAnyPublisher()
     }
-    
+
     // MARK: - Error Handling
-    
+
     private func handleError(_ error: Error) {
         errorCount += 1
         logger.error("AI service error: \(error.localizedDescription)")
-        
+
         if errorCount >= maxErrors {
             transitionToReducedFunctionality()
         }
-        
+
         errorCoordinator.handle(error as? AppError ?? AppError.unknown(error), in: "AIService")
     }
-    
+
     private func transitionToReducedFunctionality() {
         logger.warning("Transitioning to reduced functionality mode")
         serviceState = .reducedFunctionality
-        
+
         // Disable non-essential features
         // Implementation
     }
-    
+
     // MARK: - Resource Management
-    
+
     private func canStartNewOperation() -> Bool {
         guard serviceState != .reducedFunctionality else {
             return false
         }
-        
+
         return resourceUtilization != .critical && activeOperations.count < 3
     }
-    
+
     private func updateResourceUtilization() {
         let metrics = resourceMonitor.getCurrentMetrics()
-        
+
         switch metrics {
         case _ where metrics.cpuUsage > 80 || metrics.memoryUsage > 80:
             resourceUtilization = .critical
@@ -222,7 +213,7 @@ public struct AudioAnalysisResult {
 private class ResourceMonitor {
     func getCurrentMetrics() -> ResourceMetrics {
         // Implementation
-        return ResourceMetrics()
+        ResourceMetrics()
     }
 }
 

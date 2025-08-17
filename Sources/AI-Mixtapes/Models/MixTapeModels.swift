@@ -1,25 +1,27 @@
-import Foundation
 import CoreData
+import Foundation
 
 // MARK: - Model Definitions
+
 enum Mood: String, CaseIterable, Codable {
     case energetic, relaxed, happy, melancholic, focused, romantic, angry, neutral
-    
+
     var keywords: [String] {
         switch self {
-        case .energetic: return ["upbeat", "energetic", "fast", "party"]
-        case .relaxed: return ["chill", "calm", "peaceful", "relax"]
-        case .happy: return ["happy", "joy", "fun", "cheerful"]
-        case .melancholic: return ["sad", "blue", "melancholy", "lonely"]
-        case .focused: return ["focus", "study", "concentrate", "work"]
-        case .romantic: return ["love", "romance", "slow", "intimate"]
-        case .angry: return ["angry", "rage", "intense", "heavy"]
-        case .neutral: return ["neutral", "balanced", "moderate"]
+        case .energetic: ["upbeat", "energetic", "fast", "party"]
+        case .relaxed: ["chill", "calm", "peaceful", "relax"]
+        case .happy: ["happy", "joy", "fun", "cheerful"]
+        case .melancholic: ["sad", "blue", "melancholy", "lonely"]
+        case .focused: ["focus", "study", "concentrate", "work"]
+        case .romantic: ["love", "romance", "slow", "intimate"]
+        case .angry: ["angry", "rage", "intense", "heavy"]
+        case .neutral: ["neutral", "balanced", "moderate"]
         }
     }
 }
 
 // MARK: - Core Data Models
+
 @objc(MixTapeEntity)
 public class MixTape: NSManagedObject {
     @NSManaged public var title: String?
@@ -45,8 +47,4 @@ public class Song: NSManagedObject {
 }
 
 // MARK: - Audio Features Model
-struct AudioFeatures: Codable {
-    let tempo: Float
-    let energy: Float
-    let valence: Float
-}
+// AudioFeatures moved to App/Consolidated/AudioFeatures.swift to avoid duplication

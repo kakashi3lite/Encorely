@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import SharedTypes
 
 /// Aggregated sensor data for mood and context detection
 public struct SensorData: Codable {
@@ -15,7 +16,7 @@ public struct SensorData: Codable {
     public let emotionalState: EmotionalState?
     public let contextualInfo: ContextualInfo
     public let confidence: Float // 0.0-1.0
-    
+
     public init(
         timestamp: Date = Date(),
         audioFeatures: AudioFeatures? = nil,
@@ -36,7 +37,7 @@ public struct EmotionalState: Codable {
     public let facialExpression: FacialExpression?
     public let voiceSentiment: VoiceSentiment?
     public let deviceUsagePattern: DeviceUsagePattern?
-    
+
     public init(
         facialExpression: FacialExpression? = nil,
         voiceSentiment: VoiceSentiment? = nil,
@@ -50,15 +51,23 @@ public struct EmotionalState: Codable {
 
 /// Facial expression analysis results
 public struct FacialExpression: Codable {
-    public let happiness: Float     // 0.0-1.0
-    public let sadness: Float       // 0.0-1.0
-    public let anger: Float         // 0.0-1.0
-    public let surprise: Float      // 0.0-1.0
-    public let fear: Float          // 0.0-1.0
-    public let disgust: Float       // 0.0-1.0
-    public let neutral: Float       // 0.0-1.0
-    
-    public init(happiness: Float, sadness: Float, anger: Float, surprise: Float, fear: Float, disgust: Float, neutral: Float) {
+    public let happiness: Float // 0.0-1.0
+    public let sadness: Float // 0.0-1.0
+    public let anger: Float // 0.0-1.0
+    public let surprise: Float // 0.0-1.0
+    public let fear: Float // 0.0-1.0
+    public let disgust: Float // 0.0-1.0
+    public let neutral: Float // 0.0-1.0
+
+    public init(
+        happiness: Float,
+        sadness: Float,
+        anger: Float,
+        surprise: Float,
+        fear: Float,
+        disgust: Float,
+        neutral: Float
+    ) {
         self.happiness = happiness
         self.sadness = sadness
         self.anger = anger
@@ -80,7 +89,7 @@ public struct DeviceUsagePattern: Codable {
     public let isMoving: Bool
     public let batteryLevel: Float
     public let isCharging: Bool
-    
+
     public init(timeOfDay: TimeOfDay, isMoving: Bool = false, batteryLevel: Float = 1.0, isCharging: Bool = false) {
         self.timeOfDay = timeOfDay
         self.isMoving = isMoving

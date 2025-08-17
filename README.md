@@ -1,64 +1,32 @@
-# AI-Mixtapes
+# Encorely
 
-AI-powered iOS app that creates personalized mixtapes using mood analysis and AI recommendations. Built with SwiftUI and CoreData, featuring an intuitive interface and smart playlist generation.
+Premium SwiftUI music app that blends frosted glass UI with studio‑grade audio and on‑device AI to build mood‑aware mixtapes.
 
-## Features
+## What’s inside
+- GlassUI Kit: GlassCard (with Reduce‑Transparency fallback) and friends.
+- EncoreAudioKit: AVAudioSession SessionManager, low‑latency defaults, route/interrupt handling.
+- Hybrid personality engine: Big Five (OCEAN) profile mapped to UI personas for scoring.
+- Privacy manifest and background audio enabled.
 
-### Core AI Features
-- 🎵 Mood-based playlist generation
-- 🤖 AI-powered song analysis
-- 📊 Audio feature extraction
-- 🎨 Dynamic UI that adapts to mood
-- 📈 Personal music insights
+## Quick start
+- Open in Xcode 15+ and run the App target on iOS 16+.
+- Background audio is enabled; microphone, Music library, Siri, and speech usage strings are included.
 
-### Technical Features
-- SwiftUI-based modern UI
-- CoreData persistence
-- AudioKit integration
-- Mood analysis engine
-- Real-time audio visualization
+## Structure (SPM‑first)
+- Sources/Kits/GlassUI – reusable glass components
+- Sources/Kits/EncoreAudioKit – audio session utilities
+- Sources/App/Consolidated – app code (views, engines, services)
+- Sources/SharedTypes – shared models/enums
+- Tests/AIMixtapesTests – unit tests (incl. Big Five mapping)
 
-## Requirements
-- iOS 15.0+
-- Xcode 13.0+
-- Swift 5.5+
+## Personality model
+- BigFiveProfile drives recommendation weights; mapped to PersonalityType buckets for UI behavior.
+- See docs/HYBRID_PERSONALITY_MODEL.md for details.
 
-## Installation
+## Branding
+- App name: Encorely
+- Package name: Encorely
 
-1. Clone the repository:
-```bash
-git clone https://github.com/kakashi3lite/AI-Mixtapes.git
-cd AI-Mixtapes
-```
-
-2. Open the project in Xcode:
-```bash
-xed .
-```
-
-3. Build and run the project (⌘R)
-
-## Architecture
-
-### Core Components
-- **Models**: CoreData models for mixtapes and songs
-- **Views**: SwiftUI views for user interface
-- **Services**: Audio analysis and AI recommendation engines
-- **Managers**: CoreData and audio session management
-
-### Data Models
-- `MixTape`: Stores playlist metadata and mood information
-- `Song`: Manages individual song data and audio features
-- `AudioFeatures`: Captures audio analysis results
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-Copyright © 2025 kakashi3lite. All rights reserved.
+## Privacy & permissions
+- PrivacyInfo.xcprivacy lists audio access; analytics are opt‑in by design (no trackers included).
+- Background audio is enabled in Info.plist (UIBackgroundModes: audio).

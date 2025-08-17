@@ -9,7 +9,7 @@
 import SwiftUI
 import CoreData
 import AVKit
-import SharedTypes
+
 
 /// Enhanced MixTapeView with AI features and error handling
 struct MixTapeView: View {
@@ -944,7 +944,7 @@ struct SongRowView: View {
                 
                 // Song info
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(song.wrappedTitle)
+                    Text(song.wrappedName)
                         .font(.system(.body, design: .rounded))
                         .fontWeight(.medium)
                     

@@ -1,0 +1,42 @@
+name: "AI-Mixtapes CodeQL Config"
+
+# Disable default queries and use custom query suites
+disable-default-queries: false
+
+# Query suites to run
+queries:
+  - uses: security-and-quality
+  - uses: security-extended
+  - name: Custom Swift Security Queries
+    uses: ./.github/codeql/queries/swift-security.ql
+
+# Paths to include in analysis
+paths:
+  - "Sources/"
+  - "Services/"
+  - "Models/"
+  - "ViewModels/"
+  - "Views/"
+  - "AI-Mixtapes/"
+  - "Modules/"
+
+# Paths to exclude from analysis
+paths-ignore:
+  - "Tests/"
+  - "backup/"
+  - "build/"
+  - "DerivedData/"
+  - "Pods/"
+  - "vendor/"
+  - "fastlane/"
+  - "scripts/"
+  - "**/*.generated.swift"
+  - "**/*.pb.swift"
+  - "**/*.pbobjc.*"
+
+# ML model files to exclude
+  - "**/*.mlmodel"
+  - "**/*.mlmodelc"
+
+# Build configuration
+build-mode: manual

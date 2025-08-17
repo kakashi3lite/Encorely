@@ -13,7 +13,7 @@ struct PersonalityView: View {
     @ObservedObject var personalityEngine: PersonalityEngine
     @ObservedObject var mcpService = MCPSocketService()
     @State private var hoveredPersonality: PersonalityType?
-    
+
     var body: some View {
         VStack(spacing: 24) {
             // Personality Title
@@ -21,13 +21,13 @@ struct PersonalityView: View {
                 .font(.largeTitle)
                 .fontWeight(.bold)
                 .personalityThemed(transitionManager)
-            
+
             // Personality Description
             Text(personalityDescription)
                 .font(.body)
                 .multilineTextAlignment(.center)
                 .padding()
-            
+
             // Personality Selection
             ForEach(PersonalityType.allCases, id: \.rawValue) { personality in
                 PersonalityCard(
@@ -52,7 +52,7 @@ struct PersonalityView: View {
             transitionManager.updatePersonality(newPersonality)
         }
         .onChange(of: mcpService.personalityState) { newState in
-            guard let newState = newState else { return }
+            guard let newState else { return }
             if let personality = PersonalityType(rawValue: newState.type) {
                 if newState.active == true {
                     selectPersonality(personality)
@@ -70,18 +70,18 @@ struct PersonalityView: View {
             mcpService.disconnect()
         }
     }
-    
+
     private var personalityDescription: String {
         switch personalityEngine.currentPersonality {
         case .curator:
-            return "You have a refined taste in music and enjoy creating carefully curated playlists."
+            "You have a refined taste in music and enjoy creating carefully curated playlists."
         case .enthusiast:
-            return "You're passionate about music and love discovering new songs and artists."
+            "You're passionate about music and love discovering new songs and artists."
         case .explorer:
-            return "You're always seeking new musical experiences and pushing boundaries."
+            "You're always seeking new musical experiences and pushing boundaries."
         }
     }
-    
+
     private func selectPersonality(_ personality: Asset.PersonalityColor) {
         personalityEngine.updatePersonality(personality)
     }
@@ -91,19 +91,19 @@ private struct PersonalityCard: View {
     let personality: PersonalityType
     let isSelected: Bool
     let isHovered: Bool
-    
+
     var body: some View {
         VStack(spacing: 12) {
             // Icon
             PersonalityIcon(personality: personality)
                 .frame(width: 60, height: 60)
-            
+
             // Title and Traits
             VStack(spacing: 8) {
                 Text(personality.rawValue)
                     .font(.title3)
                     .fontWeight(.semibold)
-                
+
                 HStack(spacing: 8) {
                     ForEach(personality.traits.prefix(3), id: \.self) { trait in
                         Text(trait)
@@ -115,7 +115,7 @@ private struct PersonalityCard: View {
                     }
                 }
             }
-            
+
             // Strength Indicator
             GeometryReader { geometry in
                 Rectangle()
@@ -132,88 +132,86 @@ private struct PersonalityCard: View {
                 .fill(Color(.secondarySystemBackground))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(personalityColor, lineWidth: isSelected ? 2 : 0)
-                )
-        )
+                        .stroke(personalityColor, lineWidth: isSelected ? 2 : 0)))
         .scaleEffect(isHovered ? 1.05 : 1.0)
         .animation(.spring(response: 0.3), value: isHovered)
     }
-    
+
     private var personalityColor: Color {
         switch personality {
         case .curator:
-            return .purple
+            .purple
         case .enthusiast:
-            return .orange
+            .orange
         case .explorer:
-            return .blue
+            .blue
         case .social:
-            return .green
+            .green
         case .ambient:
-            return .teal
+            .teal
         case .analyzer:
-            return .red
+            .red
         }
     }
-    
+
     private var personalityStrength: CGFloat {
         switch personality {
         case .curator:
-            return 0.8
+            0.8
         case .enthusiast:
-            return 0.9
+            0.9
         case .explorer:
-            return 0.7
+            0.7
         case .social:
-            return 0.85
+            0.85
         case .ambient:
-            return 0.75
+            0.75
         case .analyzer:
-            return 0.95
+            0.95
         }
     }
 }
 
 private struct PersonalityIcon: View {
     let personality: PersonalityType
-    
+
     var body: some View {
         Image(systemName: iconName)
             .font(.system(size: 30))
             .foregroundColor(iconColor)
     }
-    
+
     private var iconName: String {
         switch personality {
         case .curator:
-            return "star.circle.fill"
+            "star.circle.fill"
         case .enthusiast:
-            return "heart.circle.fill"
+            "heart.circle.fill"
         case .explorer:
-            return "safari.fill"
+            "safari.fill"
         case .social:
-            return "person.2.circle.fill"
+            "person.2.circle.fill"
         case .ambient:
-            return "cloud.sun.fill"
+            "cloud.sun.fill"
         case .analyzer:
-            return "chart.bar.xaxis"
+            "chart.bar.xaxis"
         }
     }
-    
+
     private var iconColor: Color {
         switch personality {
         case .curator:
-            return .purple
+            .purple
         case .enthusiast:
-            return .orange
+            .orange
         case .explorer:
-            return .blue
+            .blue
         case .social:
-            return .green
+            .green
         case .ambient:
-            return .teal
+            .teal
         case .analyzer:
-            return .red
+            .red
         }
     }
 }

@@ -1,0 +1,30 @@
+name: Hygiene
+on:
+  pull_request:
+  push:
+    branches: [ main, master ]
+jobs:
+  hygiene:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Zero-byte Swift guard (outside backup only)
+        run: |
+          python3 scripts/scan_redundancy.py > scan.out
+          echo "Scan summary:" && head -n 30 scan.out || true
+          # Fail if any [0B] Swift file exists outside backup/
+          offending=$(grep "\[0B\]" scan.out | grep -v "backup/" || true)
+          if [ -n "$offending" ]; then
+            echo "Zero-byte Swift files found outside backup:" >&2
+            echo "$offending" >&2
+            exit 1
+          fi
+          echo "No zero-byte Swift files outside backup."
+      - name: Path hygiene (Swift files must be under Consolidated/Kits/SharedTypes/MCP*/Tests)
+        run: |
+          python3 scripts/check_path_hygiene.py

@@ -5,7 +5,7 @@ struct CoreDataErrorView: View {
     let error: Error
     let retryAction: (() -> Void)?
     @Environment(\.presentationMode) var presentationMode
-    
+
     var body: some View {
         NavigationView {
             ScrollView {
@@ -15,39 +15,38 @@ struct CoreDataErrorView: View {
                         .font(.system(size: 56))
                         .foregroundColor(.orange)
                         .padding(.top, 30)
-                    
+
                     // Primary message
                     Text("Database Issue Detected")
                         .font(.title)
                         .fontWeight(.bold)
                         .multilineTextAlignment(.center)
-                    
+
                     // Description
                     VStack(spacing: 12) {
                         Text("We encountered a problem with the app's database that may affect your mixtapes.")
                             .font(.body)
                             .multilineTextAlignment(.center)
-                        
+
                         Text("Technical details:")
                             .font(.caption)
                             .fontWeight(.medium)
                             .foregroundColor(.secondary)
-                        
+
                         Text(error.localizedDescription)
                             .font(.caption)
                             .padding()
                             .background(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color(.systemGray6))
-                            )
+                                    .fill(Color(.systemGray6)))
                     }
                     .padding(.horizontal)
-                    
+
                     Spacer().frame(height: 20)
-                    
+
                     // Actions
                     VStack(spacing: 16) {
-                        if let retryAction = retryAction {
+                        if let retryAction {
                             Button(action: {
                                 retryAction()
                                 presentationMode.wrappedValue.dismiss()
@@ -63,10 +62,13 @@ struct CoreDataErrorView: View {
                                 .cornerRadius(12)
                             }
                         }
-                        
+
                         Button(action: {
                             // Create a support email with error details
-                            if let url = URL(string: "mailto:support@mixtapes.ai?subject=Database%20Error&body=\(error.localizedDescription.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")") {
+                            if let url =
+                                URL(
+                                    string: "mailto:support@mixtapes.ai?subject=Database%20Error&body=\(error.localizedDescription.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")
+                            {
                                 UIApplication.shared.open(url)
                             }
                         }) {
@@ -80,7 +82,7 @@ struct CoreDataErrorView: View {
                             .foregroundColor(.primary)
                             .cornerRadius(12)
                         }
-                        
+
                         Button(action: {
                             presentationMode.wrappedValue.dismiss()
                         }) {
@@ -111,8 +113,8 @@ struct CoreDataErrorView: View {
 /// Extension to present Core Data errors from anywhere in the app
 extension View {
     func handleCoreDataError(_ error: Binding<Error?>, retryAction: (() -> Void)? = nil) -> some View {
-        sheet(item: error.map { $0 as NSError? }) { error in
-            CoreDataErrorView(error: error, retryAction: retryAction)
+        sheet(item: error.map { $0.map(IdentifiableError.init) }) { identifiableError in
+            CoreDataErrorView(error: identifiableError.error, retryAction: retryAction)
                 .accentColor(.blue)
         }
     }
@@ -125,5 +127,15 @@ extension Binding where Value == Error? {
             get: { transform(wrappedValue) },
             set: { _ in }
         )
+    }
+}
+
+// Wrapper to make Error conform to Identifiable
+struct IdentifiableError: Identifiable {
+    let id = UUID()
+    let error: Error
+    
+    init(_ error: Error) {
+        self.error = error
     }
 }

@@ -1,5 +1,9 @@
 {
-    "editor.quickSuggestions": false,
+    "editor.quickSuggestions": {
+        "comments": "off",
+        "strings": "off",
+        "other": "off"
+    },
     "swift.path.swift_driver_bin": "/usr/bin/swift",
     "swift.languageServerPath": "/usr/local/bin/sourcekit-lsp",
     "lldb.executable": "/usr/bin/lldb",

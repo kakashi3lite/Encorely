@@ -2,6 +2,24 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Build for iOS",
+            "type": "shell",
+            "command": "xcodebuild",
+            "args": [
+                "-scheme",
+                "AIMixtapes-iOS",
+                "-destination",
+                "platform=iOS Simulator,name=iPhone 14 Pro",
+                "-configuration",
+                "Debug",
+                "build"
+            ],
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
             "label": "Build for Mac",
             "type": "shell",
             "command": "xcodebuild",

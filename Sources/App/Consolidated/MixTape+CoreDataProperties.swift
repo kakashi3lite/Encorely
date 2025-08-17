@@ -1,41 +1,42 @@
-import Foundation
 import CoreData
+import Foundation
 
-extension MixTape {
-    @nonobjc public class func fetchRequest() -> NSFetchRequest<MixTape> {
-        return NSFetchRequest<MixTape>(entityName: "MixTape")
+public extension MixTape {
+    @nonobjc class func fetchRequest() -> NSFetchRequest<MixTape> {
+        NSFetchRequest<MixTape>(entityName: "MixTape")
     }
 
     // Required attributes
-    @NSManaged public var title: String
-    @NSManaged public var numberOfSongs: Int16
-    
+    @NSManaged var title: String
+    @NSManaged var numberOfSongs: Int16
+
     // Optional attributes
-    @NSManaged public var createdDate: Date?
-    @NSManaged public var lastPlayedDate: Date?
-    @NSManaged public var moodTags: String?
-    @NSManaged public var playCount: Int32
-    @NSManaged public var aiGenerated: Bool
-    @NSManaged public var urlData: Data?
-    @NSManaged public var personalityType: String?
-    @NSManaged public var isPublic: Bool
-    @NSManaged public var note: String?
-    @NSManaged public var totalDuration: Double
-    @NSManaged public var coverImageData: Data?
-    
+    @NSManaged var createdDate: Date?
+    @NSManaged var lastPlayedDate: Date?
+    @NSManaged var moodTags: String?
+    @NSManaged var playCount: Int32
+    @NSManaged var aiGenerated: Bool
+    @NSManaged var urlData: Data?
+    @NSManaged var personalityType: String?
+    @NSManaged var isPublic: Bool
+    @NSManaged var note: String?
+    @NSManaged var totalDuration: Double
+    @NSManaged var coverImageData: Data?
+
     // Relationships
-    @NSManaged public var songs: NSOrderedSet?
-    
-    public var songsArray: [Song] {
-        Array(songs).sorted { $0.title < $1.title }
+    @NSManaged var songs: NSOrderedSet?
+
+    var songsArray: [Song] {
+        let set = songs ?? NSOrderedSet()
+        return set.array.compactMap { $0 as? Song }.sorted { $0.positionInTape < $1.positionInTape }
     }
-    
+
     // Convenience computed properties
-    public var wrappedTitle: String {
-        title 
+    var wrappedTitle: String {
+        title
     }
-    
-    public var personality: PersonalityType {
+
+    var personality: PersonalityType {
         get {
             PersonalityType(rawValue: personalityType ?? "balanced") ?? .balanced
         }
@@ -43,28 +44,35 @@ extension MixTape {
             personalityType = newValue.rawValue
         }
     }
-    
-    public var dominantMood: Mood {
+
+    var dominantMood: Mood {
         get {
-            Mood(rawValue: moodLabel ?? "neutral") ?? .neutral
+            // Extract the first mood tag if available
+            if let tags = moodTags?.split(separator: ",").first {
+                let tag = String(tags.trimmingCharacters(in: .whitespaces))
+                return Mood(rawValue: tag) ?? .neutral
+            }
+            return .neutral
         }
         set {
-            moodLabel = newValue.rawValue
+            // Set the first mood tag
+            moodTags = newValue.rawValue
         }
     }
 }
 
 // MARK: Generated accessors for songs
-extension MixTape {
+
+public extension MixTape {
     @objc(addSongsObject:)
-    @NSManaged public func addToSongs(_ value: Song)
+    @NSManaged func addToSongs(_ value: Song)
 
     @objc(removeSongsObject:)
-    @NSManaged public func removeFromSongs(_ value: Song)
+    @NSManaged func removeFromSongs(_ value: Song)
 
     @objc(addSongs:)
-    @NSManaged public func addToSongs(_ values: NSSet)
+    @NSManaged func addToSongs(_ values: NSSet)
 
     @objc(removeSongs:)
-    @NSManaged public func removeFromSongs(_ values: NSSet)
+    @NSManaged func removeFromSongs(_ values: NSSet)
 }

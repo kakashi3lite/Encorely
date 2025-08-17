@@ -1,55 +1,113 @@
-import Foundation
 import AVFoundation
+import Foundation
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 import os.log
 
-/// Represents different levels of memory pressure
+/// Enhanced memory pressure level tracking
 enum MemoryPressureLevel: Int, Comparable {
     case low = 0
     case moderate = 1
     case high = 2
     case critical = 3
-    
+
+    var thresholdPercentage: Double {
+        switch self {
+        case .low: 0.60
+        case .moderate: 0.75
+        case .high: 0.85
+        case .critical: 0.95
+        }
+    }
+
+    var maxBufferAge: TimeInterval {
+        switch self {
+        case .low: 30.0
+        case .moderate: 20.0
+        case .high: 10.0
+        case .critical: 5.0
+        }
+    }
+
     static func < (lhs: MemoryPressureLevel, rhs: MemoryPressureLevel) -> Bool {
-        return lhs.rawValue < rhs.rawValue
+        lhs.rawValue < rhs.rawValue
+    }
+
+    static func from(memoryUsage: Double) -> MemoryPressureLevel {
+        switch memoryUsage {
+        case 0.0 ..< 0.6: .low
+        case 0.6 ..< 0.75: .moderate
+        case 0.75 ..< 0.85: .high
+        default: .critical
+        }
+    }
+}
+
+/// Performance metrics with enhanced memory tracking
+struct AudioBufferPoolMetrics {
+    var totalAllocations: Int = 0
+    var totalReleases: Int = 0
+    var peakMemoryUsage: Int = 0
+    var currentMemoryUsage: Int = 0
+    var reuseCount: Int = 0
+    var missedRequests: Int = 0
+    var averageBufferLifetime: TimeInterval = 0
+    var bufferEfficiency: Double = 0.0
+    var memoryPressureLevel: MemoryPressureLevel = .low
+    var recentMemoryTrend: [Int] = []
+
+    mutating func recordAllocation() {
+        totalAllocations += 1
+        updateEfficiency()
+    }
+
+    mutating func recordRelease() {
+        totalReleases += 1
+        updateEfficiency()
+    }
+
+    mutating func recordReuse() {
+        reuseCount += 1
+        updateEfficiency()
+    }
+
+    mutating func recordMissedRequest() {
+        missedRequests += 1
+    }
+
+    mutating func updateMemoryUsage(_ usage: Int) {
+        currentMemoryUsage = usage
+        peakMemoryUsage = max(peakMemoryUsage, usage)
+
+        // Keep track of recent memory usage trend
+        if recentMemoryTrend.count > 20 {
+            recentMemoryTrend.removeFirst()
+        }
+        recentMemoryTrend.append(usage)
+    }
+
+    private mutating func updateEfficiency() {
+        if totalAllocations > 0 {
+            bufferEfficiency = Double(reuseCount) / Double(totalAllocations) * 100
+        }
+    }
+
+    var memoryTrend: Double {
+        guard recentMemoryTrend.count >= 2 else { return 0 }
+        let changes = zip(recentMemoryTrend.dropLast(), recentMemoryTrend.dropFirst())
+            .map { $1 - $0 }
+        return Double(changes.reduce(0, +)) / Double(changes.count)
     }
 }
 
 /// Notification names for buffer pool events
 extension Notification.Name {
     static let audioBufferPoolMetricsUpdated = Notification.Name("AudioBufferPoolMetricsUpdated")
-}
-
-/// Performance metrics for the buffer pool
-struct AudioBufferPoolMetrics {
-    var totalAllocations: Int = 0
-    var totalReleases: Int = 0
-    var peakMemoryUsage: Int = 0
-    var averageBufferLifetime: TimeInterval = 0
-    var missedRequests: Int = 0
-    var reuseCount: Int = 0
-    var currentMemoryUsage: Int = 0
-    var memoryPressureLevel: MemoryPressureLevel = .low
-    
-    mutating func recordAllocation() {
-        totalAllocations += 1
-    }
-    
-    mutating func recordRelease() {
-        totalReleases += 1
-    }
-    
-    mutating func recordReuse() {
-        reuseCount += 1
-    }
-    
-    mutating func recordMissedRequest() {
-        missedRequests += 1
-    }
-    
-    mutating func updateMemoryUsage(_ usage: Int) {
-        currentMemoryUsage = usage
-        peakMemoryUsage = max(peakMemoryUsage, usage)
-    }
+    static let audioBufferPoolPressureChanged = Notification.Name("AudioBufferPoolPressureChanged")
+    static let audioBufferPoolEmergencyCleanup = Notification.Name("AudioBufferPoolEmergencyCleanup")
 }
 
 /// A managed audio buffer that can be pooled and reused
@@ -58,62 +116,62 @@ class ManagedAudioBuffer: Hashable {
     private let id = UUID()
     private var lastUseTime = Date()
     private var useCount = 0
-    
+
     init(buffer: AVAudioPCMBuffer) {
         self.buffer = buffer
         markUsed()
     }
-    
+
     func markUsed() {
         lastUseTime = Date()
         useCount += 1
     }
-    
+
     func clear() {
         guard let channelData = buffer.floatChannelData else { return }
-        for channel in 0..<Int(buffer.format.channelCount) {
+        for channel in 0 ..< Int(buffer.format.channelCount) {
             memset(channelData[channel], 0, Int(buffer.frameCapacity) * MemoryLayout<Float>.size)
         }
         buffer.frameLength = 0
     }
-    
+
     var memorySize: Int {
         Int(buffer.frameCapacity * buffer.format.streamDescription.pointee.mBytesPerFrame)
     }
-    
+
     var idleTime: TimeInterval {
         Date().timeIntervalSince(lastUseTime)
     }
-    
+
     static func == (lhs: ManagedAudioBuffer, rhs: ManagedAudioBuffer) -> Bool {
-        return lhs.id == rhs.id
+        lhs.id == rhs.id
     }
-    
+
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
 }
 
 /// A pool for managing and reusing audio buffers with advanced memory management
-class AudioBufferPool {
+final class AudioBufferPool {
     // MARK: - Properties
-    
+
     private let logger = Logger(subsystem: "com.aimixtapes", category: "AudioBufferPool")
+    private let queue = DispatchQueue(label: "audio.buffer.pool", attributes: .concurrent)
+    private let memoryMonitor = MemoryMonitor.shared
+    private let lifecycle = AudioBufferLifecycle()
+
     private var availableBuffers: [ManagedAudioBuffer] = []
     private var usedBuffers: Set<ManagedAudioBuffer> = []
-    private let queue = DispatchQueue(label: "audio.buffer.pool", attributes: .concurrent)
-    private var totalMemoryUsage: Int = 0
+    private var metrics = AudioBufferPoolMetrics()
+
+    private let format: AVAudioFormat
+    private let frameCapacity: AVAudioFrameCount
     private let maxMemoryUsage: Int
-    private let cleanupThreshold: TimeInterval = 30 // seconds
-    
-    // Enhanced metrics tracking
-    private var metrics = AudioBufferPoolMetrics() {
-        didSet {
-            NotificationCenter.default.post(name: .audioBufferPoolMetricsUpdated, object: metrics)
-        }
-    }
-    
-    // Adaptive buffer management
+    private let cleanupInterval: TimeInterval = 2.0 // More frequent cleanup
+
+    private var lastCleanupTime = Date()
+    private var totalMemoryUsage: Int = 0
     private var pressureLevel: MemoryPressureLevel = .low {
         didSet {
             if pressureLevel > oldValue {
@@ -121,249 +179,225 @@ class AudioBufferPool {
             }
         }
     }
-    private var lastCleanupTime = Date()
-    private let cleanupInterval: TimeInterval = 5.0
-    private var bufferAgeThresholds: [MemoryPressureLevel: TimeInterval] = [
-        .low: 30.0,
-        .moderate: 20.0,
-        .high: 10.0,
-        .critical: 5.0
+
+    // Enhanced memory thresholds
+    private let pressureThresholds: [MemoryPressureLevel: Double] = [
+        .low: 0.60,
+        .moderate: 0.75,
+        .high: 0.85,
+        .critical: 0.95,
     ]
-    
-    // Buffer configuration
-    private let format: AVAudioFormat
-    private let frameCapacity: AVAudioFrameCount
-    
+
     // MARK: - Initialization
-    
+
     init(format: AVAudioFormat, frameCapacity: AVAudioFrameCount, maxMemoryMB: Int = 50) {
         self.format = format
         self.frameCapacity = frameCapacity
-        self.maxMemoryUsage = maxMemoryMB * 1024 * 1024
-        setupPeriodicCleanup()
+        maxMemoryUsage = maxMemoryMB * 1024 * 1024
+
         setupMemoryPressureMonitoring()
-        preAllocateBuffers(count: 5)
+        setupPeriodicCleanup()
+        configureInitialBuffers()
     }
-    
-    // MARK: - Public Methods
-    
-    func getBuffer() -> ManagedAudioBuffer? {
-        return queue.sync { [weak self] in
-            guard let self = self else { return nil }
-            
-            // First try to reuse an available buffer
-            if let buffer = self.availableBuffers.popLast() {
-                self.usedBuffers.insert(buffer)
-                buffer.markUsed()
-                self.metrics.recordReuse()
-                return buffer
-            }
-            
-            // Create new buffer if memory allows
-            if self.shouldCreateNewBuffer() {
-                if let buffer = self.createBuffer() {
-                    self.usedBuffers.insert(buffer)
-                    self.metrics.recordAllocation()
-                    self.updateMemoryMetrics()
-                    return buffer
-                }
-            }
-            
-            self.metrics.recordMissedRequest()
-            self.logger.warning("Failed to provide buffer - memory pressure: \(self.pressureLevel)")
-            return nil
-        }
-    }
-    
-    func returnBuffer(_ buffer: ManagedAudioBuffer) {
-        queue.async(flags: .barrier) { [weak self] in
-            guard let self = self else { return }
-            
-            if self.usedBuffers.remove(buffer) != nil {
-                buffer.clear() // Clear buffer data
-                
-                // Only keep buffer if memory pressure isn't high
-                if self.pressureLevel < .high {
-                    self.availableBuffers.append(buffer)
-                } else {
-                    self.totalMemoryUsage -= buffer.memorySize
-                }
-                
-                self.metrics.recordRelease()
-                self.updateMemoryMetrics()
-            }
-        }
-    }
-    
-    func releaseAllBuffers() {
-        queue.async(flags: .barrier) { [weak self] in
-            guard let self = self else { return }
-            
-            self.availableBuffers.removeAll()
-            self.usedBuffers.removeAll()
-            self.totalMemoryUsage = 0
-            self.updateMemoryMetrics()
-            self.logger.info("Released all buffers")
-        }
-    }
-    
-    // MARK: - Private Methods
+
+    // MARK: - Setup Functions
     
     private func setupMemoryPressureMonitoring() {
-        #if os(iOS)
+        // Monitor memory pressure and respond accordingly
+        #if canImport(UIKit)
         NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleMemoryWarning),
-            name: UIApplication.didReceiveMemoryWarningNotification,
-            object: nil
-        )
-        #endif
-        
-        // Monitor memory pressure periodically
-        Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            self?.updatePressureLevel()
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleIncreasedMemoryPressure()
         }
+        #endif
     }
     
     private func setupPeriodicCleanup() {
-        Timer.scheduledTimer(withTimeInterval: cleanupInterval, repeats: true) { [weak self] _ in
-            self?.performPeriodicCleanup()
+        // Set up periodic buffer cleanup every 5 minutes
+        Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            self?.performGradualCleanup()
         }
     }
-    
-    @objc private func handleMemoryWarning() {
-        pressureLevel = .critical
-        performEmergencyCleanup()
-    }
-    
+
+    // MARK: - Memory Management
+
     private func handleIncreasedMemoryPressure() {
-        switch pressureLevel {
-        case .critical:
-            performEmergencyCleanup()
-        case .high:
-            performAggressiveCleanup()
-        case .moderate:
-            performGradualCleanup()
-        default:
-            break
+        queue.async(flags: .barrier) { [weak self] in
+            guard let self else { return }
+
+            switch pressureLevel {
+            case .critical:
+                performEmergencyCleanup()
+                NotificationCenter.default.post(name: .audioBufferPoolEmergencyCleanup, object: nil)
+
+            case .high:
+                performAggressiveCleanup()
+
+            case .moderate:
+                performGradualCleanup()
+
+            default:
+                break
+            }
+
+            updateMemoryMetrics()
         }
     }
-    
+
     private func performEmergencyCleanup() {
-        queue.async(flags: .barrier) { [weak self] in
-            guard let self = self else { return }
-            
-            // Clear all available buffers
-            self.availableBuffers.removeAll()
-            
-            // Keep only recently used buffers
-            let now = Date()
-            let oldBuffers = self.usedBuffers.filter {
-                now.timeIntervalSince($0.lastUsedTime) > 2.0
-            }
-            
-            for buffer in oldBuffers {
-                self.usedBuffers.remove(buffer)
-                self.totalMemoryUsage -= buffer.memorySize
-            }
-            
-            self.updateMemoryMetrics()
-            self.logger.info("Emergency cleanup completed")
+        // Clear all available buffers
+        availableBuffers.removeAll()
+
+        // Keep only essential buffers (very recently used or frequent)
+        let essentialBuffers = usedBuffers.filter {
+            $0.idleTime < 1.0 || $0.usageFrequency > 2.0
         }
+
+        // Remove all non-essential buffers
+        let removedBuffers = usedBuffers.subtracting(essentialBuffers)
+        for buffer in removedBuffers {
+            totalMemoryUsage -= buffer.memorySize
+        }
+
+        usedBuffers = essentialBuffers
+
+        // Force memory pressure recalculation
+        updateMemoryMetrics()
     }
-    
+
     private func performAggressiveCleanup() {
-        queue.async(flags: .barrier) { [weak self] in
-            guard let self = self else { return }
-            
-            // Clear old available buffers
-            self.availableBuffers.removeAll {
-                $0.idleTime > 5.0
-            }
-            
-            // Remove old used buffers
-            let oldBuffers = self.usedBuffers.filter {
-                $0.idleTime > 10.0
-            }
-            
-            for buffer in oldBuffers {
-                self.usedBuffers.remove(buffer)
-                self.totalMemoryUsage -= buffer.memorySize
-            }
-            
-            self.updateMemoryMetrics()
+        let now = Date()
+        let targetUsage = Int(Double(maxMemoryUsage) * 0.6) // Target 60% usage
+
+        // Sort buffers by value (combination of frequency and recency)
+        let sortedBuffers = usedBuffers.sorted { b1, b2 in
+            let value1 = b1.usageFrequency / (b1.idleTime + 1)
+            let value2 = b2.usageFrequency / (b2.idleTime + 1)
+            return value1 < value2
         }
-    }
-    
-    private func performGradualCleanup() {
-        queue.async(flags: .barrier) { [weak self] in
-            guard let self = self else { return }
-            
-            // Remove oldest available buffers
-            while !self.availableBuffers.isEmpty && 
-                  self.totalMemoryUsage > self.maxMemoryUsage * 3/4 {
-                _ = self.availableBuffers.removeFirst()
+
+        var freedMemory = 0
+        for buffer in sortedBuffers {
+            if totalMemoryUsage - freedMemory <= targetUsage {
+                break
             }
-            
-            self.updateMemoryMetrics()
+
+            if buffer.idleTime > 5.0, buffer.usageFrequency < 1.0 {
+                usedBuffers.remove(buffer)
+                freedMemory += buffer.memorySize
+            }
         }
+
+        totalMemoryUsage -= freedMemory
+        updatePressureLevel()
     }
-    
+
     private func updatePressureLevel() {
         let usage = Double(totalMemoryUsage) / Double(maxMemoryUsage)
-        let newLevel: MemoryPressureLevel
-        
-        switch usage {
-        case 0.0..<0.6:
-            newLevel = .low
-        case 0.6..<0.75:
-            newLevel = .moderate
-        case 0.75..<0.9:
-            newLevel = .high
-        default:
-            newLevel = .critical
+        let trend = metrics.memoryTrend
+
+        // Adjust pressure based on both current usage and trend
+        let newLevel: MemoryPressureLevel = if usage > pressureThresholds[.critical]! || trend > Double(
+            maxMemoryUsage) /
+            20
+        {
+            .critical
+        } else if usage > pressureThresholds[.high]! || trend > Double(maxMemoryUsage) / 40 {
+            .high
+        } else if usage > pressureThresholds[.moderate]! {
+            .moderate
+        } else {
+            .low
         }
-        
+
         if newLevel != pressureLevel {
             pressureLevel = newLevel
             logger.info("Memory pressure level changed to: \(String(describing: newLevel))")
+            NotificationCenter.default.post(name: .audioBufferPoolPressureChanged, object: pressureLevel)
         }
     }
-    
+
+    private func performGradualCleanup() {
+        queue.async(flags: .barrier) { [weak self] in
+            guard let self else { return }
+
+            let now = Date()
+            let targetUsage = Int(Double(maxMemoryUsage) * 0.75) // Target 75% usage
+
+            // Remove old available buffers first
+            let oldAvailableBuffers = availableBuffers.filter {
+                $0.idleTime > self.pressureLevel.maxBufferAge
+            }
+            availableBuffers.removeAll {
+                oldAvailableBuffers.contains($0)
+            }
+
+            // Then gradually remove old used buffers if needed
+            if totalMemoryUsage > targetUsage {
+                let oldUsedBuffers = usedBuffers.filter {
+                    now.timeIntervalSince($0.lastUsedTime) > self.pressureLevel.maxBufferAge &&
+                        $0.usageFrequency < 0.5
+                }
+
+                for buffer in oldUsedBuffers {
+                    usedBuffers.remove(buffer)
+                    totalMemoryUsage -= buffer.memorySize
+
+                    if totalMemoryUsage <= targetUsage {
+                        break
+                    }
+                }
+            }
+
+            updateMemoryMetrics()
+            logger.info("Gradual cleanup complete")
+        }
+    }
+
     private func updateMemoryMetrics() {
         metrics.updateMemoryUsage(totalMemoryUsage)
         metrics.memoryPressureLevel = pressureLevel
+
+        NotificationCenter.default.post(name: .audioBufferPoolMetricsUpdated, object: metrics)
     }
-    
+
+    private func configureInitialBuffers() {
+        // Pre-allocate a few buffers to reduce initial latency
+        for _ in 0 ..< 5 {
+            if let buffer = createBuffer() {
+                availableBuffers.append(buffer)
+            }
+        }
+
+        updateMemoryMetrics()
+        logger.info("Pre-allocated \(availableBuffers.count) buffers")
+    }
+
     private func createBuffer() -> ManagedAudioBuffer? {
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCapacity) else {
             logger.error("Failed to create audio buffer")
             return nil
         }
-        
+
         let managed = ManagedAudioBuffer(buffer: buffer)
         totalMemoryUsage += managed.memorySize
-        
+
         return managed
     }
-    
-    private func shouldCreateNewBuffer() -> Bool {
-        guard pressureLevel < .high else { return false }
-        
-        let proposedUsage = totalMemoryUsage + estimateBufferSize()
-        return proposedUsage <= maxMemoryUsage
-    }
-    
-    private func estimateBufferSize() -> Int {
-        return Int(frameCapacity * format.streamDescription.pointee.mBytesPerFrame)
-    }
-    
-    private func preAllocateBuffers(count: Int) {
-        for _ in 0..<count {
-            if let buffer = createBuffer() {
-                availableBuffers.append(buffer)
-            }
+}
+
+// MARK: - CustomStringConvertible
+
+extension MemoryPressureLevel: CustomStringConvertible {
+    var description: String {
+        switch self {
+        case .low: "Low"
+        case .moderate: "Moderate"
+        case .high: "High"
+        case .critical: "Critical"
         }
-        updateMemoryMetrics()
     }
 }

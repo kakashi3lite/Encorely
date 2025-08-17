@@ -7,13 +7,12 @@
 //
 
 import SwiftUI
-import SharedTypes
 
 /// Banner that displays personalized messages from the AI
 struct PersonalizedMessageBanner: View {
     @ObservedObject var aiService: AIIntegrationService
     @State private var isExpanded = false
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Main greeting
@@ -28,23 +27,23 @@ struct PersonalizedMessageBanner: View {
                             .font(.headline)
                             .foregroundColor(.primary)
                             .multilineTextAlignment(.leading)
-                        
+
                         if !isExpanded {
                             Text("Tap for more insights")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                     }
-                    
+
                     Spacer()
-                    
+
                     Image(systemName: isExpanded ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
                         .imageScale(.medium)
                         .foregroundColor(.secondary)
                 }
                 .contentShape(Rectangle())
             }
-            
+
             // Expanded insights section
             if isExpanded {
                 // Divider with mood color
@@ -52,14 +51,14 @@ struct PersonalizedMessageBanner: View {
                     .fill(aiService.moodEngine.currentMood.color)
                     .frame(height: 1)
                     .padding(.vertical, 4)
-                
+
                 // AI insights
                 Text(aiService.getUserInsights())
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 4)
-                
+
                 // Actions based on current mood
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
@@ -81,7 +80,7 @@ struct PersonalizedMessageBanner: View {
 /// Button displaying a mood-based action
 struct MoodActionButton: View {
     let action: MoodAction
-    
+
     var body: some View {
         Button(action: {
             // Handle action
@@ -93,9 +92,8 @@ struct MoodActionButton: View {
                     .overlay(
                         Image(systemName: action.mood.systemIcon)
                             .font(.system(size: 16))
-                            .foregroundColor(action.mood.color)
-                    )
-                
+                            .foregroundColor(action.mood.color))
+
                 Text(action.title)
                     .font(.subheadline)
                     .foregroundColor(.primary)
@@ -104,8 +102,7 @@ struct MoodActionButton: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 18)
-                    .stroke(action.mood.color.opacity(0.5), lineWidth: 1)
-            )
+                    .stroke(action.mood.color.opacity(0.5), lineWidth: 1))
         }
     }
 }
@@ -115,25 +112,25 @@ struct AIInsightsView: View {
     @ObservedObject var aiService: AIIntegrationService
     @State private var insightText: String = "AI is analyzing your music preferences..."
     @State private var showTooltip: Bool = false
-    
+
     // Simulated insights for demonstration
     private let insights = [
         "Your mixtapes suggest you enjoy upbeat music in the mornings",
         "We notice you frequently listen to ambient tracks while working",
         "Your musical taste spans several genres with focus on vocals",
         "You seem to prefer instrumental music in the evenings",
-        "Your current mood matches well with your recent selections"
+        "Your current mood matches well with your recent selections",
     ]
-    
+
     var body: some View {
         Button(action: {
             // Cycle through insights
             let randomInsight = insights.randomElement() ?? "AI is analyzing your music tastes..."
-            
+
             withAnimation {
                 insightText = randomInsight
                 showTooltip = true
-                
+
                 // Auto-hide tooltip after delay
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                     withAnimation {
@@ -152,19 +149,19 @@ struct AIInsightsView: View {
                             endPoint: .bottomTrailing
                         ))
                         .frame(width: 32, height: 32)
-                    
+
                     Image(systemName: "brain")
                         .font(.system(size: 16))
                         .foregroundColor(.white)
                 }
-                
+
                 Text(insightText)
                     .font(.subheadline)
                     .foregroundColor(.primary)
                     .lineLimit(1)
-                
+
                 Spacer()
-                
+
                 Image(systemName: "info.circle")
                     .foregroundColor(.secondary)
             }
@@ -173,26 +170,24 @@ struct AIInsightsView: View {
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color(.systemBackground))
-                    .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
-            )
+                    .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1))
             .overlay(
                 Group {
                     if showTooltip {
                         VStack {
-                            Text("AI analyzes your listening patterns to provide personalized insights and recommendations")
+                            Text(
+                                "AI analyzes your listening patterns to provide personalized insights and recommendations")
                                 .font(.caption)
                                 .foregroundColor(.white)
                                 .padding(8)
                                 .background(
                                     RoundedRectangle(cornerRadius: 8)
-                                        .fill(Color.black.opacity(0.8))
-                                )
+                                        .fill(Color.black.opacity(0.8)))
                                 .offset(y: 40)
                                 .transition(.opacity)
                         }
                     }
-                }
-            )
+                })
         }
         .buttonStyle(PlainButtonStyle())
     }
@@ -204,25 +199,25 @@ struct EmptyStateView: View {
     let message: String
     let systemImage: String
     let action: () -> Void
-    
+
     var body: some View {
         VStack(spacing: 16) {
             Spacer()
-            
+
             Image(systemName: systemImage)
                 .font(.system(size: 60))
                 .foregroundColor(.secondary)
-            
+
             Text(title)
                 .font(.headline)
                 .multilineTextAlignment(.center)
-            
+
             Text(message)
                 .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
-            
+
             Button(action: action) {
                 Text("Create Mixtape")
                     .fontWeight(.semibold)
@@ -233,7 +228,7 @@ struct EmptyStateView: View {
                     .cornerRadius(8)
             }
             .padding(.top, 8)
-            
+
             Spacer()
         }
         .padding()
@@ -244,10 +239,10 @@ struct EmptyStateView: View {
 struct OnboardingView: View {
     @ObservedObject var personalityEngine: PersonalityEngine
     @Binding var isShowingOnboarding: Bool
-    
+
     @State private var currentPage = 0
     @State private var selectedPersonality: PersonalityType?
-    
+
     var body: some View {
         ZStack {
             // Background color gradients for different pages
@@ -257,28 +252,27 @@ struct OnboardingView: View {
                         gradient: Gradient(colors: backgroundColors),
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
-                    )
-                )
+                    ))
                 .edgesIgnoringSafeArea(.all)
-            
+
             VStack {
                 // Page content
                 TabView(selection: $currentPage) {
                     // Welcome page
                     welcomeView
                         .tag(0)
-                    
+
                     // Personality selection page
                     personalitySelectionView
                         .tag(1)
-                    
+
                     // Features overview page
                     featuresView
                         .tag(2)
                 }
                 .tabViewStyle(PageTabViewStyle())
                 .indexViewStyle(PageIndexViewStyle(backgroundDisplayMode: .always))
-                
+
                 // Bottom button
                 Button(action: {
                     if currentPage < 2 {
@@ -300,8 +294,7 @@ struct OnboardingView: View {
                         .padding()
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.white.opacity(0.3))
-                        )
+                                .fill(Color.white.opacity(0.3)))
                         .padding(.horizontal, 40)
                 }
                 .disabled(currentPage == 1 && selectedPersonality == nil)
@@ -310,50 +303,50 @@ struct OnboardingView: View {
             .foregroundColor(.white)
         }
     }
-    
+
     // Background colors for each page
     var backgroundColors: [Color] {
         switch currentPage {
-        case 0: return [Color.purple, Color.blue]
-        case 1: return [Color.blue, Color.teal]
-        case 2: return [Color.teal, Color.green]
-        default: return [Color.blue, Color.purple]
+        case 0: [Color.purple, Color.blue]
+        case 1: [Color.blue, Color.teal]
+        case 2: [Color.teal, Color.green]
+        default: [Color.blue, Color.purple]
         }
     }
-    
+
     // Welcome page
     var welcomeView: some View {
         VStack(spacing: 30) {
             Spacer()
-            
+
             Image(systemName: "music.note.list")
                 .font(.system(size: 80))
                 .padding(.bottom, 20)
-            
+
             Text("Welcome to AI Mixtapes")
                 .font(.system(size: 28, weight: .bold))
-            
+
             Text("Your smart music companion that adapts to your personality and mood")
                 .font(.title3)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
-            
+
             Spacer()
         }
     }
-    
+
     // Personality selection page
     var personalitySelectionView: some View {
         VStack(spacing: 24) {
             Text("How do you enjoy music?")
                 .font(.system(size: 28, weight: .bold))
                 .padding(.top, 40)
-            
+
             Text("Select a personality that best matches your music listening style")
                 .font(.title3)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
-            
+
             ScrollView {
                 VStack(spacing: 16) {
                     ForEach(PersonalityType.allCases, id: \.self) { personality in
@@ -367,22 +360,21 @@ struct OnboardingView: View {
                                     .background(
                                         Circle()
                                             .fill(selectedPersonality == personality ?
-                                                  Color.white : Color.white.opacity(0.3))
-                                    )
+                                                Color.white : Color.white.opacity(0.3)))
                                     .foregroundColor(selectedPersonality == personality ?
-                                                    personality.themeColor : .white)
-                                
+                                        personality.themeColor : .white)
+
                                 VStack(alignment: .leading) {
                                     Text(personality.rawValue)
                                         .font(.headline)
-                                    
+
                                     Text(personalityDescription(personality))
                                         .font(.subheadline)
                                         .lineLimit(2)
                                 }
-                                
+
                                 Spacer()
-                                
+
                                 if selectedPersonality == personality {
                                     Image(systemName: "checkmark.circle.fill")
                                         .foregroundColor(.green)
@@ -391,8 +383,7 @@ struct OnboardingView: View {
                             .padding()
                             .background(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.white.opacity(selectedPersonality == personality ? 0.3 : 0.1))
-                            )
+                                    .fill(Color.white.opacity(selectedPersonality == personality ? 0.3 : 0.1)))
                         }
                         .buttonStyle(PlainButtonStyle())
                     }
@@ -401,29 +392,41 @@ struct OnboardingView: View {
             }
         }
     }
-    
+
     // Features overview page
     var featuresView: some View {
         VStack(spacing: 40) {
             Text("Intelligent Features")
                 .font(.system(size: 28, weight: .bold))
                 .padding(.top, 40)
-            
+
             VStack(spacing: 30) {
                 featureRow(icon: "brain", title: "AI-Powered", description: "Adapts to your mood and personality")
-                
-                featureRow(icon: "waveform.path.ecg", title: "Mood Detection", description: "Identifies the perfect music for your current mood")
-                
-                featureRow(icon: "person.fill.viewfinder", title: "Personalization", description: "Interface adapts to how you use the app")
-                
-                featureRow(icon: "rectangle.stack.person.crop", title: "Smart Mixtapes", description: "Create AI-generated mixtapes for any occasion")
+
+                featureRow(
+                    icon: "waveform.path.ecg",
+                    title: "Mood Detection",
+                    description: "Identifies the perfect music for your current mood"
+                )
+
+                featureRow(
+                    icon: "person.fill.viewfinder",
+                    title: "Personalization",
+                    description: "Interface adapts to how you use the app"
+                )
+
+                featureRow(
+                    icon: "rectangle.stack.person.crop",
+                    title: "Smart Mixtapes",
+                    description: "Create AI-generated mixtapes for any occasion"
+                )
             }
             .padding(.horizontal)
-            
+
             Spacer()
         }
     }
-    
+
     // Helper views
     func featureRow(icon: String, title: String, description: String) -> some View {
         HStack(spacing: 20) {
@@ -431,39 +434,39 @@ struct OnboardingView: View {
                 .font(.system(size: 28))
                 .frame(width: 60, height: 60)
                 .background(Circle().fill(Color.white.opacity(0.2)))
-            
+
             VStack(alignment: .leading) {
                 Text(title)
                     .font(.headline)
-                
+
                 Text(description)
                     .font(.subheadline)
             }
-            
+
             Spacer()
         }
     }
-    
+
     // Helper functions
     func personalityIcon(_ type: PersonalityType) -> String {
         switch type {
-        case .explorer: return "safari"
-        case .curator: return "folder"
-        case .enthusiast: return "star"
-        case .social: return "person.2"
-        case .ambient: return "waveform"
-        case .analyzer: return "chart.bar"
+        case .explorer: "safari"
+        case .curator: "folder"
+        case .enthusiast: "star"
+        case .social: "person.2"
+        case .ambient: "waveform"
+        case .analyzer: "chart.bar"
         }
     }
-    
+
     func personalityDescription(_ type: PersonalityType) -> String {
         switch type {
-        case .explorer: return "You enjoy discovering new music"
-        case .curator: return "You value organization and curation"
-        case .enthusiast: return "You dive deep into music you love"
-        case .social: return "You enjoy sharing music with others"
-        case .ambient: return "You prefer music in the background"
-        case .analyzer: return "You appreciate technical details"
+        case .explorer: "You enjoy discovering new music"
+        case .curator: "You value organization and curation"
+        case .enthusiast: "You dive deep into music you love"
+        case .social: "You enjoy sharing music with others"
+        case .ambient: "You prefer music in the background"
+        case .analyzer: "You appreciate technical details"
         }
     }
 }
@@ -473,7 +476,7 @@ struct OnboardingView: View {
 struct MoodCard: View {
     let mood: Mood
     let isSelected: Bool
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -484,7 +487,7 @@ struct MoodCard: View {
                 Image(systemName: mood.systemIcon)
                     .foregroundColor(mood.color)
             }
-            
+
             Text(mood.rawValue)
                 .font(.title3)
                 .fontWeight(.semibold)
@@ -495,15 +498,14 @@ struct MoodCard: View {
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color(.systemBackground))
-                .shadow(color: mood.color.opacity(0.2), radius: 10)
-        )
+                .shadow(color: mood.color.opacity(0.2), radius: 10))
     }
 }
 
 struct PersonalityCard: View {
     let personality: PersonalityType
     let isSelected: Bool
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -514,7 +516,7 @@ struct PersonalityCard: View {
                 Image(systemName: personalityIcon)
                     .foregroundColor(themeColor)
             }
-            
+
             Text(personality.rawValue)
                 .font(.title3)
                 .fontWeight(.semibold)
@@ -525,27 +527,26 @@ struct PersonalityCard: View {
         .background(
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color(.systemBackground))
-                .shadow(color: themeColor.opacity(0.2), radius: 10)
-        )
+                .shadow(color: themeColor.opacity(0.2), radius: 10))
     }
-    
+
     private var personalityIcon: String {
         switch personality {
-        case .analyzer: return "waveform.path"
-        case .explorer: return "safari"
-        case .planner: return "calendar"
-        case .creative: return "paintbrush"
-        case .balanced: return "circle.grid.2x2"
+        case .analyzer: "waveform.path"
+        case .explorer: "safari"
+        case .planner: "calendar"
+        case .creative: "paintbrush"
+        case .balanced: "circle.grid.2x2"
         }
     }
-    
+
     private var themeColor: Color {
         switch personality {
-        case .analyzer: return .blue
-        case .explorer: return .purple
-        case .planner: return .orange
-        case .creative: return .pink
-        case .balanced: return .gray
+        case .analyzer: .blue
+        case .explorer: .purple
+        case .planner: .orange
+        case .creative: .pink
+        case .balanced: .gray
         }
     }
 }
@@ -556,7 +557,7 @@ struct ControlCard<Content: View>: View {
     let icon: String
     let color: Color
     let content: Content
-    
+
     init(
         title: String,
         value: String,
@@ -570,7 +571,7 @@ struct ControlCard<Content: View>: View {
         self.color = color
         self.content = content()
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -580,17 +581,16 @@ struct ControlCard<Content: View>: View {
                     .font(.subheadline)
                     .foregroundColor(.secondary)
             }
-            
+
             Text(value)
                 .font(.headline)
-            
+
             content
         }
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.systemBackground))
-        )
+                .fill(Color(.systemBackground)))
     }
 }
 
@@ -607,12 +607,12 @@ struct SpringButtonStyle: ButtonStyle {
 struct GenreSelectorView: View {
     @Environment(\.presentationMode) var presentationMode
     @Binding var selectedGenres: Set<String>
-    
+
     private let genres = [
         "Pop", "Rock", "Hip-Hop", "R&B", "Jazz", "Classical",
-        "Electronic", "Folk", "Country", "Metal", "Blues", "Latin"
+        "Electronic", "Folk", "Country", "Metal", "Blues", "Latin",
     ]
-    
+
     var body: some View {
         NavigationView {
             List(genres, id: \.self) { genre in
@@ -633,7 +633,7 @@ struct GenreSelectorView: View {
             })
         }
     }
-    
+
     private func toggleGenre(_ genre: String) {
         if selectedGenres.contains(genre) {
             selectedGenres.remove(genre)
@@ -648,9 +648,9 @@ struct NameSuggestionsView: View {
     @Binding var mixtapeName: String
     let mood: Mood
     let personality: Personality
-    
+
     @State private var suggestions: [String] = []
-    
+
     var body: some View {
         NavigationView {
             List {
@@ -663,20 +663,24 @@ struct NameSuggestionsView: View {
                 }
             }
             .navigationTitle("Name Suggestions")
-            .navigationBarItems(trailing: Button("Done") {
-                presentationMode.wrappedValue.dismiss()
-            })
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                }
+            }
             .onAppear {
                 generateSuggestions()
             }
         }
     }
-    
+
     private func selectName(_ name: String) {
         mixtapeName = name
         presentationMode.wrappedValue.dismiss()
     }
-    
+
     private func generateSuggestions() {
         // In a real app, this would use AI to generate names based on mood and personality
         suggestions = [
@@ -685,7 +689,7 @@ struct NameSuggestionsView: View {
             "The \(mood.rawValue) Collection",
             "\(personality.rawValue) Journey",
             "Mood: \(mood.rawValue)",
-            "\(mood.rawValue) \(personality.rawValue) Series"
+            "\(mood.rawValue) \(personality.rawValue) Series",
         ]
     }
 }
@@ -696,45 +700,45 @@ struct NameSuggestionsView: View {
 extension View {
     /// Adds detailed accessibility labels and hints
     func accessibleMoodCard(mood: Mood, isSelected: Bool) -> some View {
-        self.accessibilityLabel("Mood: \(mood.rawValue)")
+        accessibilityLabel("Mood: \(mood.rawValue)")
             .accessibilityValue(isSelected ? "Selected" : "Not selected")
             .accessibilityHint("Double tap to change mood")
             .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
-    
+
     /// Adds accessibility for personality cards
     func accessiblePersonalityCard(personality: PersonalityType, isSelected: Bool) -> some View {
-        self.accessibilityLabel("Personality: \(personality.rawValue)")
+        accessibilityLabel("Personality: \(personality.rawValue)")
             .accessibilityValue(isSelected ? "Selected" : "Not selected")
             .accessibilityHint("Double tap to change personality type")
             .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
-    
+
     /// Adds accessibility for control cards
-    func accessibleControlCard(label: String, value: String, iconName: String) -> some View {
-        self.accessibilityLabel("\(label): \(value)")
+    func accessibleControlCard(label: String, value: String, iconName _: String) -> some View {
+        accessibilityLabel("\(label): \(value)")
             .accessibilityHint("Double tap to adjust")
             .accessibilityAddTraits(.isButton)
     }
-    
+
     /// Makes playlist items accessible
     func accessiblePlaylistItem(title: String, artist: String, isPlaying: Bool) -> some View {
-        self.accessibilityLabel("\(title) by \(artist)")
+        accessibilityLabel("\(title) by \(artist)")
             .accessibilityValue(isPlaying ? "Now playing" : "")
             .accessibilityHint("Double tap to play")
             .accessibilityAddTraits(isPlaying ? [.isSelected, .startsMediaSession] : .isButton)
     }
-    
+
     /// Enhances generation progress accessibility
     func accessibleGenerationProgress(phase: String, progress: Double) -> some View {
-        self.accessibilityLabel("Generating mixtape")
+        accessibilityLabel("Generating mixtape")
             .accessibilityValue("\(phase): \(Int(progress * 100))% complete")
             .accessibilityAddTraits(.updatesFrequently)
     }
-    
+
     /// Enhances player controls accessibility
     func accessiblePlayerControls(isPlaying: Bool) -> some View {
-        self.accessibilityLabel(isPlaying ? "Pause" : "Play")
+        accessibilityLabel(isPlaying ? "Pause" : "Play")
             .accessibilityHint(isPlaying ? "Double tap to pause" : "Double tap to play")
             .accessibilityAddTraits(.isButton)
     }
@@ -746,7 +750,7 @@ extension View {
 extension Text {
     /// Makes text scalable with dynamic type settings while maintaining design
     func scalableText(style: Font.TextStyle, weight: Font.Weight = .regular) -> some View {
-        self.font(.system(style))
+        font(.system(style))
             .fontWeight(weight)
             .lineLimit(nil) // Allow text to wrap as needed
             .fixedSize(horizontal: false, vertical: true) // Allow vertical growth
@@ -758,11 +762,13 @@ extension Text {
 /// Extension to add high contrast modes support
 extension Color {
     /// Returns a color that works well in both regular and high contrast modes
-    static func adaptiveColor(light: Color, dark: Color, highContrastLight: Color? = nil, highContrastDark: Color? = nil) -> Color {
-        return Color(uiColor: UIColor { traitCollection in
+    static func adaptiveColor(light: Color, dark: Color, highContrastLight: Color? = nil,
+                              highContrastDark: Color? = nil) -> Color
+    {
+        Color(uiColor: UIColor { traitCollection in
             let isDarkMode = traitCollection.userInterfaceStyle == .dark
             let isHighContrast = traitCollection.accessibilityContrast == .high
-            
+
             if isDarkMode {
                 return isHighContrast && highContrastDark != nil
                     ? UIColor(highContrastDark!)
@@ -782,7 +788,7 @@ extension Color {
 struct AccessibleMoodCard: View {
     let mood: Mood
     let isSelected: Bool
-    
+
     var body: some View {
         MoodCard(mood: mood, isSelected: isSelected)
             .accessibleMoodCard(mood: mood, isSelected: isSelected)
@@ -793,7 +799,7 @@ struct AccessibleMoodCard: View {
 struct AccessiblePersonalityCard: View {
     let personality: PersonalityType
     let isSelected: Bool
-    
+
     var body: some View {
         PersonalityCard(personality: personality, isSelected: isSelected)
             .accessiblePersonalityCard(personality: personality, isSelected: isSelected)
@@ -806,20 +812,20 @@ struct AccessibleProgressView: View {
     let subtitle: String
     let progress: Double
     let iconName: String
-    
+
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: iconName)
                 .font(.system(size: 28))
                 .foregroundColor(.accentColor)
-            
+
             Text(title)
                 .scalableText(style: .headline, weight: .semibold)
-            
+
             Text(subtitle)
                 .scalableText(style: .subheadline)
                 .foregroundColor(.secondary)
-            
+
             ProgressView(value: progress)
                 .progressViewStyle(LinearProgressViewStyle())
                 .padding(.top, 4)
@@ -838,17 +844,20 @@ struct AccessibleProgressView: View {
 struct AccessiblePlayerControls: View {
     let queuePlayer: AVQueuePlayer
     @Binding var isPlaying: Bool
-    
+
     var body: some View {
         HStack(spacing: 24) {
             Button(action: {
-                queuePlayer.seek(to: CMTime(seconds: max(0, queuePlayer.currentTime().seconds - 15), preferredTimescale: 600))
+                queuePlayer.seek(to: CMTime(
+                    seconds: max(0, queuePlayer.currentTime().seconds - 15),
+                    preferredTimescale: 600
+                ))
             }) {
                 Image(systemName: "gobackward.15")
                     .font(.system(size: 24))
             }
             .accessibilityLabel("Rewind 15 seconds")
-            
+
             Button(action: {
                 if isPlaying {
                     queuePlayer.pause()
@@ -861,7 +870,7 @@ struct AccessiblePlayerControls: View {
                     .font(.system(size: 44))
             }
             .accessiblePlayerControls(isPlaying: isPlaying)
-            
+
             Button(action: {
                 queuePlayer.seek(to: CMTime(seconds: queuePlayer.currentTime().seconds + 15, preferredTimescale: 600))
             }) {

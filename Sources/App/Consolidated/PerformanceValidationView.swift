@@ -2,7 +2,7 @@ import SwiftUI
 
 struct PerformanceValidationView: View {
     @StateObject private var viewModel = PerformanceValidationViewModel()
-    
+
     var body: some View {
         List {
             Section(header: Text("Audio Processing Performance")) {
@@ -15,28 +15,29 @@ struct PerformanceValidationView: View {
                         Text("Not Run").foregroundColor(.secondary)
                     }
                 }
-                
+
                 if let results = viewModel.results {
-                    ValidationResultRow(title: "Latency", 
-                                      passed: results.latencyResult.passed,
-                                      detail: "\(String(format: "%.1f", results.latencyResult.averageLatencyMs))ms",
-                                      target: "<100ms")
-                    
-                    ValidationResultRow(title: "Memory Usage", 
-                                      passed: results.memoryResult.passed,
-                                      detail: "\(String(format: "%.1f", results.memoryResult.peakMemoryMB))MB",
-                                      target: "<50MB")
-                    
-                    ValidationResultRow(title: "Mood Detection", 
-                                      passed: results.accuracyResult.passed,
-                                      detail: "\(String(format: "%.1f", results.accuracyResult.accuracy * 100))%",
-                                      target: ">80%")
+                    ValidationResultRow(title: "Latency",
+                                        passed: results.latencyResult.passed,
+                                        detail: "\(String(format: "%.1f", results.latencyResult.averageLatencyMs))ms",
+                                        target: "<100ms")
+
+                    ValidationResultRow(title: "Memory Usage",
+                                        passed: results.memoryResult.passed,
+                                        detail: "\(String(format: "%.1f", results.memoryResult.peakMemoryMB))MB",
+                                        target: "<50MB")
+
+                    ValidationResultRow(title: "Mood Detection",
+                                        passed: results.accuracyResult.passed,
+                                        detail: "\(String(format: "%.1f", results.accuracyResult.accuracy * 100))%",
+                                        target: ">80%")
                 }
             }
-            
-            if let results = viewModel.results, 
-               let detailedResults = viewModel.detailedMoodResults, 
-               !detailedResults.isEmpty {
+
+            if let results = viewModel.results,
+               let detailedResults = viewModel.detailedMoodResults,
+               !detailedResults.isEmpty
+            {
                 Section(header: Text("Mood Detection Details")) {
                     ForEach(detailedResults, id: \.expectedMood.rawValue) { result in
                         HStack {
@@ -54,7 +55,7 @@ struct PerformanceValidationView: View {
                     }
                 }
             }
-            
+
             Section {
                 Button(action: {
                     viewModel.runValidation()
@@ -86,7 +87,7 @@ struct PerformanceValidationView: View {
 // Status badge for pass/fail indication
 struct StatusBadge: View {
     let passed: Bool
-    
+
     var body: some View {
         Text(passed ? "PASSED" : "FAILED")
             .font(.caption.bold())
@@ -104,7 +105,7 @@ struct ValidationResultRow: View {
     let passed: Bool
     let detail: String
     let target: String
-    
+
     var body: some View {
         HStack {
             VStack(alignment: .leading) {
@@ -128,15 +129,15 @@ class PerformanceValidationViewModel: ObservableObject {
     @Published var results: ValidationResult?
     @Published var isValidating = false
     @Published var detailedMoodResults: [MoodTestResult]?
-    
+
     private let performanceMonitor = PerformanceMonitor.shared
-    
+
     func runValidation() {
         isValidating = true
-        
+
         Task {
             let validationResults = await performanceMonitor.validateAudioProcessingSystem()
-            
+
             DispatchQueue.main.async {
                 self.results = validationResults
                 self.detailedMoodResults = validationResults.accuracyResult.detailedResults
@@ -144,7 +145,7 @@ class PerformanceValidationViewModel: ObservableObject {
             }
         }
     }
-    
+
     func setupNotifications() {
         NotificationCenter.default.addObserver(
             self,
@@ -153,11 +154,11 @@ class PerformanceValidationViewModel: ObservableObject {
             object: nil
         )
     }
-    
+
     func removeNotifications() {
         NotificationCenter.default.removeObserver(self)
     }
-    
+
     @objc private func handleValidationCompleted(_ notification: Notification) {
         if let results = notification.userInfo?["results"] as? ValidationResult {
             DispatchQueue.main.async {

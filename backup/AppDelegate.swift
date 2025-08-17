@@ -1,46 +1,109 @@
-import UIKit
-import CoreData
-import Intents
+# Xcode
+#
+# gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
 
-@main
-class AppDelegate: UIResponder, UIApplicationDelegate {
-    // MARK: - Properties
-    
-    var aiService: AIIntegrationService!
-    var player: AVQueuePlayer!
-    var siriService: SiriIntegrationService!
-    
-    lazy var persistentContainer: NSPersistentContainer = {
-        // ...existing container code...
-    }()
-    
-    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Initialize services
-        player = AVQueuePlayer()
-        aiService = AIIntegrationService(context: persistentContainer.viewContext)
-        siriService = SiriIntegrationService(aiService: aiService, player: player, context: persistentContainer.viewContext)
-        
-        // Request Siri authorization
-        INPreferences.requestSiriAuthorization { [weak self] status in
-            DispatchQueue.main.async {
-                self?.aiService.siriIntegrationEnabled = status == .authorized
-                if status == .authorized {
-                    self?.siriService.donateShortcuts()
-                }
-            }
-        }
-        
-        return true
-    }
-    
-    // MARK: - Intents Extension Support
-    
-    func application(_ application: UIApplication, handlerFor intent: INIntent) -> Any? {
-        // Let SiriIntegrationService handle all intents
-        return siriService
-    }
-    
-    // MARK: - Core Data
-    
-    // ...existing Core Data methods...
-}
+## User settings
+xcuserdata/
+
+## Obj-C/Swift specific
+*.hmap
+
+## App packaging
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+## Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Swift Package Manager
+#
+# Add this line if you want to avoid checking in source code from Swift Package Manager dependencies.
+# Packages/
+# Package.pins
+# Package.resolved
+# *.xcodeproj
+#
+# Xcode automatically generates this directory with a .xcworkspacedata file and xcuserdata
+# hence it is not needed unless you have added a package configuration file to your project
+# .swiftpm
+
+.build/
+
+# CocoaPods
+#
+# We recommend against adding the Pods directory to your .gitignore. However
+# you should judge for yourself, the pros and cons are mentioned at:
+# https://guides.cocoapods.org/using/using-cocoapods.html#should-i-check-the-pods-directory-into-source-control
+#
+# Pods/
+#
+# Add this line if you want to avoid checking in source code from the Xcode workspace
+# *.xcworkspace
+
+# Carthage
+#
+# Add this line if you want to avoid checking in source code from Carthage dependencies.
+# Carthage/Checkouts
+
+Carthage/Build/
+
+# fastlane
+#
+# It is recommended to not store the screenshots in the git repo.
+# Instead, use fastlane to re-generate the screenshots whenever they are needed.
+# For more information about the recommended setup visit:
+# https://docs.fastlane.tools/best-practices/source-control/#source-control
+
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+*.env.*
+!.env.sample
+
+# Secrets
+*.pem
+*.p12
+*.key
+*.pfx
+*.cer
+*.crt
+*.keychain
+*.mobileprovision
+*.provisionprofile
+.secrets.baseline
+
+# Security scanning
+.gitleaks/
+
+# SBOM and attestation files
+sbom/
+attestation/
+
+# Local configs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

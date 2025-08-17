@@ -1,0 +1,69 @@
+# SwiftLint Configuration
+
+# Exclude external dependencies
+excluded:
+  - Modules/AIModule/.build
+  - .build
+  - Pods
+  - Carthage
+  - DerivedData
+  - vendor
+
+# Disable problematic rules for dependencies
+disabled_rules:
+  - identifier_name
+  - indentation_width
+  - line_length
+  - file_length
+  - type_body_length
+  - function_body_length
+  - cyclomatic_complexity
+  - nesting
+  - force_cast
+  - force_try
+  - force_unwrapping
+
+# Configure rules
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - first_where
+  - sorted_first_last
+
+# Custom rule configurations
+type_body_length:
+  warning: 300
+  error: 400
+
+function_body_length:
+  warning: 60
+  error: 100
+
+line_length:
+  warning: 120
+  error: 200
+  ignores_urls: true
+  ignores_function_declarations: true
+  ignores_comments: true
+
+file_length:
+  warning: 400
+  error: 1000
+
+identifier_name:
+  min_length:
+    warning: 1
+    error: 1
+  max_length:
+    warning: 50
+    error: 60
+  excluded:
+    - i
+    - j
+    - k
+    - x
+    - y
+    - z
+    - id
+    - URL
+    - GlobalAPIKey

@@ -4,7 +4,7 @@ import SwiftUI
 struct AudioAnalysisLauncher: View {
     @StateObject private var analysisService = AudioAnalysisService()
     @State private var showAnalysis = false
-    
+
     var body: some View {
         Button(action: {
             showAnalysis = true
@@ -24,8 +24,7 @@ struct AudioAnalysisLauncher: View {
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(.secondarySystemBackground))
-            )
+                    .fill(Color(.secondarySystemBackground)))
             .padding(.horizontal)
         }
         .buttonStyle(PlainButtonStyle())
@@ -45,7 +44,7 @@ struct AudioAnalysisLauncher: View {
 struct AudioAnalysisDashboardWidget: View {
     @StateObject private var analysisService = AudioAnalysisService()
     @State private var showAnalysis = false
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -63,7 +62,7 @@ struct AudioAnalysisDashboardWidget: View {
                         .foregroundColor(.white)
                 }
             }
-            
+
             if let features = analysisService.currentFeatures {
                 // Show a preview of recent analysis
                 HStack(spacing: 20) {
@@ -75,7 +74,7 @@ struct AudioAnalysisDashboardWidget: View {
                             .font(.title3)
                             .fontWeight(.medium)
                     }
-                    
+
                     VStack {
                         Text("Tempo")
                             .font(.caption)
@@ -84,7 +83,7 @@ struct AudioAnalysisDashboardWidget: View {
                             .font(.title3)
                             .fontWeight(.medium)
                     }
-                    
+
                     VStack {
                         Text("Mood")
                             .font(.caption)
@@ -105,8 +104,7 @@ struct AudioAnalysisDashboardWidget: View {
         .padding()
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.secondarySystemBackground))
-        )
+                .fill(Color(.secondarySystemBackground)))
         .sheet(isPresented: $showAnalysis) {
             NavigationView {
                 AudioAnalysisView(analysisService: analysisService)
@@ -117,13 +115,13 @@ struct AudioAnalysisDashboardWidget: View {
             }
         }
     }
-    
+
     // Simple mood determination based on audio features
     private func determineMood(features: AudioFeatures) -> String {
         if features.energy ?? 0 > 0.7 {
-            return features.valence ?? 0 > 0.7 ? "Happy" : "Energetic"
+            features.valence ?? 0 > 0.7 ? "Happy" : "Energetic"
         } else {
-            return features.valence ?? 0 > 0.7 ? "Relaxed" : "Melancholic"
+            features.valence ?? 0 > 0.7 ? "Relaxed" : "Melancholic"
         }
     }
 }

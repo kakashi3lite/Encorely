@@ -6,13 +6,13 @@ let package = Package(
     name: "UtilitiesModule",
     platforms: [
         .iOS(.v15),
-        .macOS(.v12)
+        .macOS(.v12),
     ],
     products: [
         .library(
             name: "UtilitiesModule",
             targets: ["UtilitiesModule"]
-        )
+        ),
     ],
     dependencies: [],
     targets: [
@@ -25,6 +25,6 @@ let package = Package(
             name: "UtilitiesModuleTests",
             dependencies: ["UtilitiesModule"],
             path: "Tests"
-        )
+        ),
     ]
 )

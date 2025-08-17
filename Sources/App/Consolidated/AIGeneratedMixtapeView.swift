@@ -6,19 +6,19 @@
 //  Copyright © 2025 Swanand Tanavade. All rights reserved.
 //
 
-import SwiftUI
-import CoreData
 import Combine
+import CoreData
+import SwiftUI
 
 struct AIGeneratedMixtapeView: View {
     // MARK: - Properties
-    
+
     @Environment(\.managedObjectContext) var moc
     @Environment(\.presentationMode) var presentationMode
     @ObservedObject var moodEngine: MoodEngine
     @ObservedObject var personalityEngine: PersonalityEngine
     @StateObject private var viewModel: AIGeneratedMixtapeViewModel
-    
+
     @State private var showingMoodPicker = false
     @State private var showingPersonalityView = false
     @State private var isGenerating = false
@@ -29,12 +29,12 @@ struct AIGeneratedMixtapeView: View {
     @State private var showingAdvancedOptions = false
     @State private var showingNameSuggestions = false
     @State private var generationPhase = 0.0
-    
+
     private let haptics = UINotificationFeedbackGenerator()
     private let phases = ["Analyzing mood patterns", "Selecting tracks", "Crafting transitions", "Finalizing mixtape"]
-    
+
     // MARK: - Initialization
-    
+
     init(moodEngine: MoodEngine, personalityEngine: PersonalityEngine) {
         self.moodEngine = moodEngine
         self.personalityEngine = personalityEngine
@@ -43,33 +43,33 @@ struct AIGeneratedMixtapeView: View {
             personalityEngine: personalityEngine
         ))
     }
-    
+
     // MARK: - Body
-    
+
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 24) {
                     // Header cards
                     headerSection
-                    
+
                     // Name and configuration
                     configurationSection
-                    
+
                     // Generation controls
-                    if !isGenerating && viewModel.currentMixtape == nil {
+                    if !isGenerating, viewModel.currentMixtape == nil {
                         generateSection
                     }
-                    
+
                     // Progress or preview
                     if isGenerating {
                         generationProgressSection
                     } else if let mixtape = viewModel.currentMixtape {
                         mixtapePreviewSection(mixtape: mixtape)
                     }
-                    
+
                     // Recent mixtapes
-                    if !viewModel.recentMixtapes.isEmpty && !isGenerating {
+                    if !viewModel.recentMixtapes.isEmpty, !isGenerating {
                         recentMixtapesSection
                     }
                 }
@@ -97,9 +97,9 @@ struct AIGeneratedMixtapeView: View {
             }
         }
     }
-    
+
     // MARK: - View Components
-    
+
     private var headerSection: some View {
         VStack(spacing: 16) {
             // Mood card with 3D effect
@@ -114,7 +114,7 @@ struct AIGeneratedMixtapeView: View {
                 )
             }
             .buttonStyle(SpringButtonStyle())
-            
+
             // Personality card with 3D effect
             Button(action: { showingPersonalityView = true }) {
                 PersonalityCard(
@@ -130,25 +130,25 @@ struct AIGeneratedMixtapeView: View {
         }
         .padding(.horizontal)
     }
-    
+
     private var configurationSection: some View {
         VStack(spacing: 20) {
             // Mixtape name with suggestions
             HStack {
                 TextField("Mixtape Name", text: $mixtapeName)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
-                
+
                 Button(action: { showingNameSuggestions = true }) {
                     Image(systemName: "wand.stars")
                         .foregroundColor(moodEngine.currentMood.color)
                 }
             }
             .padding(.horizontal)
-            
+
             // Controls grid
             LazyVGrid(columns: [
                 GridItem(.flexible()),
-                GridItem(.flexible())
+                GridItem(.flexible()),
             ], spacing: 16) {
                 // Song count
                 ControlCard(
@@ -157,9 +157,9 @@ struct AIGeneratedMixtapeView: View {
                     icon: "music.note.list",
                     color: moodEngine.currentMood.color
                 ) {
-                    Stepper("", value: $viewModel.songCount, in: 5...20)
+                    Stepper("", value: $viewModel.songCount, in: 5 ... 20)
                 }
-                
+
                 // Duration
                 ControlCard(
                     title: "Duration",
@@ -174,7 +174,7 @@ struct AIGeneratedMixtapeView: View {
                     }
                     .pickerStyle(SegmentedPickerStyle())
                 }
-                
+
                 // Genres
                 ControlCard(
                     title: "Genres",
@@ -187,7 +187,7 @@ struct AIGeneratedMixtapeView: View {
                             .foregroundColor(.blue)
                     }
                 }
-                
+
                 // Advanced
                 ControlCard(
                     title: "Options",
@@ -199,13 +199,13 @@ struct AIGeneratedMixtapeView: View {
                 }
             }
             .padding(.horizontal)
-            
+
             if showingAdvancedOptions {
                 advancedOptionsSection
             }
         }
     }
-    
+
     private var generateSection: some View {
         VStack {
             Button(action: generateMixtape) {
@@ -217,13 +217,12 @@ struct AIGeneratedMixtapeView: View {
                 .padding()
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .fill(mixtapeName.isEmpty ? Color.gray : moodEngine.currentMood.color)
-                )
+                        .fill(mixtapeName.isEmpty ? Color.gray : moodEngine.currentMood.color))
                 .foregroundColor(.white)
             }
             .disabled(mixtapeName.isEmpty)
             .padding(.horizontal)
-            
+
             if !viewModel.recentMixtapes.isEmpty {
                 Text("or choose from your recent creations below")
                     .font(.caption)
@@ -231,7 +230,7 @@ struct AIGeneratedMixtapeView: View {
             }
         }
     }
-    
+
     private var generationProgressSection: some View {
         VStack(spacing: 16) {
             // Visual progress
@@ -240,14 +239,14 @@ struct AIGeneratedMixtapeView: View {
                     .stroke(lineWidth: 8)
                     .opacity(0.3)
                     .foregroundColor(Color.secondary)
-                
+
                 Circle()
-                    .trim(from: 0.0, to: CGFloat(min(self.viewModel.generationProgress, 1.0)))
+                    .trim(from: 0.0, to: CGFloat(min(viewModel.generationProgress, 1.0)))
                     .stroke(style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
                     .foregroundColor(Color.accentColor)
                     .rotationEffect(Angle(degrees: 270.0))
                     .animation(.linear(duration: 0.25), value: viewModel.generationProgress)
-                
+
                 VStack {
                     Text("\(Int(viewModel.generationProgress * 100))%")
                         .font(.title)
@@ -259,19 +258,22 @@ struct AIGeneratedMixtapeView: View {
                 }
             }
             .frame(width: 150, height: 150)
-            
+
             // Current phase indicator
             VStack(spacing: 8) {
                 ForEach(viewModel.generationSteps.indices, id: \.self) { index in
                     HStack {
                         Circle()
-                            .fill(index <= Int(viewModel.generationProgress * Float(viewModel.generationSteps.count)) ? Color.accentColor : Color.secondary)
+                            .fill(index <= Int(viewModel.generationProgress * Float(viewModel.generationSteps.count)) ?
+                                Color.accentColor : Color.secondary)
                             .frame(width: 8, height: 8)
-                        
+
                         Text(viewModel.generationSteps[index])
                             .font(.subheadline)
-                            .foregroundColor(index <= Int(viewModel.generationProgress * Float(viewModel.generationSteps.count)) ? .primary : .secondary)
-                        
+                            .foregroundColor(index <=
+                                Int(viewModel.generationProgress * Float(viewModel.generationSteps.count)) ? .primary :
+                                .secondary)
+
                         Spacer()
                     }
                 }
@@ -280,7 +282,7 @@ struct AIGeneratedMixtapeView: View {
             .background(Color(.systemBackground))
             .cornerRadius(12)
             .shadow(radius: 2)
-            
+
             // Error display
             if viewModel.showingError {
                 VStack {
@@ -304,28 +306,28 @@ struct AIGeneratedMixtapeView: View {
         }
         .padding()
     }
-    
+
     private var advancedOptionsSection: some View {
         VStack(spacing: 16) {
             // Explicit content toggle
             Toggle("Include explicit content", isOn: $viewModel.includeExplicitContent)
                 .toggleStyle(SwitchToggleStyle(tint: moodEngine.currentMood.color))
                 .padding(.horizontal)
-            
+
             // Custom mood tag
             HStack {
                 Text("Custom Mood Tag")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                
+
                 Spacer()
-                
+
                 TextField("e.g., Chill, Party", text: $viewModel.customMoodTag)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .frame(width: 150)
             }
             .padding(.horizontal)
-            
+
             // Save settings button
             Button(action: viewModel.saveSettings) {
                 Text("Save Settings")
@@ -343,7 +345,7 @@ struct AIGeneratedMixtapeView: View {
         .cornerRadius(12)
         .shadow(radius: 2)
     }
-    
+
     private func errorSection(message: String) -> some View {
         Text(message)
             .font(.subheadline)
@@ -354,17 +356,17 @@ struct AIGeneratedMixtapeView: View {
             .cornerRadius(12)
             .shadow(radius: 2)
     }
-    
+
     private func mixtapePreviewSection(mixtape: MixTape) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Generated Mixtape")
                 .font(.headline)
-            
+
             VStack(alignment: .leading, spacing: 12) {
                 Text(mixtape.title ?? "Untitled Mixtape")
                     .font(.title2)
                     .fontWeight(.bold)
-                
+
                 if let mood = mixtape.mood {
                     HStack {
                         Image(systemName: "music.note")
@@ -373,13 +375,13 @@ struct AIGeneratedMixtapeView: View {
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 }
-                
+
                 Text("\(mixtape.numberOfSongs) songs")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
-                
+
                 Divider()
-                
+
                 ForEach(mixtape.songsArray) { song in
                     SongRow(song: song)
                 }
@@ -388,7 +390,7 @@ struct AIGeneratedMixtapeView: View {
             .background(Color(.systemBackground))
             .cornerRadius(12)
             .shadow(radius: 2)
-            
+
             // Save button
             Button(action: saveMixtapeEnhanced) {
                 Text("Save Mixtape")
@@ -401,12 +403,12 @@ struct AIGeneratedMixtapeView: View {
             }
         }
     }
-    
+
     private var recentMixtapesSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Recent AI Mixtapes")
                 .font(.headline)
-            
+
             ForEach(viewModel.recentMixtapes) { mixtape in
                 NavigationLink(destination: MixTapeView(mixtape: mixtape)) {
                     MixtapeRow(mixtape: mixtape)
@@ -414,14 +416,14 @@ struct AIGeneratedMixtapeView: View {
             }
         }
     }
-    
+
     // MARK: - Actions
-    
+
     private func generateMixtape() {
         haptics.prepare()
         isGenerating = true
         errorMessage = nil
-        
+
         Task {
             do {
                 try await viewModel.generateMixtape()
@@ -433,17 +435,17 @@ struct AIGeneratedMixtapeView: View {
             isGenerating = false
         }
     }
-    
+
     private func saveMixtapeEnhanced() {
         let newMixtape = MixTape(context: moc)
         newMixtape.title = mixtapeName
         newMixtape.aiGenerated = true
-        
+
         // Set mood tags
         if let mixtape = viewModel.currentMixtape {
             newMixtape.moodTags = mixtape.moodTags
             newMixtape.numberOfSongs = mixtape.numberOfSongs
-            
+
             // Copy songs
             for song in mixtape.songsArray {
                 let newSong = Song(context: moc)
@@ -453,16 +455,16 @@ struct AIGeneratedMixtapeView: View {
                 newSong.mixTape = newMixtape
             }
         }
-        
+
         do {
             try moc.save()
-            
+
             // Post notification for MainTabView to handle navigation
             NotificationCenter.default.post(
                 name: .mixtapeCreated,
                 object: newMixtape
             )
-            
+
             presentationMode.wrappedValue.dismiss()
         } catch {
             errorMessage = "Error saving mixtape: \(error.localizedDescription)"
@@ -474,20 +476,20 @@ struct AIGeneratedMixtapeView: View {
 
 struct SongRow: View {
     let song: Song
-    
+
     var body: some View {
         HStack {
             VStack(alignment: .leading) {
                 Text(song.title ?? "Unknown Title")
                     .font(.body)
-                
+
                 Text(song.artist ?? "Unknown Artist")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            
+
             Spacer()
-            
+
             if let mood = song.mood {
                 Circle()
                     .fill(Mood(rawValue: mood)?.color ?? .gray)
@@ -500,28 +502,28 @@ struct SongRow: View {
 
 struct MixtapeRow: View {
     let mixtape: MixTape
-    
+
     var body: some View {
         HStack {
             VStack(alignment: .leading) {
                 Text(mixtape.title ?? "Untitled Mixtape")
                     .font(.headline)
-                
+
                 HStack {
                     if let mood = mixtape.mood {
                         Text(mood)
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
-                    
+
                     Text("\(mixtape.numberOfSongs) songs")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
             }
-            
+
             Spacer()
-            
+
             Image(systemName: "chevron.right")
                 .foregroundColor(.secondary)
         }
@@ -536,7 +538,7 @@ struct MixtapeRow: View {
 
 class AIGeneratedMixtapeViewModel: ObservableObject {
     // MARK: - Properties
-    
+
     @Published var songCount = 12
     @Published var selectedMood: Mood?
     @Published var currentMixtape: MixTape?
@@ -548,11 +550,11 @@ class AIGeneratedMixtapeViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var includeExplicitContent = false
     @Published var customMoodTag: String = ""
-    
+
     private let moodEngine: MoodEngine
     private let personalityEngine: PersonalityEngine
     private let recommendationEngine: RecommendationEngine
-    
+
     // Progress steps
     let generationSteps = [
         "Analyzing current mood and personality traits...",
@@ -560,32 +562,32 @@ class AIGeneratedMixtapeViewModel: ObservableObject {
         "Generating song recommendations...",
         "Applying mood-based filtering...",
         "Optimizing song order...",
-        "Finalizing mixtape..."
+        "Finalizing mixtape...",
     ]
-    
+
     // MARK: - Initialization
-    
+
     init(moodEngine: MoodEngine, personalityEngine: PersonalityEngine) {
         self.moodEngine = moodEngine
         self.personalityEngine = personalityEngine
-        self.recommendationEngine = RecommendationEngine(
+        recommendationEngine = RecommendationEngine(
             moodEngine: moodEngine,
             personalityEngine: personalityEngine
         )
-        
+
         loadRecentMixtapes()
     }
-    
+
     // MARK: - Public Methods
-    
+
     func generateMixtape() async throws {
         generationProgress = 0
         currentGenerationStep = generationSteps[0]
         progressMessage = "Starting mixtape generation..."
-        
+
         // Use current or selected mood
         let targetMood = selectedMood ?? moodEngine.currentMood
-        
+
         do {
             // Simulate progress through steps
             for (index, step) in generationSteps.enumerated() {
@@ -594,13 +596,13 @@ class AIGeneratedMixtapeViewModel: ObservableObject {
                     self.progressMessage = "Phase \(index + 1) of \(generationSteps.count)"
                     self.generationProgress = Double(index) / Double(generationSteps.count)
                 }
-                
+
                 // Simulate processing time for each step
                 try await Task.sleep(nanoseconds: UInt64(0.5 * Double(NSEC_PER_SEC)))
             }
-            
+
             let mixtape = try await recommendationEngine.generateMixtape(length: songCount)
-            
+
             await MainActor.run {
                 self.currentMixtape = mixtape
                 self.recentMixtapes.insert(mixtape, at: 0)
@@ -611,7 +613,7 @@ class AIGeneratedMixtapeViewModel: ObservableObject {
                 self.progressMessage = "Generation complete!"
                 self.currentGenerationStep = "Mixtape ready!"
             }
-            
+
         } catch {
             await MainActor.run {
                 self.showingError = true
@@ -620,31 +622,31 @@ class AIGeneratedMixtapeViewModel: ObservableObject {
             throw error
         }
     }
-    
+
     func saveSettings() {
         // Save explicit content preference and custom mood tag
         // This can be expanded to include other settings in the future
         UserDefaults.standard.set(includeExplicitContent, forKey: "includeExplicitContent")
         UserDefaults.standard.set(customMoodTag, forKey: "customMoodTag")
-        
+
         // Provide feedback
         showingError = true
         errorMessage = "Settings saved!"
-        
+
         // Optionally, you can trigger a mixtape regeneration with the new settings
         // Task {
         //     try await generateMixtape()
         // }
     }
-    
+
     // MARK: - Private Methods
-    
+
     private func loadRecentMixtapes() {
         let fetchRequest: NSFetchRequest<MixTape> = MixTape.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "isAIGenerated == YES")
         fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \MixTape.createdDate, ascending: false)]
         fetchRequest.fetchLimit = 5
-        
+
         do {
             recentMixtapes = try PersistenceController.shared.container.viewContext.fetch(fetchRequest)
         } catch {

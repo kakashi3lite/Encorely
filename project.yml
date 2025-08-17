@@ -1,17 +1,51 @@
-name: AI-Mixtapes
+name: AIMixtapes
 options:
-  bundleIdPrefix: com.swanand
+  bundleIdPrefix: com.aimimixtapes
   createIntermediateGroups: true
+  deploymentTarget:
+    iOS: 15.0
+    macOS: 12.0
   xcodeVersion: "15.0"
   generateEmptyDirectories: true
 
 schemes:
-  AI-Mixtapes:
+  AIMixtapes-iOS:
     build:
       targets:
-        AI-Mixtapes: any
+        AIMixtapes: all
     run:
       config: Debug
+      platform: iOS
+      simulators:
+        - name: "iPhone 14 Pro"
+        - name: "iPad Pro (12.9-inch)"
+      customSchemeCommands:
+        preActions:
+          - script: |
+              defaults write com.apple.dt.Xcode ShowBuildOperationDuration YES
+        postActions:
+          - script: |
+              osascript -e 'display notification "iOS Build Complete" with title "AIMixtapes"'
+    test:
+      config: Debug
+      platform: iOS
+      targets: 
+        - AIMixtapesTests
+      gatherCoverageData: true
+      
+  AIMixtapes-macOS:
+    build:
+      targets:
+        AIMixtapes: all
+    run:
+      config: Debug
+      platform: macOS
+    test:
+      config: Debug
+      platform: macOS
+      targets:
+        - AIMixtapesTests
+      gatherCoverageData: true
 
 packages:
   AudioKit:
@@ -20,20 +54,25 @@ packages:
   SoundpipeAudioKit:
     url: https://github.com/AudioKit/SoundpipeAudioKit
     from: "5.6.0"
-  Domain:
-    path: Sources/Domain
 
 settings:
   base:
     DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
     SWIFT_VERSION: "5.9"
     ENABLE_BITCODE: NO
-    SUPPORTED_PLATFORMS: macosx iphoneos iphonesimulator
+    SUPPORTED_PLATFORMS: macosx
     MACOSX_DEPLOYMENT_TARGET: "12.0"
-    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
     SWIFT_STRICT_CONCURRENCY: complete
-    ENABLE_HARDENED_RUNTIME: YES
+    TARGETED_DEVICE_FAMILY: mac
     CODE_SIGN_ENTITLEMENTS: AI-Mixtapes.entitlements
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGNING_ALLOWED: NO
+    SDKROOT: macosx
+    COMBINE_HIDPI_IMAGES: YES
+    ENABLE_HARDENED_RUNTIME: YES
+    VALID_ARCHS: "x86_64 arm64"
+    INTENT_DEFINITION_CODEGEN_MODE: none
+    INTENT_DEFINITION_TARGET: AI-Mixtapes
 
 configs:
   Debug:
@@ -55,25 +94,23 @@ configs:
 targets:
   AI-Mixtapes:
     type: application
-    platform: [iOS, macOS]
-    deploymentTarget:
-      iOS: "15.0"
-      macOS: "12.0"
+    platform: macOS
+    deploymentTarget: "12.0"
     sources:
-      - path: Sources
+      - path: Sources/App
+      - path: Sources/AIMixtapes
         excludes:
-          - "Domain/**"
-          - "Tests/**"
+          - "Services/**"
+          - "Models/**"
+          - "ViewModels/**"
+          - "Views/**"
       - path: Models
       - path: Services
       - path: ViewModels
       - path: Views
-      - path: Resources
-      - path: Info.plist
     resources:
-      - path: LaunchScreen.storyboard
+      - path: Sources/App/Resources/Assets.xcassets
       - path: Intents.intentdefinition
-      - path: Sources/AIMixtapes/Resources/Assets.xcassets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.swanand.aimixtapes
@@ -88,7 +125,6 @@ targets:
     dependencies:
       - package: AudioKit
       - package: SoundpipeAudioKit
-      - package: Domain
     preBuildScripts:
       - name: SwiftFormat
         script: |

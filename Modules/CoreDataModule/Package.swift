@@ -6,13 +6,13 @@ let package = Package(
     name: "CoreDataModule",
     platforms: [
         .iOS(.v15),
-        .macOS(.v12)
+        .macOS(.v12),
     ],
     products: [
         .library(
             name: "CoreDataModule",
             targets: ["CoreDataModule"]
-        )
+        ),
     ],
     dependencies: [],
     targets: [
@@ -21,13 +21,13 @@ let package = Package(
             dependencies: [],
             path: "Sources",
             resources: [
-                .process("Resources")
+                .process("Resources"),
             ]
         ),
         .testTarget(
             name: "CoreDataModuleTests",
             dependencies: ["CoreDataModule"],
             path: "Tests"
-        )
+        ),
     ]
 )

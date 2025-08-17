@@ -2,23 +2,23 @@ import Foundation
 import SwiftUI
 
 public enum PersonalityType: String, Codable, CaseIterable {
-    case analyzer = "Analyzer" 
+    case analyzer = "Analyzer"
     case explorer = "Explorer"
     case curator = "Curator"
     case enthusiast = "Enthusiast"
     case social = "Social"
     case ambient = "Ambient"
     case balanced = "Balanced"
-    
+
     public var themeColor: Color {
         switch self {
-        case .analyzer: return .blue
-        case .explorer: return .purple
-        case .curator: return .orange
-        case .enthusiast: return .green
-        case .social: return .teal
-        case .ambient: return .mint
-        case .balanced: return .gray
+        case .analyzer: .blue
+        case .explorer: .purple
+        case .curator: .orange
+        case .enthusiast: .green
+        case .social: .teal
+        case .ambient: .mint
+        case .balanced: .gray
         }
     }
 }
@@ -30,26 +30,26 @@ public enum Mood: String, Codable {
     case melancholic
     case focused
     case neutral
-    
+
     var iconName: String {
         switch self {
-        case .energetic: return "bolt.fill"
-        case .relaxed: return "leaf.fill"
-        case .happy: return "sun.max.fill"
-        case .melancholic: return "cloud.rain.fill"
-        case .focused: return "target"
-        case .neutral: return "circle.fill"
+        case .energetic: "bolt.fill"
+        case .relaxed: "leaf.fill"
+        case .happy: "sun.max.fill"
+        case .melancholic: "cloud.rain.fill"
+        case .focused: "target"
+        case .neutral: "circle.fill"
         }
     }
-    
+
     var color: Color {
         switch self {
-        case .energetic: return .orange
-        case .relaxed: return .mint
-        case .happy: return .yellow
-        case .melancholic: return .blue
-        case .focused: return .purple
-        case .neutral: return .gray
+        case .energetic: .orange
+        case .relaxed: .mint
+        case .happy: .yellow
+        case .melancholic: .blue
+        case .focused: .purple
+        case .neutral: .gray
         }
     }
 }
@@ -62,33 +62,7 @@ public enum AudioProcessingError: Error {
     case resourceUnavailable
 }
 
-public struct AudioFeatures: Codable {
-    public let spectralCentroid: Float
-    public let spectralRolloff: Float
-    public let spectralFlux: Float
-    public let zeroCrossingRate: Float
-    public let rms: Float
-    public let tempo: Float?
-    public let mood: Mood
-    
-    public init(
-        spectralCentroid: Float,
-        spectralRolloff: Float,
-        spectralFlux: Float,
-        zeroCrossingRate: Float,
-        rms: Float,
-        tempo: Float? = nil,
-        mood: Mood = .neutral
-    ) {
-        self.spectralCentroid = spectralCentroid
-        self.spectralRolloff = spectralRolloff
-        self.spectralFlux = spectralFlux
-        self.zeroCrossingRate = zeroCrossingRate
-        self.rms = rms
-        self.tempo = tempo
-        self.mood = mood
-    }
-}
+// AudioFeatures is defined in App/Consolidated/AudioFeatures.swift
 
 public enum ServiceState {
     case initializing
@@ -107,7 +81,7 @@ public struct MixtapeGenerationOptions {
     public let duration: TimeInterval
     public let includeMoodTransitions: Bool
     public let personalityInfluence: Double
-    
+
     public init(duration: TimeInterval, includeMoodTransitions: Bool, personalityInfluence: Double) {
         self.duration = duration
         self.includeMoodTransitions = includeMoodTransitions
@@ -119,7 +93,7 @@ public struct AudioAnalysisResult {
     public let features: AudioFeatures
     public let dominantMood: Mood
     public let personalityTraits: [PersonalityType]
-    
+
     public init(features: AudioFeatures, dominantMood: Mood, personalityTraits: [PersonalityType]) {
         self.features = features
         self.dominantMood = dominantMood

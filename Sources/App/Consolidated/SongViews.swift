@@ -7,7 +7,7 @@ struct SongRowView: View {
     let isPlaying: Bool
     let isSelected: Bool
     let onTap: () -> Void
-    
+
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
@@ -17,20 +17,20 @@ struct SongRowView: View {
                         .foregroundColor(.accentColor)
                         .frame(width: 24)
                 }
-                
+
                 // Song info
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(song.wrappedTitle)
+                    Text(song.wrappedName)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
-                    
+
                     Text(song.wrappedArtist)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 // Duration and mood
                 HStack(spacing: 8) {
                     if let mood = song.mood {
@@ -38,7 +38,7 @@ struct SongRowView: View {
                             .fill(Mood(rawValue: mood)?.color ?? .gray)
                             .frame(width: 8, height: 8)
                     }
-                    
+
                     Text(song.durationString)
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -56,7 +56,7 @@ struct SongGridCell: View {
     let song: Song
     let isPlaying: Bool
     let onTap: () -> Void
-    
+
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 12) {
@@ -66,7 +66,7 @@ struct SongGridCell: View {
                         .fill(Color.gray.opacity(0.2))
                         .aspectRatio(1, contentMode: .fit)
                         .cornerRadius(8)
-                    
+
                     if isPlaying {
                         Image(systemName: "play.fill")
                             .font(.title)
@@ -77,20 +77,20 @@ struct SongGridCell: View {
                             .foregroundColor(.gray)
                     }
                 }
-                
+
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(song.wrappedTitle)
+                    Text(song.wrappedName)
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .lineLimit(1)
-                    
+
                     Text(song.wrappedArtist)
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
                 .padding(.horizontal, 4)
-                
+
                 if let mood = song.mood {
                     HStack {
                         Circle()
@@ -112,7 +112,7 @@ struct CompactSongRow: View {
     let song: Song
     let isPlaying: Bool
     let onTap: () -> Void
-    
+
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 8) {
@@ -121,12 +121,12 @@ struct CompactSongRow: View {
                         .foregroundColor(.accentColor)
                         .frame(width: 16)
                 }
-                
-                Text(song.wrappedTitle)
+
+                Text(song.wrappedName)
                     .lineLimit(1)
-                
+
                 Spacer()
-                
+
                 Text(song.durationString)
                     .font(.caption)
                     .foregroundColor(.secondary)
@@ -142,7 +142,7 @@ struct CompactSongRow: View {
 
 extension View {
     func horizontalSlideTransition(isVisible: Bool) -> some View {
-        self.transition(.asymmetric(
+        transition(.asymmetric(
             insertion: .move(edge: .trailing).combined(with: .opacity),
             removal: .move(edge: .leading).combined(with: .opacity)
         ))

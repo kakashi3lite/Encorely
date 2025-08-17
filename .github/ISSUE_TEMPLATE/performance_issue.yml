@@ -1,0 +1,175 @@
+name: Performance Issue
+description: Report performance problems or optimization opportunities
+title: "[PERFORMANCE] "
+labels: ["performance", "needs-investigation"]
+assignees:
+  - GrandMasteriOSBuilder
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a performance issue! Performance is critical for AI-powered music apps. Please provide detailed information to help us investigate.
+
+  - type: input
+    id: contact
+    attributes:
+      label: Contact Details
+      description: How can we get in touch with you if we need more info?
+      placeholder: ex. email@example.com
+    validations:
+      required: false
+
+  - type: dropdown
+    id: performance-type
+    attributes:
+      label: Performance Issue Type
+      description: What type of performance issue are you experiencing?
+      options:
+        - Slow AI music generation
+        - Audio processing latency
+        - UI lag/stuttering
+        - High memory usage
+        - Battery drain
+        - App startup time
+        - MusicKit integration slowness
+        - Core Data performance
+        - Network request delays
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Performance Issue Description
+      description: Describe the performance problem in detail
+      placeholder: |
+        - What specific action or workflow is slow?
+        - How long does it take vs. expected time?
+        - When did you first notice this issue?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device Model
+      description: What device are you using?
+      options:
+        - iPhone 15 Pro Max
+        - iPhone 15 Pro
+        - iPhone 15 Plus
+        - iPhone 15
+        - iPhone 14 Pro Max
+        - iPhone 14 Pro
+        - iPhone 14 Plus
+        - iPhone 14
+        - iPhone 13 Pro Max
+        - iPhone 13 Pro
+        - iPhone 13
+        - iPhone 13 mini
+        - iPhone 12 Pro Max
+        - iPhone 12 Pro
+        - iPhone 12
+        - iPhone 12 mini
+        - iPhone 11 Pro Max
+        - iPhone 11 Pro
+        - iPhone 11
+        - Other (please specify)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ios-version
+    attributes:
+      label: iOS Version
+      description: What version of iOS are you running?
+      options:
+        - iOS 17.2
+        - iOS 17.1
+        - iOS 17.0
+        - iOS 16.x
+        - iOS 15.x
+        - Other (please specify)
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce Performance Issue
+      description: Provide step-by-step instructions to reproduce the performance problem
+      placeholder: |
+        1. Open the app
+        2. Navigate to AI music generation
+        3. Select genre: Electronic
+        4. Tap "Generate Mixtape"
+        5. Notice it takes 30+ seconds instead of expected 5-10 seconds
+    validations:
+      required: true
+
+  - type: textarea
+    id: timing-measurements
+    attributes:
+      label: Timing Measurements
+      description: If possible, provide specific timing measurements
+      placeholder: |
+        - Expected time: 5-10 seconds
+        - Actual time: 30-45 seconds
+        - Measured using: stopwatch/Instruments/other
+    validations:
+      required: false
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often does this occur?
+      description: Frequency of the performance issue
+      options:
+        - Always (100%)
+        - Often (75%+)
+        - Sometimes (25-75%)
+        - Rarely (<25%)
+        - Only under specific conditions
+    validations:
+      required: true
+
+  - type: textarea
+    id: system-conditions
+    attributes:
+      label: System Conditions
+      description: Describe system conditions when the issue occurs
+      placeholder: |
+        - Available storage: 50GB free
+        - Battery level: 80%
+        - Background apps: Music, Messages, Safari
+        - Network: WiFi/Cellular
+        - Temperature: Normal/Warm/Hot
+    validations:
+      required: false
+
+  - type: textarea
+    id: profiling-data
+    attributes:
+      label: Profiling Data
+      description: If you have Instruments data, crash logs, or performance metrics, please attach them
+      placeholder: You can attach files by dragging & dropping, selecting, or pasting them.
+    validations:
+      required: false
+
+  - type: textarea
+    id: workarounds
+    attributes:
+      label: Workarounds
+      description: Have you found any workarounds for this performance issue?
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/AI-Mixtapes/AI-Mixtapes/blob/main/CODE_OF_CONDUCT.md)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true

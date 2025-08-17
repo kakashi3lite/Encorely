@@ -6,9 +6,8 @@
 //  Copyright © 2025 Swanand Tanavade. All rights reserved.
 //
 
+import AppKit
 import Foundation
-import UIKit
-import Domain
 
 // MARK: - Supporting Types
 
@@ -17,7 +16,7 @@ public struct AppTheme {
     public let secondaryColor: UIColor
     public let backgroundColor: UIColor
     public let textColor: UIColor
-    
+
     public init(primaryColor: UIColor, secondaryColor: UIColor, backgroundColor: UIColor, textColor: UIColor) {
         self.primaryColor = primaryColor
         self.secondaryColor = secondaryColor
@@ -45,7 +44,7 @@ public struct PlaylistContext {
     public let activityType: String?
     public let timeOfDay: Int
     public let duration: TimeInterval
-    
+
     public init(mood: Mood, activityType: String? = nil, timeOfDay: Int = 0, duration: TimeInterval = 3600) {
         self.mood = mood
         self.activityType = activityType
@@ -59,7 +58,7 @@ public struct Playlist {
     public let songs: [Song]
     public let mood: Mood
     public let duration: TimeInterval
-    
+
     public init(title: String, songs: [Song], mood: Mood, duration: TimeInterval) {
         self.title = title
         self.songs = songs
@@ -71,7 +70,7 @@ public struct Playlist {
 public struct MoodAction {
     public let title: String
     public let action: () -> Void
-    
+
     public init(title: String, action: @escaping () -> Void) {
         self.title = title
         self.action = action
@@ -81,7 +80,7 @@ public struct MoodAction {
 public struct PersonalityTrait {
     public let name: String
     public let score: Float
-    
+
     public init(name: String, score: Float) {
         self.name = name
         self.score = score

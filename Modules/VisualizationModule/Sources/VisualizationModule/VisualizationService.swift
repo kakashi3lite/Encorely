@@ -1,6 +1,6 @@
-import Foundation
-import AudioKit
 import AudioAnalysisModule
+import AudioKit
+import Foundation
 
 public protocol VisualizationServiceProtocol {
     func generateWaveform(for audioData: Data) async throws -> [Float]
@@ -10,23 +10,23 @@ public protocol VisualizationServiceProtocol {
 
 public class VisualizationService: VisualizationServiceProtocol {
     private let audioAnalyzer: AudioAnalyzer
-    
+
     public init(audioAnalyzer: AudioAnalyzer = AudioAnalyzer()) {
         self.audioAnalyzer = audioAnalyzer
     }
-    
-    public func generateWaveform(for audioData: Data) async throws -> [Float] {
+
+    public func generateWaveform(for _: Data) async throws -> [Float] {
         // Implementation will come from AudioKit integration
-        return []
+        []
     }
-    
-    public func generateSpectrum(for audioData: Data) async throws -> [Float] {
+
+    public func generateSpectrum(for _: Data) async throws -> [Float] {
         // Implementation will come from AudioKit integration
-        return []
+        []
     }
-    
-    public func generateEnergyLevels(for audioData: Data) async throws -> [Float] {
+
+    public func generateEnergyLevels(for _: Data) async throws -> [Float] {
         // Implementation will come from AudioKit integration
-        return []
+        []
     }
 }

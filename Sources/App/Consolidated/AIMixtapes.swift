@@ -1,9 +1,10 @@
+import AVFoundation
+import CoreML
 import Foundation
 import SwiftUI
-import CoreML
-import AVFoundation
 
 // MARK: - Module Configuration
+
 public struct AIMixtapesConfig {
     /// Logging configuration
     public var enableLogging: Bool = true
@@ -11,7 +12,7 @@ public struct AIMixtapesConfig {
     public var maxBufferSize: Int = 4096
     /// Audio processing configuration
     public var sampleRate: Double = 44100
-    
+
     public init(
         enableLogging: Bool = true,
         maxBufferSize: Int = 4096,
@@ -68,30 +69,30 @@ public struct AIMixtapesConfig {
 public enum AIMixtapes {
     private static var isInitialized = false
     public static var config = AIMixtapesConfig()
-    
+
     /// Initialize the AIMixtapes framework
     public static func initialize(with config: AIMixtapesConfig = AIMixtapesConfig()) throws {
         guard !isInitialized else { return }
-        
+
         self.config = config
-        
+
         // Set up audio session
         try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
         try AVAudioSession.sharedInstance().setActive(true)
-        
+
         // Validate assets
         guard Asset.validateAssets() else {
             throw AssetError.missingColor("Required assets missing")
         }
-        
+
         isInitialized = true
     }
-    
+
     /// Get the current version of the framework
     public static var version: String {
-        return "1.0.0"
+        "1.0.0"
     }
-    
+
     /// Reset the framework state
     public static func reset() {
         isInitialized = false
@@ -99,20 +100,22 @@ public enum AIMixtapes {
 }
 
 // MARK: - Public Type Exports
+
 public typealias MoodColor = Asset.MoodColor
 public typealias PersonalityColor = Asset.PersonalityColor
-public typealias AudioFeatures = AudioFeatures
+// AudioFeatures is defined in AudioFeatures.swift - no typealias needed
 public typealias MixTapeModel = MixTape
 
 // MARK: - SwiftUI View Modifiers
-extension View {
+
+public extension View {
     /// Apply a mood-based color scheme to a view
-    public func moodColor(_ mood: MoodColor, opacity: Double = 1.0) -> some View {
-        self.modifier(MoodColorModifier(mood: mood, opacity: opacity))
+    func moodColor(_ mood: MoodColor, opacity: Double = 1.0) -> some View {
+        modifier(MoodColorModifier(mood: mood, opacity: opacity))
     }
-    
+
     /// Apply a personality-based color scheme to a view
-    public func personalityColor(_ personality: PersonalityColor, opacity: Double = 1.0) -> some View {
-        self.foregroundColor(personality.color.opacity(opacity))
+    func personalityColor(_ personality: PersonalityColor, opacity: Double = 1.0) -> some View {
+        foregroundColor(personality.color.opacity(opacity))
     }
 }

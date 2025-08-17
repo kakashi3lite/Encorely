@@ -1,0 +1,164 @@
+name: 🚀 Feature Request
+description: Suggest a new feature or enhancement
+title: "[FEATURE] "
+labels: ["enhancement", "needs-triage"]
+assignees:
+  - GrandMasteriOSBuilder
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! Please provide as much detail as possible to help us understand your request.
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm the following before submitting
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: I have read the contributing guidelines
+          required: true
+        - label: This feature aligns with the AI-Mixtapes project goals
+          required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Feature Category
+      description: What category does this feature belong to?
+      options:
+        - AI/ML Enhancement
+        - User Interface
+        - Audio Processing
+        - MusicKit Integration
+        - Performance Optimization
+        - Accessibility
+        - Developer Experience
+        - Documentation
+        - Testing
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature?
+      options:
+        - Critical (Essential for core functionality)
+        - High (Important for user experience)
+        - Medium (Nice to have)
+        - Low (Future consideration)
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem does this feature solve? What user need does it address?
+      placeholder: Describe the problem or need this feature would address...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe your proposed solution in detail
+      placeholder: Describe how you envision this feature working...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative Solutions
+      description: Have you considered any alternative approaches?
+      placeholder: Describe any alternative solutions you've considered...
+
+  - type: textarea
+    id: user-story
+    attributes:
+      label: User Story
+      description: Write a user story for this feature
+      placeholder: "As a [user type], I want [feature] so that [benefit]..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: What criteria must be met for this feature to be considered complete?
+      placeholder: |
+        - [ ] Criterion 1
+        - [ ] Criterion 2
+        - [ ] Criterion 3
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: ai-considerations
+    attributes:
+      label: AI/ML Considerations
+      description: If this feature involves AI/ML, please check all that apply
+      options:
+        - label: Requires new ML model training
+        - label: Needs additional AI inference capabilities
+        - label: Involves audio analysis improvements
+        - label: Requires performance optimization for AI processing
+        - label: Needs privacy considerations for AI data
+
+  - type: textarea
+    id: technical-considerations
+    attributes:
+      label: Technical Considerations
+      description: Any technical aspects to consider?
+      placeholder: |
+        - Performance implications
+        - Dependencies
+        - Platform compatibility
+        - Security considerations
+
+  - type: textarea
+    id: mockups
+    attributes:
+      label: Mockups/Wireframes
+      description: If applicable, provide mockups, wireframes, or visual references
+      placeholder: Attach images or provide links to visual references...
+
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Estimated Effort
+      description: What do you think the implementation effort might be?
+      options:
+        - Small (1-2 days)
+        - Medium (1-2 weeks)
+        - Large (1-2 months)
+        - Extra Large (3+ months)
+        - Unknown
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context, screenshots, or examples
+      placeholder: Any additional information that might be helpful...
+
+  - type: checkboxes
+    id: implementation
+    attributes:
+      label: Implementation Interest
+      description: Are you interested in helping implement this feature?
+      options:
+        - label: I would like to help implement this feature
+        - label: I can provide design input
+        - label: I can help with testing
+        - label: I can provide documentation

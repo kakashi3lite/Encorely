@@ -1,0 +1,176 @@
+name: 📚 Documentation
+description: Report documentation issues or request documentation improvements
+title: "[DOCS] "
+labels: ["documentation", "needs-triage"]
+assignees:
+  - GrandMasteriOSBuilder
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve our documentation! Clear documentation is essential for the AI-Mixtapes project.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm the following before submitting
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: I have checked the current documentation
+          required: true
+        - label: This issue is specifically about documentation
+          required: true
+
+  - type: dropdown
+    id: doc-type
+    attributes:
+      label: Documentation Type
+      description: What type of documentation issue is this?
+      options:
+        - Missing Documentation
+        - Incorrect/Outdated Information
+        - Unclear Instructions
+        - Code Examples Needed
+        - API Documentation
+        - Setup/Installation Guide
+        - Architecture Documentation
+        - Performance Guidelines
+        - Security Documentation
+        - Contributing Guidelines
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this documentation issue?
+      options:
+        - Critical (Blocks development/usage)
+        - High (Important for user experience)
+        - Medium (Would improve clarity)
+        - Low (Nice to have)
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-state
+    attributes:
+      label: Current Documentation State
+      description: Describe the current state of the documentation
+      placeholder: |
+        - What documentation currently exists?
+        - What is missing or incorrect?
+        - Where is this documentation located?
+    validations:
+      required: true
+
+  - type: textarea
+    id: requested-improvement
+    attributes:
+      label: Requested Improvement
+      description: What documentation improvement are you requesting?
+      placeholder: Describe what documentation should be added, updated, or clarified...
+    validations:
+      required: true
+
+  - type: textarea
+    id: target-audience
+    attributes:
+      label: Target Audience
+      description: Who is the target audience for this documentation?
+      placeholder: |
+        - End users
+        - Developers
+        - Contributors
+        - System administrators
+        - AI/ML engineers
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      description: What specific use case or scenario should this documentation address?
+      placeholder: Describe the specific scenario or workflow this documentation should cover...
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: doc-sections
+    attributes:
+      label: Documentation Sections
+      description: Which sections of documentation are affected? (Check all that apply)
+      options:
+        - label: README files
+        - label: API documentation
+        - label: Setup/Installation guides
+        - label: Architecture documentation
+        - label: Code examples
+        - label: Performance guidelines
+        - label: Security documentation
+        - label: Contributing guidelines
+        - label: Troubleshooting guides
+        - label: AI/ML model documentation
+        - label: Audio processing documentation
+        - label: MusicKit integration docs
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples or References
+      description: Provide examples of good documentation or references that could help
+      placeholder: |
+        - Links to similar documentation
+        - Examples of what good documentation looks like
+        - Specific formats or styles to follow
+
+  - type: textarea
+    id: technical-details
+    attributes:
+      label: Technical Details
+      description: Any technical details that should be included in the documentation?
+      placeholder: |
+        - Code snippets
+        - Configuration examples
+        - Command-line usage
+        - API endpoints
+        - Performance benchmarks
+
+  - type: checkboxes
+    id: ai-specific
+    attributes:
+      label: AI-Specific Documentation
+      description: If this relates to AI functionality, check all that apply
+      options:
+        - label: AI model usage and configuration
+        - label: Audio analysis algorithms
+        - label: Performance optimization for AI
+        - label: Training data and model updates
+        - label: AI inference best practices
+        - label: Memory management for AI models
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other context about this documentation request
+      placeholder: |
+        - Why is this documentation important?
+        - What problems does missing documentation cause?
+        - How would this improve the developer/user experience?
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution Interest
+      description: Are you interested in helping with this documentation?
+      options:
+        - label: I can help write this documentation
+        - label: I can provide technical review
+        - label: I can provide examples or use cases
+        - label: I can help with testing the documentation

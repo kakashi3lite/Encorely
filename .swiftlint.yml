@@ -1,27 +1,37 @@
+# SwiftLint Configuration for AI-Mixtapes
+# This configuration enforces Swift coding standards and best practices
+
+# Paths to include in linting
 included:
   - Sources
   - Tests
-  - Models
-  - Services
-  - ViewModels
-  - Views
-  - Modules
-  - utils
+  - AI-Mixtapes
 
+# Paths to exclude from linting
 excluded:
-  - Tests/LinuxMain.swift
-  - .build
   - Pods
-  - .git
+  - build
+  - DerivedData
+  - .build
+  - vendor
   - fastlane
-  - Build
-  - backup
-  - "**/*.generated.swift"
+  - "*.generated.swift"
+  - "**/Generated/**"
+  - "**/*.pb.swift"
+  - "**/*+CoreDataClass.swift"
+  - "**/*+CoreDataProperties.swift"
 
+# Disable rules
 disabled_rules:
-  - trailing_whitespace
-  - todo
+  - todo # Allow TODO comments for development
+  - line_length # Handled by custom rule below
+  - function_body_length # Allow longer functions for complex AI logic
+  - type_body_length # Allow longer types for comprehensive models
+  - file_length # Allow longer files for complex modules
+  - cyclomatic_complexity # Allow complex logic for AI algorithms
+  - nesting # Allow deeper nesting for complex data structures
 
+# Enable additional rules
 opt_in_rules:
   - array_init
   - attributes
@@ -29,111 +39,271 @@ opt_in_rules:
   - closure_spacing
   - collection_alignment
   - contains_over_filter_count
-  - convenience_type
+  - contains_over_filter_is_empty
+  - contains_over_first_not_nil
+  - contains_over_range_nil_comparison
   - discouraged_object_literal
   - empty_collection_literal
   - empty_count
   - empty_string
   - enum_case_associated_values_count
+  - explicit_init
+  - extension_access_modifier
+  - fallthrough
   - fatal_error_message
   - first_where
+  - flatmap_over_map_reduce
   - force_unwrapping
-  - implicitly_unwrapped_optional
-  - indentation_width
+  - function_default_parameter_at_end
+  - identical_operands
+  - implicit_return
+  - joined_default_parameter
   - last_where
+  - legacy_random
   - literal_expression_end_indentation
+  - lower_acl_than_parent
+  - modifier_order
   - multiline_arguments
   - multiline_function_chains
   - multiline_literal_brackets
   - multiline_parameters
   - multiline_parameters_brackets
+  - nimble_operator
+  - nslocalizedstring_key
+  - number_separator
+  - object_literal
   - operator_usage_whitespace
+  - overridden_super_call
+  - override_in_extension
+  - pattern_matching_keywords
   - prefer_self_type_over_type_of_self
+  - prefer_zero_over_explicit_init
+  - prefixed_toplevel_constant
+  - prohibited_interface_builder
+  - prohibited_super_call
+  - quick_discouraged_call
+  - quick_discouraged_focused_test
+  - quick_discouraged_pending_test
+  - reduce_into
   - redundant_nil_coalescing
   - redundant_type_annotation
-  - strict_fileprivate
+  - required_enum_case
+  - single_test_class
+  - sorted_first_last
+  - sorted_imports
+  - static_operator
+  - strong_iboutlet
+  - switch_case_on_newline
   - toggle_bool
+  - trailing_closure
+  - unavailable_function
   - unneeded_parentheses_in_closure_argument
+  - unowned_variable_capture
+  - untyped_error_in_catch
+  - unused_import
+  - unused_private_declaration
+  - vertical_parameter_alignment_on_call
   - vertical_whitespace_closing_braces
   - vertical_whitespace_opening_braces
-  - weak_delegate
+  - xct_specific_matcher
   - yoda_condition
 
+# Custom rule configurations
 analyzer_rules:
-  - unused_declaration
+  - explicit_self
   - unused_import
+  - unused_declaration
 
-custom_rules:
-  asset_validation:
-    name: "Asset Validation Rule"
-    regex: 'UIImage\(named:\s*"([^"]+)"\)'
-    message: "Make sure this image asset is included in ASSET_MANIFEST.json"
-    severity: warning
-
-  color_validation:
-    name: "Color Asset Validation Rule"
-    regex: 'UIColor\(named:\s*"([^"]+)"\)'
-    message: "Make sure this color asset is included in ASSET_MANIFEST.json"
-    severity: warning
-
-  use_asset_helper:
-    name: "Use Asset Helper"
-    regex: 'UIImage\(named:'
-    message: "Consider using `Asset.image(name:)` to ensure assets are properly validated at compile time"
-    severity: warning
-
-  logging_rule:
-    name: "Logging Rule"
-    regex: 'print\('
-    message: "Use AILogger instead of print for consistent logging"
-    severity: warning
-
-  force_try_rule:
-    name: "Force Try Rule"
-    regex: 'try!'
-    message: "Avoid using force try, handle errors appropriately"
-    severity: error
-
+# Line length configuration
 line_length:
   warning: 120
   error: 150
-  ignores_comments: true
   ignores_urls: true
+  ignores_function_declarations: true
+  ignores_comments: true
 
+# Function body length
+function_body_length:
+  warning: 60
+  error: 100
+
+# Function parameter count
+function_parameter_count:
+  warning: 6
+  error: 8
+
+# Type body length
 type_body_length:
   warning: 300
   error: 400
 
+# File length
 file_length:
   warning: 500
-  error: 700
+  error: 800
+  ignore_comment_only_lines: true
 
-function_body_length:
-  warning: 50
-  error: 100
-
+# Identifier name lengths
 type_name:
   min_length: 3
-  max_length: 50
+  max_length:
+    warning: 40
+    error: 50
+  excluded:
+    - iPhone
+    - iPad
+    - AI
+    - ML
+    - UI
+    - API
+    - URL
+    - ID
+    - UUID
 
 identifier_name:
-  min_length: 2
-  max_length: 40
+  min_length: 1
+  max_length:
+    warning: 40
+    error: 50
   excluded:
     - id
-    - URL
+    - url
+    - ai
+    - ml
+    - ui
+    - api
     - x
     - y
-    - dx
-    - dy
-    - up
-    - vm
+    - z
+    - i
+    - j
+    - k
 
+# Nesting configuration
 nesting:
-  type_level: 3
+  type_level:
+    warning: 2
+    error: 3
+  function_level:
+    warning: 3
+    error: 5
 
+# Cyclomatic complexity
 cyclomatic_complexity:
-  warning: 10
-  error: 15
+  warning: 15
+  error: 25
+  ignores_case_statements: true
 
+# Force unwrapping
+force_unwrapping:
+  severity: error
+
+# Multiline arguments
+multiline_arguments:
+  first_argument_location: next_line
+  only_enforce_after_first_closure_on_first_line: true
+
+# Multiline parameters
+multiline_parameters:
+  allows_single_line: true
+
+# Trailing whitespace
+trailing_whitespace:
+  ignores_empty_lines: false
+  ignores_comments: true
+
+# Vertical whitespace
+vertical_whitespace:
+  max_empty_lines: 2
+
+# Custom rules for AI-Mixtapes specific patterns
+custom_rules:
+  # Ensure proper error handling in AI operations
+  ai_error_handling:
+    name: "AI Error Handling"
+    regex: '(generateMixtape|analyzeAudio|processMusic)\([^)]*\)\s*(?!\s*(throws|async))'
+    message: "AI operations should be marked as throws or async"
+    severity: warning
+
+  # Ensure proper documentation for public APIs
+  public_api_documentation:
+    name: "Public API Documentation"
+    regex: '^\s*(public|open)\s+(class|struct|enum|protocol|func|var|let)(?!.*\/\/\/)'
+    message: "Public APIs should have documentation comments"
+    severity: warning
+
+  # Discourage force casting in production code
+  force_cast_production:
+    name: "Force Cast in Production"
+    regex: '\s+as!\s+'
+    message: "Avoid force casting in production code. Use safe casting with 'as?' instead"
+    severity: warning
+    match_kinds:
+      - argument
+      - attribute.builtin
+      - attribute.name
+      - buildconfig.id
+      - buildconfig.keyword
+      - comment
+      - comment.mark
+      - comment.url
+      - doccomment
+      - doccomment.field
+      - identifier
+      - keyword
+      - number
+      - objectliteral
+      - parameter
+      - placeholder
+      - string
+      - string_interpolation_anchor
+      - typeidentifier
+
+  # Ensure proper async/await usage
+  async_await_pattern:
+    name: "Async/Await Pattern"
+    regex: '\bawait\s+[^\n]*(?<!try\s+await)'
+    message: "Use 'try await' instead of just 'await' for throwing async functions"
+    severity: warning
+
+  # Ensure proper MusicKit usage patterns
+  musickit_authorization:
+    name: "MusicKit Authorization"
+    regex: 'MusicAuthorization\.[^\n]*(?<!requestAuthorization)'
+    message: "Always check MusicKit authorization before accessing music data"
+    severity: warning
+
+# Reporter configuration
 reporter: "xcode"
+
+# Severity levels
+warning_threshold: 10
+error_threshold: 5
+
+# Exclude generated files and third-party code
+excluded_paths:
+  - "*/Generated/*"
+  - "*/Pods/*"
+  - "*/build/*"
+  - "*/DerivedData/*"
+  - "*/.build/*"
+  - "*/vendor/*"
+  - "*/fastlane/*"
+
+# File header rule
+file_header:
+  required_pattern: |
+                    //
+                    //  .*\.swift
+                    //  AI-Mixtapes
+                    //
+                    //  Created by .* on \d{1,2}/\d{1,2}/\d{2,4}\.
+                    //
+  forbidden_pattern: |
+                     //
+                     //  .*\.swift
+                     //  AI-Mixtapes
+                     //
+                     //  Created by .* on \d{1,2}/\d{1,2}/\d{2,4}\.
+                     //  Copyright © \d{4} .* All rights reserved\.
+                     //

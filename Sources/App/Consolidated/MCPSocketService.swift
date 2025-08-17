@@ -1,6 +1,6 @@
+import Combine
 import Foundation
 import SocketIO
-import Combine
 
 // Event types for Socket.IO events
 enum MCPEvent: String {
@@ -43,22 +43,22 @@ struct PlayerEventData: MCPEventData {
 class MCPSocketService: ObservableObject {
     private var manager: SocketManager
     private var socket: SocketIOClient
-    
+
     // Publishers for component state updates
     @Published var personalityState: PersonalityEventData?
     @Published var moodState: MoodEventData?
     @Published var playerState: PlayerEventData?
-    
+
     init() {
         // Initialize Socket.IO manager and client
         let serverURL = URL(string: "http://localhost:3000")!
         manager = SocketManager(socketURL: serverURL, config: [.log(true)])
         socket = manager.defaultSocket
-        
+
         // Setup event handlers
         setupEventHandlers()
     }
-    
+
     private func setupEventHandlers() {
         // Personality events
         socket.on(MCPEvent.personalityStateUpdate.rawValue) { [weak self] data, _ in
@@ -67,7 +67,7 @@ class MCPSocketService: ObservableObject {
                 self?.personalityState = eventData
             }
         }
-        
+
         // Mood events
         socket.on(MCPEvent.moodStateUpdate.rawValue) { [weak self] data, _ in
             guard let eventData = try? self?.decodeEventData(data, type: MoodEventData.self) else { return }
@@ -75,7 +75,7 @@ class MCPSocketService: ObservableObject {
                 self?.moodState = eventData
             }
         }
-        
+
         // Player events
         socket.on(MCPEvent.playerStateUpdate.rawValue) { [weak self] data, _ in
             guard let eventData = try? self?.decodeEventData(data, type: PlayerEventData.self) else { return }
@@ -84,52 +84,52 @@ class MCPSocketService: ObservableObject {
             }
         }
     }
-    
+
     // Helper function to decode event data
-    private func decodeEventData<T: MCPEventData>(_ data: [Any], type: T.Type) throws -> T {
+    private func decodeEventData<T: MCPEventData>(_ data: [Any], type _: T.Type) throws -> T {
         guard let jsonData = try? JSONSerialization.data(withJSONObject: data[0]) else {
             throw NSError(domain: "MCPSocket", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid event data"])
         }
         return try JSONDecoder().decode(T.self, from: jsonData)
     }
-    
+
     // MARK: - Public Methods
-    
+
     func connect() {
         socket.connect()
     }
-    
+
     func disconnect() {
         socket.disconnect()
     }
-    
+
     // Personality events
     func emitPersonalityHover(type: String, hovered: Bool) {
         socket.emit(MCPEvent.personalityHover.rawValue, ["type": type, "hovered": hovered])
     }
-    
+
     func emitPersonalitySelect(type: String) {
         socket.emit(MCPEvent.personalitySelect.rawValue, ["type": type])
     }
-    
+
     // Mood events
     func emitMoodSelect(type: String) {
         socket.emit(MCPEvent.moodSelect.rawValue, ["type": type])
     }
-    
+
     // Player events
     func emitPlayerTogglePlayback() {
         socket.emit(MCPEvent.playerTogglePlayback.rawValue)
     }
-    
+
     func emitPlayerSeek(time: Double) {
         socket.emit(MCPEvent.playerSeek.rawValue, ["time": time])
     }
-    
+
     func emitPlayerVolume(level: Double) {
         socket.emit(MCPEvent.playerVolume.rawValue, ["level": level])
     }
-    
+
     func emitPlayerToggleMute() {
         socket.emit(MCPEvent.playerToggleMute.rawValue)
     }

@@ -1,0 +1,66 @@
+# Global owners - require approval for all changes
+* @core-team @GrandMasteriOSBuilder
+
+# AI/ML specific components
+/Services/AI* @ai-team @GrandMasteriOSBuilder
+/Services/*Engine.swift @ai-team @GrandMasteriOSBuilder
+/Models/*.mlmodel @ai-team @GrandMasteriOSBuilder
+/Modules/AIModule/ @ai-team @GrandMasteriOSBuilder
+/Sources/AIMixtapes/Services/AI* @ai-team @GrandMasteriOSBuilder
+/Sources/App/Services/AI* @ai-team @GrandMasteriOSBuilder
+
+# Performance critical components
+/Services/Audio* @performance-team @GrandMasteriOSBuilder
+/Services/Performance* @performance-team @GrandMasteriOSBuilder
+/Models/AudioBuffer* @performance-team @GrandMasteriOSBuilder
+/Models/ManagedAudioBuffer.swift @performance-team @GrandMasteriOSBuilder
+/Modules/AudioAnalysisModule/ @performance-team @GrandMasteriOSBuilder
+/Sources/AIMixtapes/AudioProcessor.swift @performance-team @GrandMasteriOSBuilder
+
+# Core Data and data models
+/*.xcdatamodeld/ @data-team @GrandMasteriOSBuilder
+/Models/MixTape* @data-team @GrandMasteriOSBuilder
+/Models/Song* @data-team @GrandMasteriOSBuilder
+/Modules/CoreDataModule/ @data-team @GrandMasteriOSBuilder
+/Sources/App/CoreData/ @data-team @GrandMasteriOSBuilder
+
+# MusicKit integration
+/Modules/MusicKitModule/ @musickit-team @GrandMasteriOSBuilder
+/Services/*MusicKit* @musickit-team @GrandMasteriOSBuilder
+/Sources/AIMixtapes/Services/*MusicKit* @musickit-team @GrandMasteriOSBuilder
+
+# UI/UX components
+/Views/ @ui-team @GrandMasteriOSBuilder
+/Sources/AIMixtapes/Views/ @ui-team @GrandMasteriOSBuilder
+/Sources/App/Components/ @ui-team @GrandMasteriOSBuilder
+/Assets.xcassets/ @ui-team @GrandMasteriOSBuilder
+
+# Configuration and build system
+/Config/ @devops-team @GrandMasteriOSBuilder
+/*.xcconfig @devops-team @GrandMasteriOSBuilder
+/project.yml @devops-team @GrandMasteriOSBuilder
+/Package.swift @devops-team @GrandMasteriOSBuilder
+/fastlane/ @devops-team @GrandMasteriOSBuilder
+/.github/workflows/ @devops-team @GrandMasteriOSBuilder
+
+# Documentation
+/Documentation/ @docs-team @GrandMasteriOSBuilder
+/README*.md @docs-team @GrandMasteriOSBuilder
+/CHANGELOG.md @docs-team @GrandMasteriOSBuilder
+/CONTRIBUTING.md @docs-team @GrandMasteriOSBuilder
+/Docs/ @docs-team @GrandMasteriOSBuilder
+
+# Testing infrastructure
+/Tests/ @qa-team @GrandMasteriOSBuilder
+/*.xctestplan @qa-team @GrandMasteriOSBuilder
+/scripts/ @qa-team @devops-team @GrandMasteriOSBuilder
+
+# Security sensitive files
+/.github/workflows/security.yml @security-team @GrandMasteriOSBuilder
+/.github/dependabot.yml @security-team @devops-team @GrandMasteriOSBuilder
+/AI-Mixtapes.entitlements @security-team @GrandMasteriOSBuilder
+
+# Release and deployment
+/Release.xcconfig @release-team @GrandMasteriOSBuilder
+/CHANGELOG.md @release-team @docs-team @GrandMasteriOSBuilder
+/fastlane/Fastfile @release-team @devops-team @GrandMasteriOSBuilder

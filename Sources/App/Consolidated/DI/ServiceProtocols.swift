@@ -6,15 +6,70 @@
 //  Copyright © 2025 Swanand Tanavade. All rights reserved.
 //
 
-import Foundation
 import AVFoundation
 import CoreData
-import Domain
+import Foundation
+import SwiftUI
+
+// MARK: - Type Definitions
+
+public enum PersonalityType: String, Codable, CaseIterable {
+    case analyzer = "Analyzer"
+    case explorer = "Explorer"
+    case curator = "Curator"
+    case enthusiast = "Enthusiast"
+    case social = "Social"
+    case ambient = "Ambient"
+    case balanced = "Balanced"
+}
+
+public enum AppError: LocalizedError {
+    case audioLoadFailed(Error)
+    case deletionFailure(Error)
+    case saveFailure(Error)
+    case aiServiceUnavailable
+    case resourcesUnavailable
+    case serviceUnavailable
+    case unknown(Error)
+
+    public var errorDescription: String? {
+        switch self {
+        case let .audioLoadFailed(error):
+            "Failed to load audio: \(error.localizedDescription)"
+        case let .deletionFailure(error):
+            "Failed to delete item: \(error.localizedDescription)"
+        case let .saveFailure(error):
+            "Failed to save changes: \(error.localizedDescription)"
+        case .aiServiceUnavailable:
+            "AI service is temporarily unavailable"
+        case .resourcesUnavailable:
+            "Required resources are not available"
+        case .serviceUnavailable:
+            "Service is temporarily unavailable"
+        case let .unknown(error):
+            "An unexpected error occurred: \(error.localizedDescription)"
+        }
+    }
+}
+
+
+
+
+// MARK: - Placeholder Types (to be defined elsewhere)
+
+// Core Data type aliases - Song and MixTape defined in Domain module
+public typealias Playlist = NSManagedObject
+public typealias PlaylistContext = String
+public typealias MoodAction = String
+public typealias PersonalityTrait = String
+public typealias AppTheme = String
+public typealias NotificationEvent = String
+public typealias SheetType = String
 
 // MARK: - Service Protocols
 
 /// Protocol for AI service coordination
-public protocol AIServiceCoordinating: AnyObject {
+public protocol AIServiceCoordinating: AnyObject, ObservableObject {
     var moodEngine: MoodDetecting { get }
     var personalityEngine: PersonalityAnalyzing { get }
     var recommendationEngine: RecommendationProviding { get }
@@ -26,7 +81,7 @@ public protocol MoodDetecting: AnyObject {
     var currentMood: Mood { get }
     var moodConfidence: Float { get }
     func setMood(_ mood: Mood, confidence: Float)
-    func detectMoodFromCurrentAudio(player: AVQueuePlayer) 
+    func detectMoodFromCurrentAudio(player: AVQueuePlayer)
     func getMoodBasedRecommendations() -> [MixTape]
     func getMoodBasedActions() -> [MoodAction]
 }
@@ -106,12 +161,12 @@ public protocol AnalyticsTracking: AnyObject {
 public protocol DataManaging: AnyObject {
     func save() throws
     func fetch<T: NSManagedObject>(_ type: T.Type, predicate: NSPredicate?) throws -> [T]
-    func delete<T: NSManagedObject>(_ object: T) throws
+    func delete(_ object: some NSManagedObject) throws
 }
 
 /// Protocol for cache management
 public protocol CacheManaging: AnyObject {
-    func store<T: Codable>(_ object: T, forKey key: String)
+    func store(_ object: some Codable, forKey key: String)
     func retrieve<T: Codable>(_ type: T.Type, forKey key: String) -> T?
     func remove(forKey key: String)
 }

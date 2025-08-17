@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>INIntents</key>
+    <array>
+        <dict>
+            <key>INIntentCategory</key>
+            <string>generic</string>
+            <key>INIntentClassName</key>
+            <string>PlayMoodIntent</string>
+            <key>INIntentName</key>
+            <string>PlayMood</string>
+            <key>INIntentParameterCombinations</key>
+            <dict>
+                <key>mood</key>
+                <dict>
+                    <key>INIntentParameter</key>
+                    <string>mood</string>
+                </dict>
+            </dict>
+            <key>INIntentParameters</key>
+            <array>
+                <dict>
+                    <key>INIntentParameterName</key>
+                    <string>mood</string>
+                    <key>INIntentParameterType</key>
+                    <string>String</string>
+                </dict>
+            </array>
+            <key>INIntentResponse</key>
+            <dict>
+                <key>INIntentResponseClassName</key>
+                <string>PlayMoodIntentResponse</string>
+            </dict>
+        </dict>
+    </array>
+</dict>
+</plist>

@@ -6,11 +6,15 @@
 //  Copyright © 2025 Swanand Tanavade. All rights reserved.
 //
 
-import Foundation
-import AVFoundation
-import UIKit
-import CoreML
 import Accelerate
+import AVFoundation
+import CoreML
+import Foundation
+#if canImport(UIKit)
+    import UIKit
+#elseif canImport(AppKit)
+    import AppKit
+#endif
 
 // MARK: - Error Handling
 
@@ -20,14 +24,14 @@ enum AIError: Error, LocalizedError {
     case audioLoadFailed
     case imageLoadFailed
     case songNotReachable
-    
+
     var errorDescription: String? {
         switch self {
-        case .invalidURL: return "Invalid URL provided"
-        case .networkError(let error): return "Network error: \(error.localizedDescription)"
-        case .audioLoadFailed: return "Failed to load audio file"
-        case .imageLoadFailed: return "Failed to load cover art image"
-        case .songNotReachable: return "Song URL is not reachable"
+        case .invalidURL: "Invalid URL provided"
+        case let .networkError(error): "Network error: \(error.localizedDescription)"
+        case .audioLoadFailed: "Failed to load audio file"
+        case .imageLoadFailed: "Failed to load cover art image"
+        case .songNotReachable: "Song URL is not reachable"
         }
     }
 }
@@ -41,16 +45,16 @@ private let imageCache = NSCache<NSString, UIImage>()
 /// Get cover art image from URL with caching
 func getCoverArtImage(url: URL) -> UIImage {
     let cacheKey = url.absoluteString as NSString
-    
+
     // Check cache first
     if let cachedImage = imageCache.object(forKey: cacheKey) {
         return cachedImage
     }
-    
+
     // Load synchronously (for compatibility with existing code)
     let semaphore = DispatchSemaphore(value: 0)
     var resultImage = UIImage(systemName: "music.note") ?? UIImage()
-    
+
     Task {
         do {
             let image = try await loadImageAsync(from: url)
@@ -61,7 +65,7 @@ func getCoverArtImage(url: URL) -> UIImage {
         }
         semaphore.signal()
     }
-    
+
     semaphore.wait()
     return resultImage
 }
@@ -69,34 +73,35 @@ func getCoverArtImage(url: URL) -> UIImage {
 /// Async image loading helper
 private func loadImageAsync(from url: URL) async throws -> UIImage {
     let (data, response) = try await URLSession.shared.data(from: url)
-    
+
     guard let httpResponse = response as? HTTPURLResponse,
-          httpResponse.statusCode == 200 else {
+          httpResponse.statusCode == 200
+    else {
         throw AIError.networkError(URLError(.badServerResponse))
     }
-    
+
     guard let image = UIImage(data: data) else {
         throw AIError.imageLoadFailed
     }
-    
+
     return image
 }
 
 /// Create array of AVPlayerItems from songs
 func createArrayOfPlayerItems(songs: [Song]) -> [AVPlayerItem] {
-    return songs.compactMap { song in
+    songs.compactMap { song in
         let url = song.wrappedUrl
         guard url.absoluteString != "" else { return nil }
-        
+
         let asset = AVAsset(url: url)
         let item = AVPlayerItem(asset: asset)
-        
+
         // Add metadata for identification
         let metadata = AVMutableMetadataItem()
         metadata.identifier = .commonIdentifierTitle
         metadata.value = song.wrappedName as NSString
         item.externalMetadata = [metadata]
-        
+
         return item
     }
 }
@@ -105,7 +110,7 @@ func createArrayOfPlayerItems(songs: [Song]) -> [AVPlayerItem] {
 func loadPlayer(arrayOfPlayerItems: [AVPlayerItem], player: AVQueuePlayer) {
     // Remove all existing items
     player.removeAllItems()
-    
+
     // Add new items
     for item in arrayOfPlayerItems {
         player.insert(item, after: nil)
@@ -113,24 +118,26 @@ func loadPlayer(arrayOfPlayerItems: [AVPlayerItem], player: AVQueuePlayer) {
 }
 
 /// Skip back to previous song
-func skipBack(currentPlayerItems: [AVPlayerItem], currentSongName: String, queuePlayer: AVQueuePlayer, isPlaying: Bool) {
+func skipBack(currentPlayerItems: [AVPlayerItem], currentSongName _: String, queuePlayer: AVQueuePlayer,
+              isPlaying: Bool)
+{
     guard let currentItem = queuePlayer.currentItem else { return }
-    
+
     // Find current item index
     let currentIndex = currentPlayerItems.firstIndex(of: currentItem) ?? 0
-    
+
     if currentIndex > 0 {
         // Go to previous item
         let previousItem = currentPlayerItems[currentIndex - 1]
-        
+
         // Remove all items and reload from previous
         queuePlayer.removeAllItems()
-        
+
         // Add items starting from previous
         for item in currentPlayerItems[currentIndex - 1...] {
             queuePlayer.insert(item, after: nil)
         }
-        
+
         // Play if was playing
         if isPlaying {
             queuePlayer.play()
@@ -147,39 +154,41 @@ func skipBack(currentPlayerItems: [AVPlayerItem], currentSongName: String, queue
 /// Get song name from AVPlayerItem
 func getItemName(playerItem: AVPlayerItem?) -> String {
     guard let item = playerItem else { return "Not Playing" }
-    
+
     // Try to get from external metadata first
     for metadata in item.externalMetadata {
         if metadata.identifier == .commonIdentifierTitle,
-           let title = metadata.value as? String {
+           let title = metadata.value as? String
+        {
             return title
         }
     }
-    
+
     // Fallback to asset metadata
     if let asset = item.asset as? AVURLAsset {
         let fileName = asset.url.lastPathComponent
         return fileName.replacingOccurrences(of: ".\(asset.url.pathExtension)", with: "")
     }
-    
+
     return "Unknown Song"
 }
 
 /// Check if song URL is reachable
 func checkSongUrlIsReachable(song: Song) -> Bool {
     let url = song.wrappedUrl
-    
+
     // Basic URL validation
     guard url.absoluteString != "",
-          url.scheme != nil else {
+          url.scheme != nil
+    else {
         return false
     }
-    
+
     // For file URLs, check if file exists
     if url.isFileURL {
         return FileManager.default.fileExists(atPath: url.path)
     }
-    
+
     // For remote URLs, assume reachable (avoid blocking main thread)
     // In production, you might want to cache reachability status
     return true
@@ -190,7 +199,7 @@ func checkUrlReachability(url: URL) async throws -> Bool {
     var request = URLRequest(url: url)
     request.httpMethod = "HEAD"
     request.timeoutInterval = 5.0
-    
+
     do {
         let (_, response) = try await URLSession.shared.data(for: request)
         return (response as? HTTPURLResponse)?.statusCode == 200
@@ -203,17 +212,17 @@ func checkUrlReachability(url: URL) async throws -> Bool {
 
 /**
  * Environment Variables (.env file)
- * 
+ *
  * Create a .env file in your project root with:
  * SPOTIFY_CLIENT_ID=your_spotify_client_id
  * SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
- * 
+ *
  * ⚠️ WARNING: Never commit .env files to version control!
  * Add .env to your .gitignore file to prevent accidental exposure.
  * For production builds, use Xcode build configurations or environment variables.
  */
 
-struct EnvironmentConfig {
+enum EnvironmentConfig {
     static let spotifyClientId = ProcessInfo.processInfo.environment["SPOTIFY_CLIENT_ID"] ?? ""
     static let spotifyClientSecret = ProcessInfo.processInfo.environment["SPOTIFY_CLIENT_SECRET"] ?? ""
 }
@@ -223,7 +232,7 @@ struct EnvironmentConfig {
 /// Utilities for optimizing AI operations and managing resources
 enum AIUtilities {
     // MARK: - Background Processing
-    
+
     /// Process ML operations in background with proper QoS
     static func processInBackground<T>(_ operation: @escaping () throws -> T) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
@@ -237,43 +246,46 @@ enum AIUtilities {
             }
         }
     }
-    
+
     // MARK: - Memory Management
-    
+
     /// Cache for ML model outputs
     private static var modelCache = NSCache<NSString, AnyObject>()
-    
+
     /// Configure cache limits based on device capabilities
     static func configureCacheLimit() {
         modelCache.countLimit = 100
         modelCache.totalCostLimit = 50 * 1024 * 1024 // 50MB
     }
-    
+
     /// Cache ML model output with expiration
-    static func cacheModelOutput<T: AnyObject>(_ output: T, forKey key: String, expirationInterval: TimeInterval = 300) {
+    static func cacheModelOutput(_ output: some AnyObject, forKey key: String, expirationInterval: TimeInterval = 300) {
         let expirationDate = Date().addingTimeInterval(expirationInterval)
         let cacheItem = CacheItem(value: output, expirationDate: expirationDate)
         modelCache.setObject(cacheItem, forKey: key as NSString)
     }
-    
+
     /// Retrieve cached ML model output if valid
     static func getCachedModelOutput<T: AnyObject>(forKey key: String) -> T? {
         guard let cacheItem = modelCache.object(forKey: key as NSString) as? CacheItem,
               cacheItem.expirationDate > Date(),
-              let value = cacheItem.value as? T else {
+              let value = cacheItem.value as? T
+        else {
             return nil
         }
         return value
     }
-    
+
     // MARK: - Performance Optimization
-    
+
     /// Batch process multiple inputs for better performance
-    static func batchProcess<T, U>(_ inputs: [T], batchSize: Int = 10, operation: @escaping ([T]) throws -> [U]) async throws -> [U] {
+    static func batchProcess<T, U>(_ inputs: [T], batchSize: Int = 10,
+                                   operation: @escaping ([T]) throws -> [U]) async throws -> [U]
+    {
         let batches = stride(from: 0, to: inputs.count, by: batchSize).map {
-            Array(inputs[$0..<min($0 + batchSize, inputs.count)])
+            Array(inputs[$0 ..< min($0 + batchSize, inputs.count)])
         }
-        
+
         var results: [U] = []
         for batch in batches {
             let batchResults = try await processInBackground {
@@ -283,93 +295,95 @@ enum AIUtilities {
         }
         return results
     }
-    
+
     /// Optimize audio buffer for ML processing
     static func optimizeAudioBuffer(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
         guard let optimizedBuffer = AVAudioPCMBuffer(pcmFormat: buffer.format,
-                                                   frameCapacity: buffer.frameLength) else {
+                                                     frameCapacity: buffer.frameLength)
+        else {
             return nil
         }
-        
+
         // Normalize and optimize audio data
         let channels = UnsafeBufferPointer(start: buffer.floatChannelData,
-                                         count: Int(buffer.format.channelCount))
+                                           count: Int(buffer.format.channelCount))
         let optimizedChannels = UnsafeBufferPointer(start: optimizedBuffer.floatChannelData,
-                                                  count: Int(optimizedBuffer.format.channelCount))
-        
+                                                    count: Int(optimizedBuffer.format.channelCount))
+
         for (source, destination) in zip(channels, optimizedChannels) {
             // Apply normalization
             var normalizedData = [Float](repeating: 0,
-                                       count: Int(buffer.frameLength))
+                                         count: Int(buffer.frameLength))
             vDSP_vabs(source, 1,
-                     &normalizedData, 1,
-                     vDSP_Length(buffer.frameLength))
-            
+                      &normalizedData, 1,
+                      vDSP_Length(buffer.frameLength))
+
             var maximumValue: Float = 0
             vDSP_maxv(normalizedData, 1,
-                     &maximumValue,
-                     vDSP_Length(buffer.frameLength))
-            
+                      &maximumValue,
+                      vDSP_Length(buffer.frameLength))
+
             if maximumValue > 0 {
                 var scalar = 1.0 / maximumValue
                 vDSP_vsmul(normalizedData, 1,
-                          &scalar,
-                          destination, 1,
-                          vDSP_Length(buffer.frameLength))
+                           &scalar,
+                           destination, 1,
+                           vDSP_Length(buffer.frameLength))
             }
         }
-        
+
         optimizedBuffer.frameLength = buffer.frameLength
         return optimizedBuffer
     }
-    
+
     // MARK: - Resource Management
-    
+
     /// Monitor and manage ML resource usage
     static func monitorResourceUsage() -> ResourceMetrics {
         var metrics = ResourceMetrics()
-        
+
         // Memory usage
         var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size) / 4
         let kerr: kern_return_t = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
                 task_info(mach_task_self_,
-                         task_flavor_t(MACH_TASK_BASIC_INFO),
-                         $0,
-                         &count)
+                          task_flavor_t(MACH_TASK_BASIC_INFO),
+                          $0,
+                          &count)
             }
         }
-        
+
         if kerr == KERN_SUCCESS {
             metrics.memoryUsage = Double(info.resident_size) / 1024.0 / 1024.0
         }
-        
+
         // CPU usage
         var thread_list: thread_act_array_t?
         var thread_count: mach_msg_type_number_t = 0
         let thread_info_count = mach_msg_type_number_t(THREAD_INFO_MAX)
         var thread_data = thread_basic_info()
         var thread_info_out = mach_msg_type_number_t(thread_info_count)
-        
+
         if task_threads(mach_task_self_, &thread_list, &thread_count) == KERN_SUCCESS {
-            for i in 0..<thread_count {
+            for i in 0 ..< thread_count {
                 if thread_info(thread_list![Int(i)],
-                             thread_flavor_t(THREAD_BASIC_INFO),
-                             UnsafeMutablePointer<integer_t>.init(mutating: &thread_data),
-                             &thread_info_out) == KERN_SUCCESS {
+                               thread_flavor_t(THREAD_BASIC_INFO),
+                               UnsafeMutablePointer<integer_t>(mutating: &thread_data),
+                               &thread_info_out) == KERN_SUCCESS
+                {
                     let usage = (Double(thread_data.cpu_usage) / Double(TH_USAGE_SCALE)) * 100.0
                     metrics.cpuUsage += usage
                 }
             }
         }
-        
-        if let thread_list = thread_list {
+
+        if let thread_list {
             vm_deallocate(mach_task_self_,
-                         vm_address_t(UnsafePointer(thread_list).pointee),
-                         vm_size_t(thread_count) * vm_size_t(MemoryLayout<thread_t>.size))
+                          vm_address_t(UnsafePointer(thread_list).pointee),
+                          vm_size_t(thread_count) * vm_size_t(MemoryLayout<thread_t>.size))
         }
-        
+
         return metrics
     }
 }
@@ -380,7 +394,7 @@ enum AIUtilities {
 private class CacheItem {
     let value: AnyObject
     let expirationDate: Date
-    
+
     init(value: AnyObject, expirationDate: Date) {
         self.value = value
         self.expirationDate = expirationDate
@@ -389,9 +403,9 @@ private class CacheItem {
 
 /// Resource usage metrics
 struct ResourceMetrics {
-    var memoryUsage: Double = 0  // In MB
-    var cpuUsage: Double = 0     // In percentage
-    
+    var memoryUsage: Double = 0 // In MB
+    var cpuUsage: Double = 0 // In percentage
+
     var description: String {
         """
         Resource Usage:

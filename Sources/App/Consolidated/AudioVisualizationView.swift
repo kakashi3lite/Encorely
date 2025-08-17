@@ -1,14 +1,15 @@
-import SwiftUI
 import AVFoundation
 import Combine
+import SwiftUI
 
 struct AudioVisualizationView: View {
     // MARK: - Properties
+
     @ObservedObject var queuePlayer: AVQueuePlayer
     @ObservedObject var currentSongName: CurrentSongName
     @ObservedObject var mcpService = MCPSocketService()
     var aiService: AIIntegrationService
-    
+
     @State private var visualizationData: [Float] = Array(repeating: 0, count: 40)
     @State private var currentMood: Mood = .neutral
     @State private var isAnalyzing = false
@@ -17,8 +18,9 @@ struct AudioVisualizationView: View {
     @State private var selectedTimeRange: TimeRange = .lastHour
     @State private var visualizationStyle: VisualizationStyle = .modern
     @State private var sensitivity: Double = 1.0
-    
+
     // MARK: - Body
+
     var body: some View {
         NavigationView {
             ScrollView {
@@ -30,7 +32,7 @@ struct AudioVisualizationView: View {
                         isAnalyzing: isAnalyzing
                     )
                     .padding(.horizontal)
-                    
+
                     // Visualization style picker
                     Picker("Style", selection: $visualizationStyle) {
                         ForEach(VisualizationStyle.allCases, id: \.self) { style in
@@ -39,7 +41,7 @@ struct AudioVisualizationView: View {
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .padding(.horizontal)
-                    
+
                     // Visualization area
                     Group {
                         if visualizationStyle == .modern {
@@ -66,30 +68,28 @@ struct AudioVisualizationView: View {
                     .background(
                         RoundedRectangle(cornerRadius: 16)
                             .fill(Color(.systemBackground))
-                            .shadow(radius: 2)
-                    )
+                            .shadow(radius: 2))
                     .padding(.horizontal)
-                    
+
                     // Sensitivity slider
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Visualization Sensitivity")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
-                        
+
                         HStack {
                             Image(systemName: "speaker.wave.1")
-                            Slider(value: $sensitivity, in: 0.1...2.0)
+                            Slider(value: $sensitivity, in: 0.1 ... 2.0)
                             Image(systemName: "speaker.wave.3")
                         }
                     }
                     .padding(.horizontal)
-                    
+
                     // Audio characteristics
                     AudioCharacteristicsGrid(
-                        characteristics: getCurrentAudioCharacteristics()
-                    )
-                    .padding(.horizontal)
-                    
+                        characteristics: getCurrentAudioCharacteristics())
+                        .padding(.horizontal)
+
                     // Analysis controls
                     VStack(spacing: 16) {
                         // Time range picker
@@ -100,7 +100,7 @@ struct AudioVisualizationView: View {
                         }
                         .pickerStyle(SegmentedPickerStyle())
                         .padding(.horizontal)
-                        
+
                         // Action buttons
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: 16) {
@@ -109,13 +109,13 @@ struct AudioVisualizationView: View {
                                     icon: "chart.line.uptrend.xyaxis",
                                     action: { showingMoodHistory = true }
                                 )
-                                
+
                                 AnalysisButton(
                                     title: "Frequency Analysis",
                                     icon: "waveform.path.ecg",
                                     action: { showingFrequencyDetails = true }
                                 )
-                                
+
                                 AnalysisButton(
                                     title: "Generate Report",
                                     icon: "doc.text.viewfinder",
@@ -146,14 +146,14 @@ struct AudioVisualizationView: View {
             }
         }
     }
-    
+
     // MARK: - Supporting Views
-    
+
     struct PlaybackCard: View {
         let songName: String
         let mood: Mood
         let isAnalyzing: Bool
-        
+
         var body: some View {
             VStack(spacing: 12) {
                 // Song info
@@ -166,9 +166,9 @@ struct AudioVisualizationView: View {
                             .font(.title3)
                             .fontWeight(.semibold)
                     }
-                    
+
                     Spacer()
-                    
+
                     // Mood indicator
                     if songName != "Not Playing" {
                         VStack(alignment: .trailing, spacing: 4) {
@@ -184,7 +184,7 @@ struct AudioVisualizationView: View {
                         }
                     }
                 }
-                
+
                 if isAnalyzing {
                     // Analysis progress
                     HStack(spacing: 8) {
@@ -203,14 +203,14 @@ struct AudioVisualizationView: View {
             .shadow(color: Color.black.opacity(0.05), radius: 5)
         }
     }
-    
+
     struct AudioCharacteristicsGrid: View {
         let characteristics: [AudioCharacteristic]
-        
+
         var body: some View {
             LazyVGrid(columns: [
                 GridItem(.flexible()),
-                GridItem(.flexible())
+                GridItem(.flexible()),
             ], spacing: 16) {
                 ForEach(characteristics) { characteristic in
                     CharacteristicCard(
@@ -223,13 +223,13 @@ struct AudioVisualizationView: View {
             }
         }
     }
-    
+
     struct CharacteristicCard: View {
         let title: String
         let value: String
         let icon: String
         let color: Color
-        
+
         var body: some View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
@@ -239,7 +239,7 @@ struct AudioVisualizationView: View {
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
-                
+
                 Text(value)
                     .font(.title2)
                     .fontWeight(.semibold)
@@ -252,12 +252,12 @@ struct AudioVisualizationView: View {
             .shadow(color: color.opacity(0.1), radius: 5)
         }
     }
-    
+
     struct AnalysisButton: View {
         let title: String
         let icon: String
         let action: () -> Void
-        
+
         var body: some View {
             Button(action: action) {
                 VStack(spacing: 8) {
@@ -274,34 +274,34 @@ struct AudioVisualizationView: View {
             }
         }
     }
-    
+
     // MARK: - Helper Methods
-    
+
     private func startVisualization() {
         // Start audio analysis timer
         Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
             guard let audioFeatures = analyzeAudio() else { return }
-            
+
             // Update visualization data
             visualizationData = audioFeatures.frequencies.map { Float($0) }
-            
+
             // Send audio features to MCP server
             mcpService.emitAudioVisualization(audioFeatures)
         }
     }
-    
+
     private func stopVisualization() {
         // Clean up timers and audio analysis
     }
-    
+
     private func analyzeAudio() -> AudioFeatures? {
         guard let currentItem = queuePlayer.currentItem else { return nil }
-        
+
         let energy = calculateEnergy(currentItem)
         let tempo = calculateTempo(currentItem)
         let valence = calculateValence(currentItem)
         let frequencies = calculateFrequencies(currentItem)
-        
+
         return AudioFeatures(
             energy: energy,
             tempo: tempo,
@@ -309,9 +309,9 @@ struct AudioVisualizationView: View {
             frequencies: frequencies
         )
     }
-    
+
     private func getCurrentAudioCharacteristics() -> [AudioCharacteristic] {
-        return [
+        [
             AudioCharacteristic(
                 name: "Tempo",
                 value: "128 BPM",
@@ -335,10 +335,10 @@ struct AudioVisualizationView: View {
                 value: "12 dB",
                 icon: "waveform",
                 color: .purple
-            )
+            ),
         ]
     }
-    
+
     private func generateAnalysisReport() {
         // Generate and share analysis report
     }
@@ -359,26 +359,27 @@ enum TimeRange: String, CaseIterable {
     case lastDay = "24H"
     case lastWeek = "1W"
     case lastMonth = "1M"
-    
+
     var description: String {
         switch self {
-        case .lastHour: return "1 Hour"
-        case .lastDay: return "24 Hours"
-        case .lastWeek: return "1 Week"
-        case .lastMonth: return "1 Month"
+        case .lastHour: "1 Hour"
+        case .lastDay: "24 Hours"
+        case .lastWeek: "1 Week"
+        case .lastMonth: "1 Month"
         }
     }
 }
 
 // MARK: - Visualization Style
+
 enum VisualizationStyle: String, CaseIterable {
     case classic
     case modern
-    
+
     var description: String {
         switch self {
-        case .classic: return "Classic"
-        case .modern: return "Modern"
+        case .classic: "Classic"
+        case .modern: "Modern"
         }
     }
 }
@@ -400,9 +401,9 @@ private struct AnimatedVisualizationView: View {
     let mood: Mood
     let sensitivity: Double
     let mcpService: MCPSocketService
-    
+
     @State private var isAnimating = false
-    
+
     var body: some View {
         GeometryReader { geometry in
             HStack(spacing: geometry.size.width / CGFloat(audioData.count * 2)) {
@@ -412,12 +413,11 @@ private struct AnimatedVisualizationView: View {
                             LinearGradient(
                                 gradient: Gradient(colors: [
                                     mood.color.opacity(0.6),
-                                    mood.color
+                                    mood.color,
                                 ]),
                                 startPoint: .bottom,
                                 endPoint: .top
-                            )
-                        )
+                            ))
                         .frame(width: geometry.size.width / CGFloat(audioData.count) / 1.5,
                                height: geometry.size.height * CGFloat(value) * CGFloat(sensitivity))
                         .animation(
@@ -442,53 +442,52 @@ private struct ClassicVisualizationView: View {
     let mood: Mood
     let sensitivity: Double
     let mcpService: MCPSocketService
-    
+
     var body: some View {
         GeometryReader { geometry in
             let maxHeight = geometry.size.height
             let width = geometry.size.width
-            
+
             Path { path in
                 path.move(to: CGPoint(x: 0, y: maxHeight / 2))
-                
+
                 for (index, value) in audioData.enumerated() {
                     let x = width * CGFloat(index) / CGFloat(audioData.count)
                     let y = maxHeight / 2 + CGFloat(value) * maxHeight / 2 * CGFloat(sensitivity)
-                    
+
                     if index == 0 {
                         path.move(to: CGPoint(x: x, y: y))
                     } else {
                         path.addLine(to: CGPoint(x: x, y: y))
                     }
                 }
-                
+
                 // Mirror the waveform
                 for (index, value) in audioData.enumerated().reversed() {
                     let x = width * CGFloat(index) / CGFloat(audioData.count)
                     let y = maxHeight / 2 - CGFloat(value) * maxHeight / 2 * CGFloat(sensitivity)
                     path.addLine(to: CGPoint(x: x, y: y))
                 }
-                
+
                 path.closeSubpath()
             }
             .fill(
                 LinearGradient(
                     gradient: Gradient(colors: [
                         mood.color.opacity(0.3),
-                        mood.color.opacity(0.7)
+                        mood.color.opacity(0.7),
                     ]),
                     startPoint: .top,
                     endPoint: .bottom
-                )
-            )
+                ))
             .overlay(
                 Path { path in
                     path.move(to: CGPoint(x: 0, y: maxHeight / 2))
-                    
+
                     for (index, value) in audioData.enumerated() {
                         let x = width * CGFloat(index) / CGFloat(audioData.count)
                         let y = maxHeight / 2 + CGFloat(value) * maxHeight / 2 * CGFloat(sensitivity)
-                        
+
                         if index == 0 {
                             path.move(to: CGPoint(x: x, y: y))
                         } else {
@@ -497,8 +496,7 @@ private struct ClassicVisualizationView: View {
                     }
                 }
                 .stroke(mood.color, lineWidth: 2)
-                .blur(radius: 1)
-            )
+                .blur(radius: 1))
         }
     }
 }

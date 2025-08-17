@@ -1,10 +1,13 @@
-name: CI - AI Mixtapes Modules
+name: CI/CD Pipeline
 
 on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  schedule:
+    # Run nightly builds
+    - cron: '0 2 * * *'
   workflow_dispatch:
 
 env:
@@ -40,9 +43,93 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      ios: ${{ steps.changes.outputs.ios }}
+      docs: ${{ steps.changes.outputs.docs }}
+      config: ${{ steps.changes.outputs.config }}
+      dependencies: ${{ steps.changes.outputs.dependencies }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changes
+        uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            ios:
+              - 'Sources/**'
+              - 'Tests/**'
+              - '*.xcodeproj/**'
+              - '*.xcworkspace/**'
+              - 'Package.swift'
+              - 'Package.resolved'
+              - '*.xcconfig'
+              - 'project.yml'
+            docs:
+              - 'README.md'
+              - 'CHANGELOG.md'
+              - 'docs/**'
+              - '*.md'
+            config:
+              - '.github/**'
+              - 'fastlane/**'
+              - 'scripts/**'
+            dependencies:
+              - 'Gemfile'
+              - 'Gemfile.lock'
+              - 'Package.swift'
+              - 'Package.resolved'
+              - 'Podfile'
+              - 'Podfile.lock'
+
+  lint-and-format:
+    name: Lint and Format
+    runs-on: macos-latest
+    needs: changes
+    if: needs.changes.outputs.ios == 'true' || needs.changes.outputs.config == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "15.2"
+
+      - name: Cache SwiftLint
+        uses: actions/cache@v3
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm
+          key: ${{ runner.os }}-swiftlint-${{ hashFiles('**/.swiftlint.yml') }}
+
+      - name: Install SwiftLint
+        run: |
+          if ! command -v swiftlint &> /dev/null; then
+            brew install swiftlint
+          fi
+
+      - name: Run SwiftLint
+        run: |
+          swiftlint lint --reporter github-actions-logging
+
+      - name: Run SwiftFormat (check only)
+        run: |
+          if ! command -v swiftformat &> /dev/null; then
+            brew install swiftformat
+          fi
+          swiftformat --lint .
+
   prepare:
     name: Prepare Build Environment
     runs-on: macos-latest
+    needs: changes
+    if: needs.changes.outputs.ios == 'true' || github.event_name == 'schedule'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -705,6 +792,200 @@ jobs:
             echo "graph TD"
             # Extract module dependencies from import statements
             find . -name "*.swift" -exec grep -H "^import" {} \; | \
+              head -20
+            echo "\`\`\`"
+          } > Build/Documentation/architecture/dependencies.md
+
+  security-scan:
+    name: Security Scan
+    runs-on: macos-latest
+    needs: [changes, prepare]
+    if: needs.changes.outputs.ios == 'true' || needs.changes.outputs.dependencies == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Run bundle audit
+        run: |
+          bundle install
+          bundle audit check --update
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          languages: swift
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: auto
+
+  performance-tests:
+    name: Performance Tests
+    runs-on: macos-latest
+    needs: [changes, build]
+    if: needs.changes.outputs.ios == 'true' && (github.event_name == 'push' || github.event_name == 'schedule')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "15.2"
+
+      - name: Restore build environment
+        uses: actions/cache@v3
+        with:
+          path: |
+            Pods
+            *.xcodeproj
+            *.xcworkspace
+            vendor/bundle
+          key: ${{ runner.os }}-build-env-${{ github.sha }}
+
+      - name: Run performance tests
+        run: |
+          xcodebuild test \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -destination "platform=iOS Simulator,name=iPhone 16 Pro,OS=18.1" \
+            -configuration Release \
+            -only-testing:AIMixtapesTests/PerformanceTests \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty
+
+      - name: Archive performance results
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-results
+          path: build/Logs/Test/*.xcresult
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v3
+        with:
+          fail-on-severity: moderate
+          allow-licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC
+
+  build-release:
+    name: Build Release
+    runs-on: macos-latest
+    needs: [build, test, security-scan]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "15.2"
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Restore build environment
+        uses: actions/cache@v3
+        with:
+          path: |
+            Pods
+            *.xcodeproj
+            *.xcworkspace
+            vendor/bundle
+          key: ${{ runner.os }}-build-env-${{ github.sha }}
+
+      - name: Install dependencies
+        run: bundle install
+
+      - name: Build for App Store
+        env:
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          FASTLANE_USER: ${{ secrets.FASTLANE_USER }}
+          FASTLANE_PASSWORD: ${{ secrets.FASTLANE_PASSWORD }}
+        run: |
+          fastlane build_release
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build
+          path: |
+            build/
+            *.ipa
+          retention-days: 30
+
+  deploy-testflight:
+    name: Deploy to TestFlight
+    runs-on: macos-latest
+    needs: build-release
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: testflight
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: true
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-build
+
+      - name: Deploy to TestFlight
+        env:
+          FASTLANE_USER: ${{ secrets.FASTLANE_USER }}
+          FASTLANE_PASSWORD: ${{ secrets.FASTLANE_PASSWORD }}
+          FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD: ${{ secrets.FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD }}
+        run: |
+          fastlane deploy_testflight
+
+  notify-status:
+    name: Notify Status
+    runs-on: ubuntu-latest
+    needs: [build, test, security-scan, performance-tests]
+    if: always()
+    steps:
+      - name: Notify success
+        if: needs.build.result == 'success' && needs.test.result == 'success' && needs.security-scan.result == 'success'
+        run: |
+          echo "✅ CI/CD Pipeline completed successfully!"
+          echo "🔒 Security scans passed"
+          echo "🧪 All tests passed"
+
+      - name: Notify failure
+        if: needs.build.result == 'failure' || needs.test.result == 'failure' || needs.security-scan.result == 'failure'
+        run: |
+          echo "❌ CI/CD Pipeline failed!"
+          echo "Build status: ${{ needs.build.result }}"
+          echo "Test status: ${{ needs.test.result }}"
+          echo "Security status: ${{ needs.security-scan.result }}"
+          exit 1
               sort -u | \
               awk -F: '{print $2}' | \
               sed 's/import //' | \

@@ -16,7 +16,7 @@
 --semicolons never
 --commas always
 --trimwhitespace always
---indent-switch-case true
+--indentcase true
 --linebreaks lf
 --stripunusedargs closure-only
 
@@ -47,10 +47,13 @@
 --importgrouping testable-bottom
 --header ignore
 
+# Import sorting
+--enable sortImports
+
 # Documentation
 --beforemarks empty
---betweenmarks empty
---organizemark "MARK: - "
+
+
 
 # Rules
 --enable blankLinesAtEndOfScope
@@ -77,7 +80,7 @@
 --enable redundantReturn
 --enable redundantVoidReturnType
 --enable semicolons
---enable sortedImports
+--enable sortImports
 --enable spaceAroundBraces
 --enable spaceAroundBrackets
 --enable spaceAroundComments

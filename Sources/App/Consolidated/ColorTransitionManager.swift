@@ -1,16 +1,16 @@
-import SwiftUI
 import Combine
+import SwiftUI
 
 /// Manages smooth transitions between mood and personality colors
 class ColorTransitionManager: ObservableObject {
     @Published private(set) var currentMoodColor: Asset.MoodColor = .happy
     @Published private(set) var currentPersonalityColor: Asset.PersonalityColor = .enthusiast
-    
+
     private var cancellables = Set<AnyCancellable>()
-    
+
     /// Duration for color transitions
     var transitionDuration: Double = 0.3
-    
+
     /// Transition to a new mood color
     /// - Parameter mood: The target mood color
     /// - Parameter completion: Optional completion handler
@@ -18,14 +18,14 @@ class ColorTransitionManager: ObservableObject {
         withAnimation(.easeInOut(duration: transitionDuration)) {
             self.currentMoodColor = mood
         }
-        
-        if let completion = completion {
+
+        if let completion {
             DispatchQueue.main.asyncAfter(deadline: .now() + transitionDuration) {
                 completion()
             }
         }
     }
-    
+
     /// Update personality theme
     /// - Parameter personality: The target personality color
     func updatePersonality(_ personality: Asset.PersonalityColor) {
@@ -33,7 +33,7 @@ class ColorTransitionManager: ObservableObject {
             self.currentPersonalityColor = personality
         }
     }
-    
+
     /// Get interpolated color between two moods
     /// - Parameters:
     ///   - from: Starting mood color

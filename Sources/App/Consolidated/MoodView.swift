@@ -12,7 +12,7 @@ struct MoodView: View {
     @StateObject private var colorTransitionManager = ColorTransitionManager()
     @ObservedObject var moodEngine: MoodEngine
     @ObservedObject var mcpService = MCPSocketService()
-    
+
     var body: some View {
         VStack(spacing: 20) {
             // Mood Title with accessibility
@@ -21,14 +21,14 @@ struct MoodView: View {
                 .fontWeight(.bold)
                 .moodColored(colorTransitionManager, as: .foreground)
                 .accessibilityLabel("Current mood: \(moodEngine.currentMood.rawValue)")
-            
+
             // Mood Intensity Indicator with accessibility
             CircularProgressView(progress: moodEngine.moodIntensity)
                 .frame(width: 150, height: 150)
                 .moodColored(colorTransitionManager, as: .accent)
                 .accessibilityLabel("Mood intensity: \(Int(moodEngine.moodIntensity * 100))%")
                 .accessibilityValue("\(moodEngine.moodIntensity)")
-            
+
             // Mood Selection Grid with dynamic layout
             LazyVGrid(columns: gridColumns, spacing: 16) {
                 ForEach(Asset.MoodColor.allCases, id: \.rawValue) { mood in
@@ -54,7 +54,7 @@ struct MoodView: View {
             }
         }
         .onChange(of: mcpService.moodState) { newState in
-            guard let newState = newState,
+            guard let newState,
                   let mood = Asset.MoodColor(rawValue: newState.type),
                   newState.active == true else { return }
             selectMood(mood)
@@ -66,13 +66,13 @@ struct MoodView: View {
             mcpService.disconnect()
         }
     }
-    
+
     // Dynamic grid columns based on size class
     private var gridColumns: [GridItem] {
         let count = UIDevice.current.userInterfaceIdiom == .pad ? 3 : 2
         return Array(repeating: GridItem(.flexible()), count: count)
     }
-    
+
     private func selectMood(_ mood: Asset.MoodColor) {
         // Haptic feedback
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -84,7 +84,7 @@ struct MoodView: View {
 
 struct CircularProgressView: View {
     let progress: Double
-    
+
     var body: some View {
         Circle()
             .trim(from: 0, to: progress)
@@ -99,7 +99,7 @@ private struct MoodCard: View {
     let isSelected: Bool
     let onSelect: () -> Void
     @State private var isAnimating = false
-    
+
     var body: some View {
         Button(action: onSelect) {
             VStack(spacing: 12) {
@@ -111,14 +111,13 @@ private struct MoodCard: View {
                         Circle()
                             .stroke(isSelected ? mood.color : Color.clear, lineWidth: 3)
                             .scaleEffect(isAnimating ? 1.2 : 1.0)
-                            .opacity(isAnimating ? 0 : 1)
-                    )
-                
+                            .opacity(isAnimating ? 0 : 1))
+
                 // Mood Label
                 Text(mood.name)
                     .font(.headline)
                     .foregroundColor(.primary)
-                
+
                 // Intensity Bar
                 GeometryReader { geometry in
                     Rectangle()
@@ -132,12 +131,10 @@ private struct MoodCard: View {
             .padding()
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(.secondarySystemBackground))
-            )
+                    .fill(Color(.secondarySystemBackground)))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(isSelected ? mood.color : Color.clear, lineWidth: 2)
-            )
+                    .stroke(isSelected ? mood.color : Color.clear, lineWidth: 2))
         }
         .buttonStyle(PlainButtonStyle())
         .onChange(of: isSelected) { newValue in
@@ -151,21 +148,21 @@ private struct MoodCard: View {
             }
         }
     }
-    
+
     private var moodIntensity: CGFloat {
         switch mood {
         case .energetic:
-            return 0.9
+            0.9
         case .relaxed:
-            return 0.6
+            0.6
         case .focused:
-            return 0.8
+            0.8
         case .upbeat:
-            return 0.85
+            0.85
         case .melancholic:
-            return 0.7
+            0.7
         case .balanced:
-            return 0.75
+            0.75
         }
     }
 }

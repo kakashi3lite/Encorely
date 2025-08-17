@@ -9,14 +9,14 @@
 import Foundation
 import SwiftUI
 import CoreML
-import Domain
+
 import Vision
 import CoreData
 import Combine
 import AVFoundation
 import Intents
 import os.log
-import SharedTypes
+
 
 // Mood enum is now defined in SharedTypes.swift
 // Here we add domain-specific mood analysis capabilities

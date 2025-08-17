@@ -6,24 +6,24 @@ let package = Package(
     name: "AIModule",
     platforms: [
         .iOS(.v15),
-        .macOS(.v12)
+        .macOS(.v12),
     ],
     products: [
         .library(
             name: "AIModule",
             targets: ["AIModule"]
-        )
+        ),
     ],
     dependencies: [
         .package(path: "../AudioAnalysisModule"),
-        .package(path: "../MusicKitModule")
+        .package(path: "../MusicKitModule"),
     ],
     targets: [
         .target(
             name: "AIModule",
             dependencies: [
                 "AudioAnalysisModule",
-                "MusicKitModule"
+                "MusicKitModule",
             ],
             path: "Sources"
         ),
@@ -31,6 +31,6 @@ let package = Package(
             name: "AIModuleTests",
             dependencies: ["AIModule"],
             path: "Tests"
-        )
+        ),
     ]
 )

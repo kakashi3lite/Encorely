@@ -6,7 +6,7 @@ let package = Package(
     name: "AudioAnalysisModule",
     platforms: [
         .iOS(.v15),
-        .macOS(.v11)
+        .macOS(.v11),
     ],
     products: [
         .library(
@@ -21,10 +21,10 @@ let package = Package(
         .target(
             name: "AudioAnalysisModule",
             dependencies: [
-                "AudioKit"
+                "AudioKit",
             ],
             linkerSettings: [
-                .linkedFramework("Accelerate")
+                .linkedFramework("Accelerate"),
             ]
         ),
         .testTarget(
