@@ -1,7 +1,7 @@
+import AVFoundation
 import CoreData
 import Intents
 import UIKit
-import AVFoundation
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -14,7 +14,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     lazy var persistentContainer: NSPersistentContainer = {
         let container = NSPersistentContainer(name: "AI_Mixtapes")
         container.loadPersistentStores { _, error in
-            if let error = error {
+            if let error {
                 fatalError("Unresolved Core Data error: \(error)")
             }
         }
@@ -55,6 +55,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_: UIApplication, handlerFor _: INIntent) -> Any? {
         siriService
     }
+
     // MARK: - Core Data
 
     // Placeholder Core Data save method (implement as needed)

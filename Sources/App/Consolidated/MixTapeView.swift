@@ -6,21 +6,20 @@
 //  Copyright © 2025 Swanand Tanavade. All rights reserved.
 //
 
-import SwiftUI
-import CoreData
 import AVKit
-
+import CoreData
+import SwiftUI
 
 /// Enhanced MixTapeView with AI features and error handling
 struct MixTapeView: View {
     // MARK: - Properties
-    
+
     @Environment(\.managedObjectContext) var moc
     @State var songs: [Song]
     @State var mixTape: MixTape
     @Binding var currentMixTapeName: String
     @Binding var currentMixTapeImage: URL
-    
+
     // Playback properties
     let queuePlayer: AVQueuePlayer
     let currentStatusObserver: PlayerStatusObserver
@@ -28,10 +27,10 @@ struct MixTapeView: View {
     @ObservedObject var currentPlayerItems: CurrentPlayerItems
     @ObservedObject var currentSongName: CurrentSongName
     @ObservedObject var isPlaying: IsPlaying
-    
+
     // AI service
     var aiService: AIIntegrationService
-    
+
     // Enhanced state
     @State private var showingDocsPicker = false
     @State private var showingSmartReorder = false
@@ -46,25 +45,25 @@ struct MixTapeView: View {
     @State private var showingVisualization = false
     @State private var scrollOffset: CGFloat = 0
     @State private var viewMode: ViewMode = .list
-    
+
     private let headerHeight: CGFloat = 200
-    
+
     enum ViewMode: String, CaseIterable {
         case list = "List"
-        case grid = "Grid" 
+        case grid = "Grid"
         case compact = "Compact"
-        
+
         var icon: String {
             switch self {
-            case .list: return "list.bullet"
-            case .grid: return "square.grid.2x2"
-            case .compact: return "list.dash"
+            case .list: "list.bullet"
+            case .grid: "square.grid.2x2"
+            case .compact: "list.dash"
             }
         }
     }
-    
+
     // MARK: - Body
-    
+
     var body: some View {
         ZStack(alignment: .bottom) {
             ScrollView {
@@ -73,32 +72,32 @@ struct MixTapeView: View {
                     GeometryReader { geometry in
                         let minY = geometry.frame(in: .global).minY
                         let progress = max(0, min(1, -minY / headerHeight))
-                        
+
                         headerView
-                            .frame(height: max(headerHeight - minY, headerHeight/2))
+                            .frame(height: max(headerHeight - minY, headerHeight / 2))
                             .blur(radius: progress * 10)
                             .opacity(1 - progress)
                     }
                     .frame(height: headerHeight)
-                    
+
                     // Error banner if needed
                     if let error = currentError {
                         ErrorBanner(error: error) {
                             retryAction?()
                         }
                     }
-                    
+
                     VStack(spacing: 24) {
                         // Mood tags section
                         moodTagsSection
                             .horizontalSlideTransition(isVisible: !getMoodTags().isEmpty)
-                        
+
                         // Action buttons
                         actionButtonsSection
-                        
+
                         // Songs list with view mode toggle
                         songListHeader
-                        
+
                         switch viewMode {
                         case .list:
                             listView
@@ -119,7 +118,7 @@ struct MixTapeView: View {
                 }
             }
             .edgesIgnoringSafeArea(.top)
-            
+
             // Bottom player bar
             if let currentSong = songs.first(where: { $0.title == currentSongName.wrappedValue }) {
                 VStack(spacing: 0) {
@@ -131,7 +130,7 @@ struct MixTapeView: View {
                             .animation(.linear, value: currentSong.title)
                     }
                     .frame(height: 2)
-                    
+
                     PlaybackControlsView(
                         song: currentSong,
                         isPlaying: isPlaying,
@@ -157,9 +156,9 @@ struct MixTapeView: View {
                     Button(action: { viewMode = .compact }) {
                         Label("Compact View", systemImage: "list.dash")
                     }
-                    
+
                     Divider()
-                    
+
                     Button(action: { showingAIAnalysis = true }) {
                         Label("AI Analysis", systemImage: "chart.bar.xaxis")
                     }
@@ -189,28 +188,28 @@ struct MixTapeView: View {
             )
         }
     }
-    
+
     // MARK: - Components
-    
+
     private var headerView: some View {
         ZStack {
             // Background gradient
             LinearGradient(
                 colors: [
                     aiService.moodEngine.currentMood.color.opacity(0.8),
-                    aiService.personalityEngine.currentPersonality.themeColor.opacity(0.8)
+                    aiService.personalityEngine.currentPersonality.themeColor.opacity(0.8),
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            
+
             // Content
             VStack(spacing: 16) {
                 Text(mixTape.wrappedTitle)
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .foregroundColor(.white)
-                
+
                 HStack(spacing: 16) {
                     Label("\(songs.count) songs", systemImage: "music.note")
                     Label(formatDuration(songs.reduce(0) { $0 + ($1.duration ?? 0) }), systemImage: "clock")
@@ -221,22 +220,22 @@ struct MixTapeView: View {
             .shadow(radius: 5)
         }
     }
-    
+
     private var moodTagsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Mood Tags")
                     .font(.headline)
-                
+
                 Spacer()
-                
-                Button(action: { }) {
+
+                Button(action: {}) {
                     Image(systemName: "plus.circle.fill")
                         .foregroundColor(aiService.moodEngine.currentMood.color)
                 }
             }
             .padding(.horizontal)
-            
+
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(getMoodTags(), id: \_.self) { tag in
@@ -257,7 +256,7 @@ struct MixTapeView: View {
             .padding(.horizontal)
         }
     }
-    
+
     private var actionButtonsSection: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 16) {
@@ -268,7 +267,7 @@ struct MixTapeView: View {
                     color: aiService.moodEngine.currentMood.color,
                     action: { showingSmartReorder = true }
                 )
-                
+
                 // Find Similar
                 ActionButton(
                     icon: "rectangle.stack.person.crop",
@@ -279,7 +278,7 @@ struct MixTapeView: View {
                         aiService.trackInteraction(type: "find_similar", mixtape: mixTape)
                     }
                 )
-                
+
                 // Add Songs
                 ActionButton(
                     icon: "plus.circle",
@@ -290,7 +289,7 @@ struct MixTapeView: View {
                         aiService.trackInteraction(type: "add_songs", mixtape: mixTape)
                     }
                 )
-                
+
                 // AI Analysis
                 ActionButton(
                     icon: "waveform.path",
@@ -301,7 +300,7 @@ struct MixTapeView: View {
                         aiService.trackInteraction(type: "view_analysis", mixtape: mixTape)
                     }
                 )
-                
+
                 // Visualize
                 ActionButton(
                     icon: "chart.bar.xaxis",
@@ -313,14 +312,14 @@ struct MixTapeView: View {
             .padding(.horizontal)
         }
     }
-    
+
     private var songListHeader: some View {
         HStack {
             Text("Songs")
                 .font(.headline)
-            
+
             Spacer()
-            
+
             Picker("View Mode", selection: $viewMode) {
                 Image(systemName: "list.bullet").tag(ViewMode.list)
                 Image(systemName: "square.grid.2x2").tag(ViewMode.grid)
@@ -331,7 +330,7 @@ struct MixTapeView: View {
         }
         .padding(.horizontal)
     }
-    
+
     private var listView: some View {
         VStack(spacing: 2) {
             ForEach(songs) { song in
@@ -356,7 +355,7 @@ struct MixTapeView: View {
         .cornerRadius(12)
         .padding(.horizontal)
     }
-    
+
     private var gridView: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
             ForEach(songs) { song in
@@ -372,7 +371,7 @@ struct MixTapeView: View {
         }
         .padding(.horizontal)
     }
-    
+
     private var compactView: some View {
         VStack(spacing: 1) {
             ForEach(songs) { song in
@@ -391,18 +390,18 @@ struct MixTapeView: View {
         .cornerRadius(12)
         .padding(.horizontal)
     }
-    
+
     // MARK: - Helper Functions
-    
+
     private func formatDuration(_ seconds: TimeInterval) -> String {
         let minutes = Int(seconds / 60)
         return "\(minutes) min"
     }
-    
+
     private func getMoodTags() -> [String] {
-        return mixTape.moodTagsArray
+        mixTape.moodTagsArray
     }
-    
+
     /// Action sheet for smart reordering options
     private func smartReorderActionSheet() -> ActionSheet {
         ActionSheet(
@@ -424,25 +423,25 @@ struct MixTapeView: View {
                 .default(Text("Emotional Arc: Build and Release")) {
                     smartReorderSongs(startMood: .melancholic, endMood: .relaxed)
                 },
-                .cancel()
+                .cancel(),
             ]
         )
     }
-    
+
     /// Reorder mixtape based on mood progression
     private func smartReorderSongs(startMood: Mood, endMood: Mood) {
         reorderInProgress = true
-        
+
         let success = mixTape.reorderSongsForMoodProgression(
             startMood: startMood,
             endMood: endMood,
             context: moc
         )
-        
+
         if success {
             // Update the songs array to reflect changes
             songs = mixTape.songsArray
-            
+
             // Track interaction
             aiService.trackInteraction(
                 type: "reordered_songs_\(startMood.rawValue)_to_\(endMood.rawValue)",
@@ -452,69 +451,69 @@ struct MixTapeView: View {
             currentError = .aiServiceUnavailable
             retryAction = { smartReorderSongs(startMood: startMood, endMood: endMood) }
         }
-        
+
         reorderInProgress = false
     }
-    
+
     /// Play a specific song from the mixtape
     private func playSong(_ song: Song) {
         do {
-            if self.currentMixTapeName != self.mixTape.wrappedTitle {
-                self.currentMixTapeName = self.mixTape.wrappedTitle
-                self.currentMixTapeImage = self.mixTape.wrappedUrl
+            if currentMixTapeName != mixTape.wrappedTitle {
+                currentMixTapeName = mixTape.wrappedTitle
+                currentMixTapeImage = mixTape.wrappedUrl
             }
-            
-            let newPlayerItems = createArrayOfPlayerItems(songs: self.songs)
-            if self.currentPlayerItems.items != newPlayerItems {
-                self.currentPlayerItems.items = newPlayerItems
+
+            let newPlayerItems = createArrayOfPlayerItems(songs: songs)
+            if currentPlayerItems.items != newPlayerItems {
+                currentPlayerItems.items = newPlayerItems
             }
-            
+
             // Different behavior based on selection and current state
-            if song == self.songs[0] && self.currentSongName.name == "Not Playing" {
-                loadPlayer(arrayOfPlayerItems: self.currentPlayerItems.items, player: self.queuePlayer)
-                
-            } else if song != self.songs[0] && self.currentSongName.name == "Not Playing" {
+            if song == songs[0], currentSongName.name == "Not Playing" {
+                loadPlayer(arrayOfPlayerItems: currentPlayerItems.items, player: queuePlayer)
+
+            } else if song != songs[0], currentSongName.name == "Not Playing" {
                 let index = Int(song.positionInTape)
-                let slicedArray = self.currentPlayerItems.items[index...self.songs.count - 1]
-                
-                loadPlayer(arrayOfPlayerItems: Array(slicedArray), player: self.queuePlayer)
-                
-            } else if song == self.songs[0] && self.currentSongName.name != "Not Playing" {
-                self.queuePlayer.pause()
-                self.queuePlayer.currentItem?.seek(to: CMTime.zero, completionHandler: nil)
-                
-                loadPlayer(arrayOfPlayerItems: self.currentPlayerItems.items, player: self.queuePlayer)
-                
-            } else if song != self.songs[0] && self.currentSongName.name != "Not Playing" {
-                self.queuePlayer.pause()
-                self.queuePlayer.currentItem?.seek(to: CMTime.zero, completionHandler: nil)
-                
+                let slicedArray = currentPlayerItems.items[index ... songs.count - 1]
+
+                loadPlayer(arrayOfPlayerItems: Array(slicedArray), player: queuePlayer)
+
+            } else if song == songs[0], currentSongName.name != "Not Playing" {
+                queuePlayer.pause()
+                queuePlayer.currentItem?.seek(to: CMTime.zero, completionHandler: nil)
+
+                loadPlayer(arrayOfPlayerItems: currentPlayerItems.items, player: queuePlayer)
+
+            } else if song != songs[0], currentSongName.name != "Not Playing" {
+                queuePlayer.pause()
+                queuePlayer.currentItem?.seek(to: CMTime.zero, completionHandler: nil)
+
                 let index = Int(song.positionInTape)
-                let slicedArray = self.currentPlayerItems.items[index...self.songs.count - 1]
-                loadPlayer(arrayOfPlayerItems: Array(slicedArray), player: self.queuePlayer)
+                let slicedArray = currentPlayerItems.items[index ... songs.count - 1]
+                loadPlayer(arrayOfPlayerItems: Array(slicedArray), player: queuePlayer)
             }
-            
+
             // Play and track interaction
-            self.queuePlayer.play()
-            
+            queuePlayer.play()
+
             // Update song play count
             song.trackPlay()
             mixTape.trackPlay()
-            
+
             try moc.save()
-            
+
             // Track interaction
             aiService.trackInteraction(type: "play_song", mixtape: mixTape)
-            
+
             // Analyze audio for mood (simulated)
             aiService.detectMoodFromCurrentAudio(player: queuePlayer)
-            
+
         } catch {
             currentError = AppError.audioLoadFailed(error)
             retryAction = { playSong(song) }
         }
     }
-    
+
     private func songContextMenu(for song: Song) -> some View {
         Group {
             Button(action: {
@@ -523,15 +522,15 @@ struct MixTapeView: View {
             }) {
                 Label("Analyze with AI", systemImage: "waveform.path")
             }
-            
+
             Button(action: {
                 // Add to another mixtape
             }) {
                 Label("Add to Mixtape", systemImage: "plus.rectangle.on.rectangle")
             }
-            
+
             Divider()
-            
+
             Button(role: .destructive, action: {
                 deleteSongs(indexSet: IndexSet([songs.firstIndex(of: song)!]))
             }) {
@@ -547,14 +546,14 @@ struct MoodTagEditorView: View {
     var mixtape: MixTape
     var moc: NSManagedObjectContext
     @State private var selectedMoods: [Mood] = []
-    
+
     var body: some View {
         NavigationView {
             VStack(spacing: 20) {
                 Text("Select moods that match this mixtape's vibe")
                     .font(.headline)
                     .padding(.top)
-                
+
                 // Grid of mood options
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 16) {
                     ForEach(Mood.allCases, id: \.self) { mood in
@@ -568,9 +567,9 @@ struct MoodTagEditorView: View {
                     }
                 }
                 .padding()
-                
+
                 Spacer()
-                
+
                 // Apply button
                 Button(action: {
                     saveMoodTags()
@@ -596,7 +595,7 @@ struct MoodTagEditorView: View {
             }
         }
     }
-    
+
     /// Toggle a mood in the selection
     private func toggleMood(_ mood: Mood) {
         if let index = selectedMoods.firstIndex(of: mood) {
@@ -605,24 +604,24 @@ struct MoodTagEditorView: View {
             selectedMoods.append(mood)
         }
     }
-    
+
     /// Load existing mood tags
     private func loadExistingTags() {
         let existingTags = mixtape.moodTagsArray
-        
+
         selectedMoods = Mood.allCases.filter { mood in
             existingTags.contains(mood.rawValue)
         }
     }
-    
+
     /// Save selected mood tags
     private func saveMoodTags() {
         // Convert selected moods to strings
-        let moodStrings = selectedMoods.map { $0.rawValue }
-        
+        let moodStrings = selectedMoods.map(\.rawValue)
+
         // Update mixtape
         mixtape.moodTags = moodStrings.joined(separator: ", ")
-        
+
         // Save changes
         do {
             try moc.save()
@@ -637,7 +636,7 @@ struct MoodTagToggle: View {
     let mood: Mood
     let isSelected: Bool
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
@@ -645,24 +644,24 @@ struct MoodTagToggle: View {
                     Circle()
                         .fill(isSelected ? mood.color : Color.gray.opacity(0.1))
                         .frame(width: 36, height: 36)
-                    
+
                     Image(systemName: mood.systemIcon)
                         .foregroundColor(isSelected ? .white : mood.color)
                 }
-                
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(mood.rawValue)
                         .font(.headline)
                         .foregroundColor(isSelected ? mood.color : .primary)
-                    
+
                     Text(getMoodDescription(mood))
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
-                
+
                 Spacer()
-                
+
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(mood.color)
@@ -678,18 +677,18 @@ struct MoodTagToggle: View {
         }
         .buttonStyle(PlainButtonStyle())
     }
-    
+
     /// Get a short description for a mood
     private func getMoodDescription(_ mood: Mood) -> String {
         switch mood {
-        case .energetic: return "Upbeat, vibrant tracks"
-        case .relaxed: return "Calm, peaceful songs"
-        case .happy: return "Joyful, positive tunes"
-        case .melancholic: return "Reflective, emotional pieces"
-        case .focused: return "Concentration-enhancing music"
-        case .romantic: return "Love-themed, intimate songs"
-        case .angry: return "Intense, powerful tracks"
-        case .neutral: return "Balanced, versatile music"
+        case .energetic: "Upbeat, vibrant tracks"
+        case .relaxed: "Calm, peaceful songs"
+        case .happy: "Joyful, positive tunes"
+        case .melancholic: "Reflective, emotional pieces"
+        case .focused: "Concentration-enhancing music"
+        case .romantic: "Love-themed, intimate songs"
+        case .angry: "Intense, powerful tracks"
+        case .neutral: "Balanced, versatile music"
         }
     }
 }
@@ -699,15 +698,15 @@ struct SimilarMixtapesView: View {
     @Environment(\.presentationMode) var presentationMode
     @Environment(\.managedObjectContext) var moc
     @FetchRequest(entity: MixTape.entity(), sortDescriptors: [
-        NSSortDescriptor(keyPath: \MixTape.title, ascending: true)
+        NSSortDescriptor(keyPath: \MixTape.title, ascending: true),
     ]) var allMixTapes: FetchedResults<MixTape>
-    
+
     var originalMixtape: MixTape
     var aiService: AIIntegrationService
-    
+
     @State private var similarityScores: [MixTape: Float] = [:]
     @State private var isLoading = true
-    
+
     var body: some View {
         NavigationView {
             VStack {
@@ -736,24 +735,24 @@ struct SimilarMixtapesView: View {
                                                 .fill(Color.gray.opacity(0.2))
                                                 .frame(width: 50, height: 50)
                                                 .cornerRadius(6)
-                                            
+
                                             Image(systemName: "music.note")
                                                 .font(.system(size: 20))
                                                 .foregroundColor(.gray)
                                         }
                                     }
-                                    
+
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(mixtape.wrappedTitle)
                                             .font(.headline)
-                                        
+
                                         Text("\(mixtape.numberOfSongs) songs")
                                             .font(.subheadline)
                                             .foregroundColor(.secondary)
                                     }
-                                    
+
                                     Spacer()
-                                    
+
                                     // Similarity percentage
                                     if let score = similarityScores[mixtape] {
                                         Text("\(Int(score * 100))% similar")
@@ -775,74 +774,74 @@ struct SimilarMixtapesView: View {
             }
         }
     }
-    
+
     /// List of filtered mixtapes (similar ones only)
     var filteredMixtapes: [MixTape] {
         let array = allMixTapes.filter { mixtape in
             // Don't include the original mixtape
             guard mixtape != originalMixtape else { return false }
-            
+
             // Only include mixtapes with similarity score > 0.3
             if let score = similarityScores[mixtape], score > 0.3 {
                 return true
             }
             return false
         }
-        
+
         // Sort by similarity score (descending)
-        return array.sorted { 
+        return array.sorted {
             similarityScores[$0] ?? 0 > similarityScores[$1] ?? 0
         }
     }
-    
+
     /// Calculate similarity between mixtapes
     private func calculateSimilarity() {
         // Reset scores
         similarityScores = [:]
-        
+
         // Set a small delay to show loading indicator
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            for mixtape in self.allMixTapes {
+            for mixtape in allMixTapes {
                 // Skip the original mixtape
-                if mixtape == self.originalMixtape { continue }
-                
+                if mixtape == originalMixtape { continue }
+
                 // Calculate similarity score
-                let score = self.calculateSimilarityScore(mixtape)
-                self.similarityScores[mixtape] = score
+                let score = calculateSimilarityScore(mixtape)
+                similarityScores[mixtape] = score
             }
-            
+
             // Finish loading
-            self.isLoading = false
+            isLoading = false
         }
     }
-    
+
     /// Calculate similarity score between original mixtape and comparison mixtape
     private func calculateSimilarityScore(_ comparison: MixTape) -> Float {
         var score: Float = 0.0
-        
+
         // Compare mood tags (highest impact)
         let originalTags = originalMixtape.moodTagsArray
         let comparisonTags = comparison.moodTagsArray
-        
+
         let commonTags = Set(originalTags).intersection(Set(comparisonTags))
-        if !originalTags.isEmpty && !comparisonTags.isEmpty {
+        if !originalTags.isEmpty, !comparisonTags.isEmpty {
             score += Float(commonTags.count) / Float(max(originalTags.count, comparisonTags.count)) * 0.5
         }
-        
+
         // Compare song names (medium impact)
         let originalSongNames = originalMixtape.songsArray.map { $0.wrappedName.lowercased() }
         let comparisonSongNames = comparison.songsArray.map { $0.wrappedName.lowercased() }
-        
+
         let commonWords = originalSongNames.joined(separator: " ").components(separatedBy: .whitespacesAndNewlines)
             .filter { word in
                 word.count > 3 && comparisonSongNames.joined(separator: " ").contains(word)
             }
-        
+
         score += min(Float(commonWords.count) * 0.05, 0.3)
-        
+
         // Add randomization for demonstration
-        score += Float.random(in: 0...0.2)
-        
+        score += Float.random(in: 0 ... 0.2)
+
         // Cap at 1.0
         return min(score, 1.0)
     }
@@ -853,7 +852,7 @@ struct ActionButton: View {
     let title: String
     let color: Color
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 8) {
@@ -861,12 +860,12 @@ struct ActionButton: View {
                     Circle()
                         .fill(color.opacity(0.1))
                         .frame(width: 50, height: 50)
-                    
+
                     Image(systemName: icon)
                         .font(.system(size: 22))
                         .foregroundColor(color)
                 }
-                
+
                 Text(title)
                     .font(.caption)
                     .fontWeight(.medium)
@@ -880,7 +879,7 @@ struct ActionButton: View {
 struct MoodBadge: View {
     let mood: Mood
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
@@ -896,7 +895,7 @@ struct MoodBadge: View {
                 ZStack {
                     Capsule()
                         .fill(mood.color.opacity(0.15))
-                    
+
                     Capsule()
                         .strokeBorder(mood.color.opacity(0.3), lineWidth: 1)
                 }
@@ -920,7 +919,7 @@ struct SongRowView: View {
     let isPlaying: Bool
     let isSelected: Bool
     let onTap: () -> Void
-    
+
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
@@ -930,7 +929,7 @@ struct SongRowView: View {
                         Circle()
                             .fill(Color.accentColor.opacity(0.1))
                             .frame(width: 36, height: 36)
-                        
+
                         Image(systemName: "music.note")
                             .font(.system(size: 14))
                             .foregroundColor(.accentColor)
@@ -938,26 +937,26 @@ struct SongRowView: View {
                         Circle()
                             .fill(Color(.systemGray6))
                             .frame(width: 36, height: 36)
-                        
+
                         Text("\(songs.firstIndex(of: song)! + 1)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
-                
+
                 // Song info
                 VStack(alignment: .leading, spacing: 4) {
                     Text(song.wrappedName)
                         .font(.system(.body, design: .rounded))
                         .fontWeight(.medium)
-                    
+
                     Text(song.wrappedArtist)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 // Duration and mood
                 HStack(spacing: 12) {
                     if let mood = song.mood {
@@ -965,7 +964,7 @@ struct SongRowView: View {
                             .fill(Mood(rawValue: mood)?.color ?? .gray)
                             .frame(width: 8, height: 8)
                     }
-                    
+
                     Text(song.durationString)
                         .font(.caption)
                         .foregroundColor(.secondary)

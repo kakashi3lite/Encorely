@@ -401,7 +401,7 @@ class PerformanceValidator {
         logger.info("Latency: \(results.latencyResult.passed ? "PASSED" : "FAILED")")
         logger
             .info(
-                "  Average: \(String(format: "%.1f", results.latencyResult.averageLatencyMs))ms (target: <\(self.maxLatencyMs)ms)"
+                "  Average: \(String(format: "%.1f", results.latencyResult.averageLatencyMs))ms (target: <\(maxLatencyMs)ms)"
             )
         logger.info("  Maximum: \(String(format: "%.1f", results.latencyResult.maxLatencyMs))ms")
 
@@ -409,17 +409,20 @@ class PerformanceValidator {
         logger.info("Memory: \(results.memoryResult.passed ? "PASSED" : "FAILED")")
         logger
             .info(
-                "  Peak Usage: \(String(format: "%.1f", results.memoryResult.peakMemoryMB))MB (target: <\(self.maxMemoryMB)MB)")
+                "  Peak Usage: \(String(format: "%.1f", results.memoryResult.peakMemoryMB))MB (target: <\(maxMemoryMB)MB)"
+            )
         logger.info("  Memory Increase: \(String(format: "%.1f", results.memoryResult.memoryIncreaseMB))MB")
 
         // Accuracy Results
         logger.info("Accuracy: \(results.accuracyResult.passed ? "PASSED" : "FAILED")")
         logger
             .info(
-                "  Mood Detection: \(String(format: "%.1f", results.accuracyResult.accuracy * 100))% (target: >\(Self.minMoodAccuracy * 100)%)")
+                "  Mood Detection: \(String(format: "%.1f", results.accuracyResult.accuracy * 100))% (target: >\(Self.minMoodAccuracy * 100)%)"
+            )
         logger
             .info(
-                "  Correct Predictions: \(results.accuracyResult.correctPredictions)/\(results.accuracyResult.totalPredictions)")
+                "  Correct Predictions: \(results.accuracyResult.correctPredictions)/\(results.accuracyResult.totalPredictions)"
+            )
 
         // Overall Result
         logger.info("Overall: \(results.overallPassed ? "PASSED" : "FAILED")")
@@ -429,7 +432,8 @@ class PerformanceValidator {
             let status = result.isCorrect ? "✓" : "✗"
             logger
                 .debug(
-                    "\(status) Expected: \(result.expectedMood.rawValue), Got: \(result.predictedMood.rawValue), Confidence: \(String(format: "%.2f", result.confidence))")
+                    "\(status) Expected: \(result.expectedMood.rawValue), Got: \(result.predictedMood.rawValue), Confidence: \(String(format: "%.2f", result.confidence))"
+                )
         }
     }
 }

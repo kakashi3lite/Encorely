@@ -8,8 +8,8 @@
 
 import AppKit
 import CoreData
-import Foundation
 import Domain
+import Foundation
 import SharedTypes
 
 // Import the CoreData class definitions
