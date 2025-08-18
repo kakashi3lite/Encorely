@@ -1,0 +1,14 @@
+{
+  "swift.path.swiftlint": "swiftlint",
+  "editor.defaultFormatter": "jinmingjian.sde",
+  "editor.formatOnSave": true,
+  "files.exclude": {
+    "**/.build": true
+  },
+  "search.exclude": {
+    "**/.build": true
+  },
+  "lldb.displayFormat": "auto",
+  "lldb.showDisassembly": "never",
+  "lldb.suppressMissingSourceWarning": true
+}

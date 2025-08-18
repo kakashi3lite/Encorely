@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Tests (AIMixtapes)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/.build/debug/AIMixtapesTests.xctest/Contents/MacOS/AIMixtapesTests",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build (debug)",
+      "sourceLanguages": ["swift"]
+    },
+    {
+      "name": "Debug Tests (AudioKitEncorely)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/.build/debug/AudioKitEncorelyTests.xctest/Contents/MacOS/AudioKitEncorelyTests",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build (debug)",
+      "sourceLanguages": ["swift"]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "vadimcn.vscode-lldb",
+    "llvm-vs-code-extensions.lldb-dap",
+    "jinmingjian.sde",
+    "fireplusteam.vscode-ios",
+    "diemasmichiels.emulate",
+    "ryanluker.vscode-coverage-gutters"
+  ]
+}

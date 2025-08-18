@@ -1,0 +1,29 @@
+{
+    "testAudio": {
+        "happy_song.mp3": {
+            "mood": "happy",
+            "energy": 0.8,
+            "valence": 0.9
+        },
+        "sad_song.mp3": {
+            "mood": "melancholic",
+            "energy": 0.3,
+            "valence": 0.2
+        },
+        "energetic_song.mp3": {
+            "mood": "energetic",
+            "energy": 0.9,
+            "valence": 0.8
+        }
+    },
+    "testImages": {
+        "test_cover.jpg": {
+            "type": "albumCover",
+            "dimensions": "512x512"
+        },
+        "test_waveform.png": {
+            "type": "waveform",
+            "dimensions": "800x200"
+        }
+    }
+}

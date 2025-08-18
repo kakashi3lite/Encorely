@@ -1,0 +1,63 @@
+{
+  "$schema": "vscode://schemas/tasks",
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "SPM Resolve",
+      "type": "shell",
+      "command": "swift package resolve",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Build (debug)",
+      "type": "shell",
+      "command": "swift build -c debug",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Build (release)",
+      "type": "shell",
+      "command": "swift build -c release",
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Test",
+      "type": "shell",
+      "command": "swift test --parallel",
+      "group": "test",
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Generate Code Coverage (lcov)",
+      "type": "shell",
+      "command": "swift test --enable-code-coverage && llvm-cov export -format=lcov .build/debug/EncorelyPackageTests.xctest/Contents/MacOS/EncorelyPackageTests -instr-profile .build/debug/codecov/default.profdata > coverage.lcov",
+      "group": "test",
+      "problemMatcher": []
+    }
+    ,{
+      "label": "SwiftLint",
+      "type": "shell",
+      "command": "swiftlint --quiet",
+      "problemMatcher": []
+    }
+    ,{
+      "label": "SwiftFormat",
+      "type": "shell",
+      "command": "swift format --in-place --recursive Sources Tests",
+      "problemMatcher": []
+    }
+    ,{
+      "label": "(Optional) Build iOS Framework (debug)",
+      "type": "shell",
+      "command": "if [ -d 'Encorely.xcodeproj' ] || [ -d 'Encorely.xcworkspace' ]; then xcodebuild -scheme Encorely -configuration Debug -sdk iphonesimulator build; else echo 'No Xcode project/workspace yet'; fi",
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}
