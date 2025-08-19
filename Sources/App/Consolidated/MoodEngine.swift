@@ -850,6 +850,40 @@ public final class MoodEngine: ObservableObject {
     }
 }
 
+// MARK: - External Mood Hints
+extension MoodEngine {
+    /// Registers an external contextual hint nudging the current mood toward a target.
+    /// - Parameters:
+    ///   - mood: Target mood to bias toward.
+    ///   - weight: Strength of the hint (0-1). Values are clamped. Multiple hints accumulate and decay.
+    /// The hint gently shifts internal mood distribution rather than forcing an immediate switch.
+    func registerExternalMoodHint(_ mood: Mood, weight: Float) {
+        let clamped = max(0, min(1, weight))
+        guard clamped > 0 else { return }
+        // Adjust distribution
+        let current = moodDistribution[mood] ?? 0
+        moodDistribution[mood] = min(1, current + clamped * 0.1)
+        // Slightly decay others
+        for key in moodDistribution.keys where key != mood {
+            moodDistribution[key] = max(0, (moodDistribution[key] ?? 0) * 0.98)
+        }
+        // Re-normalize
+        let total = moodDistribution.values.reduce(0, +)
+        if total > 0 {
+            for key in moodDistribution.keys {
+                moodDistribution[key] = (moodDistribution[key] ?? 0) / total
+            }
+        }
+        // Opportunistically update current mood if confidence low or hint strong
+        if moodConfidence < 0.5 || clamped > 0.3 {
+            if currentMood != mood {
+                currentMood = mood
+                moodConfidence = min(1, max(moodConfidence, clamped * 0.8 + 0.2))
+            }
+        }
+    }
+}
+
 // MARK: - Supporting Types
 
 /// Enum representing time of day context
