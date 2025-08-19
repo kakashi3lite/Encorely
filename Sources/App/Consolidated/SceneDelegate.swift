@@ -39,7 +39,13 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             // `application:configurationForConnectingSceneSession` instead).
 
             // Get the managed object context from the shared persistent container.
-            let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
+            guard
+                let appDelegate = UIApplication.shared.delegate as? AppDelegate
+            else {
+                assertionFailure("Unexpected app delegate type")
+                return
+            }
+            let context = appDelegate.persistentContainer.viewContext
 
             // Initialize AI services
             aiService = AIIntegrationService(context: context)

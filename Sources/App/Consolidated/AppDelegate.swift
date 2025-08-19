@@ -7,9 +7,9 @@ import UIKit
 class AppDelegate: UIResponder, UIApplicationDelegate {
     // MARK: - Properties
 
-    var aiService: AIIntegrationService!
-    var player: AVQueuePlayer!
-    var siriService: SiriIntegrationService!
+        private(set) var aiService: AIIntegrationService?
+        private(set) var player: AVQueuePlayer?
+        private(set) var siriService: SiriIntegrationService?
 
     lazy var persistentContainer: NSPersistentContainer = {
         let container = NSPersistentContainer(name: "AI_Mixtapes")
@@ -29,13 +29,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
         // Initialize services
-        player = AVQueuePlayer()
-        aiService = AIIntegrationService(context: persistentContainer.viewContext)
-        siriService = SiriIntegrationService(
-            aiService: aiService,
-            player: player,
-            context: persistentContainer.viewContext
-        )
+        let context = persistentContainer.viewContext
+        let player = AVQueuePlayer()
+        let aiService = AIIntegrationService(context: context)
+        let siri = SiriIntegrationService(aiService: aiService, moc: context, player: player)
+        self.player = player
+        self.aiService = aiService
+        siriService = siri
 
         // Request Siri authorization
         INPreferences.requestSiriAuthorization { [weak self] status in

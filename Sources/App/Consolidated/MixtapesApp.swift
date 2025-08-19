@@ -28,7 +28,8 @@ struct MixtapesApp: App {
 
     var body: some Scene {
         WindowGroup {
-            let aiService = Resolver.resolve(AIServiceCoordinating.self) as! AIIntegrationService
+            let resolved = Resolver.resolve(AIServiceCoordinating.self)
+            let aiService = resolved as? AIIntegrationService ?? AIIntegrationService(context: persistenceController.container.viewContext)
             ContentView(
                 queuePlayer: player,
                 playerItemObserver: PlayerItemObserver(),
