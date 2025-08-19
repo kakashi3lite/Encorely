@@ -65,3 +65,6 @@ fastlane/test_output
 .build/
 .swiftpm/
 .DS_Store
+
+# Lint baseline temp artifacts
+.swiftlint-baseline.temp
