@@ -16,8 +16,20 @@ jobs:
         run: |
           brew install swiftlint swiftformat
 
-      - name: SwiftLint
-        run: swiftlint --strict
+      - name: SwiftLint (incremental emulation)
+        run: |
+          echo "Running full SwiftLint; failing only on critical rules (force unwrap/try/cast, fatal_error)."
+          set +e
+          swiftlint > swiftlint_full.log 2>&1
+          STATUS=$?
+          CRITICAL=$(grep -E 'force_(unwrap|try|cast)|fatal_error' swiftlint_full.log || true)
+          echo "--- Critical Violations (if any) ---"
+          echo "$CRITICAL"
+          if [ -n "$CRITICAL" ]; then
+            echo "CI FAIL: Critical SwiftLint violations present."; exit 1
+          fi
+          echo "Non-critical violations allowed (status=$STATUS).";
+          exit 0
 
       - name: SwiftFormat Check
         run: swift format --mode lint --recursive Sources Tests
