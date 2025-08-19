@@ -1,5 +1,6 @@
 import AVKit
 import SwiftUI
+import DesignSystem
 
 struct PlayerView: View {
     // MARK: - Properties
@@ -45,18 +46,24 @@ struct PlayerView: View {
                 // Album art / visualization
                 ZStack {
                     // Background gradient
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    aiService.moodEngine.currentMood.color.opacity(0.8),
-                                    aiService.personalityEngine.currentPersonality.themeColor.opacity(0.8),
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                    GlassCard {
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        aiService.moodEngine.currentMood.color.opacity(0.6),
+                                        aiService.personalityEngine.currentPersonality.themeColor.opacity(0.6),
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
                             )
-                        )
-                        .frame(height: 300)
+                            .frame(height: 300)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(aiService.moodEngine.currentMood.color.opacity(0.25), lineWidth: 1)
+                            )
+                    }
 
                     // Visualization orbs
                     ForEach(0 ..< 3) { i in
@@ -77,14 +84,17 @@ struct PlayerView: View {
                 .accessibilityHidden(true) // Hide visualization from VoiceOver
 
                 // Song info
-                VStack(spacing: 8) {
-                    Text(currentSongName.wrappedValue ?? "Not Playing")
-                        .font(.title2)
-                        .fontWeight(.semibold)
+                GlassCard {
+                    VStack(spacing: 8) {
+                        Text(currentSongName.wrappedValue ?? "Not Playing")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(NoirPalette.onGlass)
 
-                    Text(currentMixTapeName)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        Text(currentMixTapeName)
+                            .font(.subheadline)
+                            .foregroundColor(NoirPalette.subduedText)
+                    }
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Now playing")
@@ -92,26 +102,29 @@ struct PlayerView: View {
                 .accessibilityAddTraits(.updatesFrequently)
 
                 // Progress bar
-                VStack(spacing: 8) {
-                    Slider(value: $progress)
-                        .accentColor(aiService.moodEngine.currentMood.color)
+                GlassCard {
+                    VStack(spacing: 8) {
+                        Slider(value: $progress)
+                            .tint(aiService.moodEngine.currentMood.color)
                         .accessibilityLabel("Playback progress")
                         .accessibilityValue("\(currentTime) of \(totalTime)")
                         .accessibilityHint("Adjust to seek through the song")
 
-                    HStack {
-                        Text(currentTime)
-                            .accessibilityHidden(true)
-                        Spacer()
-                        Text(totalTime)
-                            .accessibilityHidden(true)
+                        HStack {
+                            Text(currentTime)
+                                .accessibilityHidden(true)
+                            Spacer()
+                            Text(totalTime)
+                                .accessibilityHidden(true)
+                        }
+                        .font(.caption)
+                        .foregroundColor(NoirPalette.subduedText)
                     }
-                    .font(.caption)
-                    .foregroundColor(.secondary)
                 }
 
                 // Player controls
-                HStack(spacing: 40) {
+                GlassCard {
+                    HStack(spacing: 40) {
                     // Previous
                     Button(action: previousTrack) {
                         Image(systemName: "backward.fill")
@@ -124,7 +137,7 @@ struct PlayerView: View {
                     Button(action: playPause) {
                         Image(systemName: isPlaying.wrappedValue ? "pause.circle.fill" : "play.circle.fill")
                             .font(.system(size: 64))
-                            .foregroundColor(aiService.moodEngine.currentMood.color)
+                            .foregroundStyle(LinearGradient(colors: [aiService.moodEngine.currentMood.color, aiService.personalityEngine.currentPersonality.themeColor], startPoint: .topLeading, endPoint: .bottomTrailing))
                     }
                     .accessibilityLabel(isPlaying.wrappedValue ? "Pause" : "Play")
                     .accessibilityHint(isPlaying.wrappedValue ? "Pause current song" : "Play current song")
@@ -137,14 +150,16 @@ struct PlayerView: View {
                     }
                     .accessibilityLabel("Next track")
                     .accessibilityHint("Play next song")
+                    }
                 }
 
                 // Volume and playlist controls
-                HStack(spacing: 20) {
+                GlassCard {
+                    HStack(spacing: 20) {
                     // Volume slider
                     HStack {
                         Image(systemName: "speaker.fill")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(NoirPalette.subduedText)
                             .accessibilityHidden(true)
 
                         Slider(value: $volume)
@@ -153,14 +168,14 @@ struct PlayerView: View {
                             .accessibilityHint("Adjust volume")
 
                         Image(systemName: "speaker.wave.2.fill")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(NoirPalette.subduedText)
                             .accessibilityHidden(true)
                     }
 
                     // Shuffle
                     Button(action: toggleShuffle) {
                         Image(systemName: "shuffle")
-                            .foregroundColor(isShuffleOn ? aiService.moodEngine.currentMood.color : .secondary)
+                            .foregroundColor(isShuffleOn ? aiService.moodEngine.currentMood.color : NoirPalette.subduedText)
                     }
                     .accessibilityLabel("Shuffle")
                     .accessibilityValue(isShuffleOn ? "On" : "Off")
@@ -170,14 +185,16 @@ struct PlayerView: View {
                     // Repeat
                     Button(action: cycleRepeatMode) {
                         Image(systemName: repeatMode.icon)
-                            .foregroundColor(repeatMode != .off ? aiService.moodEngine.currentMood.color : .secondary)
+                            .foregroundColor(repeatMode != .off ? aiService.moodEngine.currentMood.color : NoirPalette.subduedText)
                     }
                     .accessibilityLabel("Repeat mode")
                     .accessibilityValue(repeatModeDescription)
                     .accessibilityHint("Change repeat mode")
+                    }
                 }
             }
             .padding()
+            .background(NoirPalette.background.ignoresSafeArea())
         }
     }
 
