@@ -9,6 +9,7 @@
 import AVKit
 import CoreData
 import SwiftUI
+import DesignSystem
 
 /// Enhanced MixTapeView with AI features and error handling
 struct MixTapeView: View {
@@ -110,14 +111,15 @@ struct MixTapeView: View {
                     .padding(.top)
                     .background(
                         RoundedRectangle(cornerRadius: 20)
-                            .fill(Color(.systemBackground))
-                            .shadow(color: Color.black.opacity(0.1), radius: 10, y: -5)
+                            .fill(NoirPalette.background.opacity(0.6))
+                            .noirGlass()
                             .edgesIgnoringSafeArea(.bottom)
                     )
                     .offset(y: -20)
                 }
             }
             .edgesIgnoringSafeArea(.top)
+            .background(NoirPalette.background.ignoresSafeArea())
 
             // Bottom player bar
             if let currentSong = songs.first(where: { $0.title == currentSongName.wrappedValue }) {
@@ -142,7 +144,7 @@ struct MixTapeView: View {
                 .transition(.move(edge: .bottom))
             }
         }
-        .navigationBarTitle("")
+    .navigationBarTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -222,30 +224,34 @@ struct MixTapeView: View {
     }
 
     private var moodTagsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Mood Tags")
-                    .font(.headline)
+        GlassCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Mood Tags")
+                        .font(.headline)
+                        .foregroundColor(NoirPalette.onGlass)
 
-                Spacer()
+                    Spacer()
 
-                Button(action: {}) {
-                    Image(systemName: "plus.circle.fill")
-                        .foregroundColor(aiService.moodEngine.currentMood.color)
+                    Button(action: {}) {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundColor(aiService.moodEngine.currentMood.color)
+                    }
+                    .buttonStyle(GlassButtonStyle())
                 }
-            }
-            .padding(.horizontal)
+                .padding(.horizontal, 4)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(getMoodTags(), id: \_.self) { tag in
-                        if let mood = Mood(rawValue: tag) {
-                            MoodBadge(mood: mood) {
-                                withAnimation {
-                                    if let index = selectedMoodTags.firstIndex(of: tag) {
-                                        selectedMoodTags.remove(at: index)
-                                    } else {
-                                        selectedMoodTags.append(tag)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(getMoodTags(), id: _.self) { tag in
+                            if let mood = Mood(rawValue: tag) {
+                                MoodBadge(mood: mood) {
+                                    withAnimation {
+                                        if let index = selectedMoodTags.firstIndex(of: tag) {
+                                            selectedMoodTags.remove(at: index)
+                                        } else {
+                                            selectedMoodTags.append(tag)
+                                        }
                                     }
                                 }
                             }
@@ -253,63 +259,64 @@ struct MixTapeView: View {
                     }
                 }
             }
-            .padding(.horizontal)
         }
     }
 
     private var actionButtonsSection: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 16) {
-                // Smart Reorder
-                ActionButton(
-                    icon: "wand.and.stars",
-                    title: "Smart Reorder",
-                    color: aiService.moodEngine.currentMood.color,
-                    action: { showingSmartReorder = true }
-                )
+        GlassCard {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 16) {
+                    // Smart Reorder
+                    ActionButton(
+                        icon: "wand.and.stars",
+                        title: "Smart Reorder",
+                        color: aiService.moodEngine.currentMood.color,
+                        action: { showingSmartReorder = true }
+                    )
 
-                // Find Similar
-                ActionButton(
-                    icon: "rectangle.stack.person.crop",
-                    title: "Find Similar",
-                    color: aiService.personalityEngine.currentPersonality.themeColor,
-                    action: {
-                        showingSimilarMixtapes = true
-                        aiService.trackInteraction(type: "find_similar", mixtape: mixTape)
-                    }
-                )
+                    // Find Similar
+                    ActionButton(
+                        icon: "rectangle.stack.person.crop",
+                        title: "Find Similar",
+                        color: aiService.personalityEngine.currentPersonality.themeColor,
+                        action: {
+                            showingSimilarMixtapes = true
+                            aiService.trackInteraction(type: "find_similar", mixtape: mixTape)
+                        }
+                    )
 
-                // Add Songs
-                ActionButton(
-                    icon: "plus.circle",
-                    title: "Add Songs",
-                    color: .blue,
-                    action: {
-                        showingDocsPicker = true
-                        aiService.trackInteraction(type: "add_songs", mixtape: mixTape)
-                    }
-                )
+                    // Add Songs
+                    ActionButton(
+                        icon: "plus.circle",
+                        title: "Add Songs",
+                        color: NoirPalette.accent,
+                        action: {
+                            showingDocsPicker = true
+                            aiService.trackInteraction(type: "add_songs", mixtape: mixTape)
+                        }
+                    )
 
-                // AI Analysis
-                ActionButton(
-                    icon: "waveform.path",
-                    title: "AI Analysis",
-                    color: .purple,
-                    action: {
-                        showingAIAnalysis = true
-                        aiService.trackInteraction(type: "view_analysis", mixtape: mixTape)
-                    }
-                )
+                    // AI Analysis
+                    ActionButton(
+                        icon: "waveform.path",
+                        title: "AI Analysis",
+                        color: .purple,
+                        action: {
+                            showingAIAnalysis = true
+                            aiService.trackInteraction(type: "view_analysis", mixtape: mixTape)
+                        }
+                    )
 
-                // Visualize
-                ActionButton(
-                    icon: "chart.bar.xaxis",
-                    title: "Visualize",
-                    color: .orange,
-                    action: { showingVisualization = true }
-                )
+                    // Visualize
+                    ActionButton(
+                        icon: "chart.bar.xaxis",
+                        title: "Visualize",
+                        color: .orange,
+                        action: { showingVisualization = true }
+                    )
+                }
+                .padding(.horizontal, 4)
             }
-            .padding(.horizontal)
         }
     }
 
