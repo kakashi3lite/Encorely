@@ -13,7 +13,9 @@ let package = Package(
         .library(name: "AudioKitEncorely", targets: ["AudioKitEncorely"]),
         .library(name: "AIMixtapes", targets: ["AIMixtapes"]),
         .library(name: "Domain", targets: ["Domain"]),
-        .library(name: "SharedTypes", targets: ["SharedTypes"])
+    .library(name: "SharedTypes", targets: ["SharedTypes"]),
+    // New Noir Design System
+    .library(name: "DesignSystem", targets: ["DesignSystem"])
     ],
     dependencies: [
     ],
@@ -43,6 +45,15 @@ let package = Package(
             dependencies: [],
             path: "Sources/SharedTypes"
         ),
+        .target(
+            name: "DesignSystem",
+            dependencies: [],
+            path: "Packages/DesignSystem/Sources/DesignSystem",
+            resources: [
+                // Optional noise texture placeholder (user can replace with real 512x512 PNG named noise_512.png)
+                .process("Resources")
+            ]
+        ),
         .testTarget(
             name: "AudioKitEncorelyTests",
             dependencies: ["AudioKitEncorely"],
@@ -52,6 +63,11 @@ let package = Package(
             name: "AIMixtapesTests",
             dependencies: ["AIMixtapes"],
             path: "Tests/AIMixtapesTests"
+        ),
+        .testTarget(
+            name: "DesignSystemTests",
+            dependencies: ["DesignSystem"],
+            path: "Packages/DesignSystem/Tests/DesignSystemTests"
         )
     ]
 )
