@@ -51,3 +51,6 @@ excluded:
 
 # Reporter type
 reporter: "xcode"
+
+# Baseline file (used by custom CI script to filter existing violations)
+baseline: .swiftlint-baseline.yml

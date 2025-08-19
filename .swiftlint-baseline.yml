@@ -1,0 +1,11 @@
+# SwiftLint Auto-Generated Baseline
+# Generated to allow incremental cleanup. Do not edit manually.
+# Regenerate after fixing violations by deleting this file and re-running baseline generation.
+
+whitelist_rules: []
+
+analysed_paths:
+  - Sources
+  - Tests
+
+# Stored violations snapshot (ignored by custom script referencing this file)
