@@ -1,13 +1,12 @@
-//
 //  ContentView.swift
-//  Mixtapes
-//
-//  Created by Swanand Tanavade on 03/25/23.
-//  Updated by Claude AI on 05/16/25.
-//
+//  Root orchestrator for playback experience (library list, sheets, AI surfaces, onboarding).
+//  Intentionally still monolithic; slated for future decomposition (playlist grid, now-playing,
+//  AI controls) into focused subviews to reduce file length & complexity.
+//  Maintains state bridging CoreData entities, AVQueuePlayer, and AIIntegrationService.
 
 import AVKit
 import CoreData
+import DesignSystem
 import SwiftUI
 
 struct ContentView: View {
@@ -37,6 +36,8 @@ struct ContentView: View {
     // AI services
     @ObservedObject var aiService: AIIntegrationService
 
+    // Encore Mode state
+    @State private var showingEncoreMode = false
     // Selected tab in the navigation
     @State private var selectedTab: AppSection = .library
 
@@ -93,6 +94,15 @@ struct ContentView: View {
                     )
                     .environment(\.managedObjectContext, moc)
                 }
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            showingEncoreMode = true
+                        } label: {
+                            Label("Encore", systemImage: "sparkles")
+                        }
+                    }
+                }
             }
         }
         .onAppear {
@@ -120,6 +130,9 @@ struct ContentView: View {
             .onDisappear {
                 UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
             }
+        }
+        .sheet(isPresented: $showingEncoreMode) {
+            EncoreModeView(aiService: aiService, sensorService: SensorFusionService())
         }
     }
 

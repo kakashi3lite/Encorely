@@ -1,5 +1,9 @@
-import SwiftUI
+//  EncoreModeView.swift
+//  Presents a unified surface for AI-assisted playback, podcasts, sensor-driven adaptation,
+//  and quick personalization controls (“Encore Mode”). Built with Noir design primitives.
+//  Keeps logic minimal; delegates intelligence to AIIntegrationService & SensorFusionService.
 import DesignSystem
+import SwiftUI
 
 struct EncoreModeView: View {
     @ObservedObject var aiService: AIIntegrationService
@@ -102,7 +106,7 @@ struct EncoreModeView: View {
                     Text("Crossfade: \(Int(crossfadeSeconds))s")
                         .font(.caption)
                         .foregroundColor(NoirPalette.subduedText)
-                    Slider(value: $crossfadeSeconds, in: 2...12, step: 1)
+                    Slider(value: $crossfadeSeconds, in: 2 ... 12, step: 1)
                         .tint(aiService.moodEngine.currentMood.color)
                 }
                 Button("Swivel Now") {
@@ -151,7 +155,7 @@ struct EncoreModeView: View {
                         Text("Personality Influence")
                             .font(.caption)
                             .foregroundColor(NoirPalette.subduedText)
-                        Slider(value: $personalityInfluence, in: 0...1)
+                        Slider(value: $personalityInfluence, in: 0 ... 1)
                             .tint(NoirPalette.accent)
                         Text(personalityInfluence, format: .percent.precision(.fractionLength(0)))
                             .font(.caption2)
@@ -164,12 +168,16 @@ struct EncoreModeView: View {
     }
 
     private var currentTrackTitle: String { "(demo) Track" }
-    private struct RecSlot: Hashable { let id: String; let title: String; let subtitle: String }
+    private struct RecSlot: Hashable { let id: String
+        let title: String
+        let subtitle: String
+    }
+
     private var recommendationSlots: [RecSlot] {
         [
             RecSlot(id: "energy_boost", title: "Energy Boost Mix", subtitle: "Lift mood • tempo+"),
             RecSlot(id: "focus_flow", title: "Focus Flow", subtitle: "Instrumental • low distraction"),
-            RecSlot(id: "evening_unwind", title: "Evening Unwind", subtitle: "Calm acoustic • relax")
+            RecSlot(id: "evening_unwind", title: "Evening Unwind", subtitle: "Calm acoustic • relax"),
         ]
     }
 
@@ -189,5 +197,7 @@ struct EncoreModeView: View {
         }
     }
 
-    private func percent(_ v: Double) -> String { (v as NSNumber).doubleValue.formatted(.percent.precision(.fractionLength(0))) }
+    private func percent(_ v: Double) -> String { (v as NSNumber).doubleValue
+        .formatted(.percent.precision(.fractionLength(0)))
+    }
 }

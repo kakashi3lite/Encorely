@@ -1,10 +1,8 @@
-//
 //  MoodEngine.swift
-//  Mixtapes
-//
-//  Created by Claude AI on 05/16/25.
-//  Copyright © 2025 Swanand Tanavade. All rights reserved.
-//
+//  Central adaptive model: fuses audio features, user interactions, personality bias,
+//  and external context (sensor + hint APIs) to maintain current mood & distribution.
+//  Large by necessity today; roadmap includes slicing into: Core State, Feature Extraction,
+//  Adaptation Policies, Persistence/History, and External Integrations.
 
 import CoreML
 import Foundation
@@ -851,6 +849,7 @@ public final class MoodEngine: ObservableObject {
 }
 
 // MARK: - External Mood Hints
+
 extension MoodEngine {
     /// Registers an external contextual hint nudging the current mood toward a target.
     /// - Parameters:

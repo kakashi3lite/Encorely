@@ -1,12 +1,9 @@
-//
 //  PagerView.swift
-//  AI-Mixtapes
-//
-//  Created by Claude AI on 05/18/25.
-//  Copyright © 2025 Swanand Tanavade. All rights reserved.
-//
+//  High-level tab switcher (Playlists / Podcasts / AI Mixer). Hosts lightweight per-tab content
+//  and reports interaction telemetry to AIIntegrationService. Future: migrate to composable route enum.
 
 import CoreData
+import DesignSystem
 import SwiftUI
 
 /// AI-Enhanced PagerView for seamless navigation between Playlists, Podcasts, and AI Mixer
@@ -216,44 +213,28 @@ struct PodcastsTabView: View {
 
             // AI podcast recommendation placeholder
             VStack(spacing: 24) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    aiService.moodEngine.currentMood.color.opacity(0.1),
-                                    aiService.personalityEngine.currentPersonality.themeColor.opacity(0.1),
-                                ]),
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                GlassCard {
+                    VStack(spacing: 16) {
+                        Image(systemName: "waveform.and.mic")
+                            .font(.system(size: 50))
+                            .foregroundColor(aiService.moodEngine.currentMood.color)
+                            .opacity(isAnalyzingPreferences ? 0.6 : 1.0)
+                            .scaleEffect(isAnalyzingPreferences ? 1.1 : 1.0)
+                            .animation(
+                                isAnalyzingPreferences ?
+                                    .easeInOut(duration: 1.0).repeatForever(autoreverses: true) : .default,
+                                value: isAnalyzingPreferences
                             )
+                        Text("AI-Curated Podcasts")
+                            .font(.title3.bold())
+                            .foregroundColor(NoirPalette.onGlass)
+                        Text(
+                            "Discover podcasts tailored to your \(aiService.personalityEngine.currentPersonality.rawValue.lowercased()) personality and \(aiService.moodEngine.currentMood.rawValue.lowercased()) mood"
                         )
-                        .frame(width: 120, height: 120)
-
-                    Image(systemName: "waveform.and.mic")
-                        .font(.system(size: 50))
-                        .foregroundColor(aiService.moodEngine.currentMood.color)
-                        .opacity(isAnalyzingPreferences ? 0.6 : 1.0)
-                        .scaleEffect(isAnalyzingPreferences ? 1.1 : 1.0)
-                        .animation(
-                            isAnalyzingPreferences ?
-                                .easeInOut(duration: 1.0).repeatForever(autoreverses: true) : .default,
-                            value: isAnalyzingPreferences
-                        )
-                }
-
-                VStack(spacing: 12) {
-                    Text("AI-Curated Podcasts")
-                        .font(.title2)
-                        .fontWeight(.bold)
-
-                    Text(
-                        "Discover podcasts tailored to your \(aiService.personalityEngine.currentPersonality.rawValue.lowercased()) personality and \(aiService.moodEngine.currentMood.rawValue.lowercased()) mood"
-                    )
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                        .font(.caption)
+                        .foregroundColor(NoirPalette.subduedText)
+                        .multilineTextAlignment(.center)
+                    }
                 }
 
                 if isAnalyzingPreferences {
@@ -282,11 +263,8 @@ struct PodcastsTabView: View {
                     }) {
                         Label("Start AI Analysis", systemImage: "brain")
                             .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(aiService.personalityEngine.currentPersonality.themeColor)
-                            .cornerRadius(12)
                     }
+                    .buttonStyle(GlassButtonStyle())
                 }
             }
 

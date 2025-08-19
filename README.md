@@ -8,19 +8,23 @@ Encorely is a Swift Package–first codebase with two core modules:
 This foundation compiles and tests on macOS runners in CI, and is ready to be embedded into an iOS app target.
 
 ## Requirements
+
 - macOS 13+ with Xcode 15+ (Swift 5.9)
 
 ## Build
+
 ```bash
 swift build
 ```
 
 ## Test
+
 ```bash
 swift test
 ```
 
 ## Modules
+
 - GlassUI: Start with `GlassCard` for frosted UI blocks (Reduce Transparency supported).
 - AudioKitEncorely: Includes `DSP.rms(_:)` and a cross-platform-safe `AudioSessionManager` API.
 
@@ -34,6 +38,23 @@ This project enforces strict code quality standards through automated tools:
 - **SwiftLint**: Enforces Swift style and conventions
 
 A pre-commit hook is installed to automatically check code quality before each commit.
+
+#### Incremental Lint Strategy
+
+Legacy code introduces a large volume of SwiftLint violations. To preserve velocity while improving quality:
+
+1. Pre-commit hook reformats & lints only STAGED Swift files (fast feedback).
+2. Critical violations (force unwrap / force try / force cast / fatal error usage) block commits.
+3. Non‑critical violations are logged; developers should opportunistically fix them on each touch.
+4. Generate a snapshot baseline (informational) any time with:
+
+   ```bash
+   bash Scripts/generate_swiftlint_baseline.sh
+   ```
+   
+5. Remove violations from edited lines first; never introduce NEW violations of enforced rules.
+
+This approach steadily reduces debt without freezing feature delivery.
 
 ### Git Workflow
 

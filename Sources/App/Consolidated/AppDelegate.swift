@@ -7,9 +7,9 @@ import UIKit
 class AppDelegate: UIResponder, UIApplicationDelegate {
     // MARK: - Properties
 
-        private(set) var aiService: AIIntegrationService?
-        private(set) var player: AVQueuePlayer?
-        private(set) var siriService: SiriIntegrationService?
+    private(set) var aiService: AIIntegrationService?
+    private(set) var player: AVQueuePlayer?
+    private(set) var siriService: SiriIntegrationService?
 
     lazy var persistentContainer: NSPersistentContainer = {
         let container = NSPersistentContainer(name: "AI_Mixtapes")

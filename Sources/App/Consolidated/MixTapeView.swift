@@ -8,8 +8,8 @@
 
 import AVKit
 import CoreData
-import SwiftUI
 import DesignSystem
+import SwiftUI
 
 /// Enhanced MixTapeView with AI features and error handling
 struct MixTapeView: View {
@@ -144,7 +144,7 @@ struct MixTapeView: View {
                 .transition(.move(edge: .bottom))
             }
         }
-    .navigationBarTitle("")
+        .navigationBarTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {

@@ -1,9 +1,7 @@
-//
 //  PerformanceValidator.swift
-//  AI-Mixtapes
-//  Created by AI Assistant on 05/23/25.
-//  Copyright © 2025 Swanand Tanavade. All rights reserved.
-//
+//  Ensures audio pipeline (latency, memory, mood accuracy) stays within defined SLA thresholds.
+//  Recently refactored to eliminate force unwraps; buffer creation now guarded.
+//  Large result model structs moved to PerformanceValidationModels.swift for clarity.
 
 import AVFoundation
 import Foundation
@@ -239,15 +237,19 @@ class PerformanceValidator {
         sampleRate: Double
     ) -> AVAudioPCMBuffer {
         let frameCount = AVAudioFrameCount(duration * sampleRate)
-        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else {
+            fatalError("Failed to create AVAudioFormat in createTestAudioBuffer")
+        }
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            fatalError("Failed to allocate AVAudioPCMBuffer in createTestAudioBuffer")
+        }
 
         buffer.frameLength = frameCount
-        let channelData = buffer.floatChannelData![0]
+        guard let channelPointer = buffer.floatChannelData?.pointee else { return buffer }
 
         for i in 0 ..< Int(frameCount) {
             let sample = sin(2.0 * .pi * frequency * Float(i) / Float(sampleRate))
-            channelData[i] = sample
+            channelPointer[i] = sample
         }
 
         return buffer
@@ -255,11 +257,15 @@ class PerformanceValidator {
 
     private func createLargeTestBuffer(frequency: Float, duration: TimeInterval) -> AVAudioPCMBuffer {
         let frameCount = AVAudioFrameCount(duration * Self.testSampleRate)
-        let format = AVAudioFormat(standardFormatWithSampleRate: Self.testSampleRate, channels: 1)!
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: Self.testSampleRate, channels: 1) else {
+            fatalError("Failed to create AVAudioFormat in createLargeTestBuffer")
+        }
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            fatalError("Failed to allocate AVAudioPCMBuffer in createLargeTestBuffer")
+        }
 
         buffer.frameLength = frameCount
-        let channelData = buffer.floatChannelData![0]
+        guard let channelPointer = buffer.floatChannelData?.pointee else { return buffer }
 
         // Create complex multi-frequency signal
         for i in 0 ..< Int(frameCount) {
@@ -267,7 +273,7 @@ class PerformanceValidator {
             let sample = sin(2.0 * .pi * frequency * t) * 0.5 +
                 sin(2.0 * .pi * (frequency * 2) * t) * 0.3 +
                 sin(2.0 * .pi * (frequency * 0.5) * t) * 0.2
-            channelData[i] = sample
+            channelPointer[i] = sample
         }
 
         return buffer
@@ -288,11 +294,15 @@ class PerformanceValidator {
 
     private func createMoodSpecificAudioBuffer(mood: Mood, duration: TimeInterval) -> AVAudioPCMBuffer {
         let frameCount = AVAudioFrameCount(duration * Self.testSampleRate)
-        let format = AVAudioFormat(standardFormatWithSampleRate: Self.testSampleRate, channels: 1)!
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: Self.testSampleRate, channels: 1) else {
+            fatalError("Failed to create AVAudioFormat in createMoodSpecificAudioBuffer")
+        }
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            fatalError("Failed to allocate AVAudioPCMBuffer in createMoodSpecificAudioBuffer")
+        }
 
         buffer.frameLength = frameCount
-        let channelData = buffer.floatChannelData![0]
+        guard let channelPointer = buffer.floatChannelData?.pointee else { return buffer }
 
         // Generate audio characteristics specific to each mood
         let (baseFreq, tempo, amplitude) = getMoodCharacteristics(mood)
@@ -342,7 +352,7 @@ class PerformanceValidator {
                 break
             }
 
-            channelData[i] = sample
+            channelPointer[i] = sample
         }
 
         return buffer
@@ -436,68 +446,6 @@ class PerformanceValidator {
                 )
         }
     }
-}
-
-// MARK: - Result Structures
-
-struct ValidationResult {
-    var latencyResult = LatencyValidationResult(
-        passed: false,
-        averageLatencyMs: 0,
-        maxLatencyMs: 0,
-        processingTimes: []
-    )
-    var memoryResult = MemoryValidationResult(
-        passed: false,
-        initialMemoryMB: 0,
-        peakMemoryMB: 0,
-        finalMemoryMB: 0,
-        memoryIncreaseMB: 0
-    )
-    var accuracyResult = AccuracyValidationResult(
-        passed: false,
-        accuracy: 0,
-        correctPredictions: 0,
-        totalPredictions: 0,
-        detailedResults: []
-    )
-    var overallPassed = false
-}
-
-struct LatencyValidationResult {
-    let passed: Bool
-    let averageLatencyMs: Double
-    let maxLatencyMs: Double
-    let processingTimes: [TimeInterval]
-}
-
-struct MemoryValidationResult {
-    let passed: Bool
-    let initialMemoryMB: Double
-    let peakMemoryMB: Double
-    let finalMemoryMB: Double
-    let memoryIncreaseMB: Double
-}
-
-struct AccuracyValidationResult {
-    let passed: Bool
-    let accuracy: Double
-    let correctPredictions: Int
-    let totalPredictions: Int
-    let detailedResults: [MoodTestResult]
-}
-
-struct MoodTestCase {
-    let expectedMood: Mood
-    let description: String
-}
-
-struct MoodTestResult {
-    let expectedMood: Mood
-    let predictedMood: Mood
-    let features: AudioFeatures?
-    let isCorrect: Bool
-    let confidence: Float
 }
 
 // MARK: - Usage Example

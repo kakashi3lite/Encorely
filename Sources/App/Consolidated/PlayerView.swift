@@ -1,6 +1,6 @@
 import AVKit
-import SwiftUI
 import DesignSystem
+import SwiftUI
 
 struct PlayerView: View {
     // MARK: - Properties
@@ -106,9 +106,9 @@ struct PlayerView: View {
                     VStack(spacing: 8) {
                         Slider(value: $progress)
                             .tint(aiService.moodEngine.currentMood.color)
-                        .accessibilityLabel("Playback progress")
-                        .accessibilityValue("\(currentTime) of \(totalTime)")
-                        .accessibilityHint("Adjust to seek through the song")
+                            .accessibilityLabel("Playback progress")
+                            .accessibilityValue("\(currentTime) of \(totalTime)")
+                            .accessibilityHint("Adjust to seek through the song")
 
                         HStack {
                             Text(currentTime)
@@ -125,71 +125,78 @@ struct PlayerView: View {
                 // Player controls
                 GlassCard {
                     HStack(spacing: 40) {
-                    // Previous
-                    Button(action: previousTrack) {
-                        Image(systemName: "backward.fill")
-                            .font(.title)
-                    }
-                    .accessibilityLabel("Previous track")
-                    .accessibilityHint("Play previous song")
+                        // Previous
+                        Button(action: previousTrack) {
+                            Image(systemName: "backward.fill")
+                                .font(.title)
+                        }
+                        .accessibilityLabel("Previous track")
+                        .accessibilityHint("Play previous song")
 
-                    // Play/Pause
-                    Button(action: playPause) {
-                        Image(systemName: isPlaying.wrappedValue ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 64))
-                            .foregroundStyle(LinearGradient(colors: [aiService.moodEngine.currentMood.color, aiService.personalityEngine.currentPersonality.themeColor], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    }
-                    .accessibilityLabel(isPlaying.wrappedValue ? "Pause" : "Play")
-                    .accessibilityHint(isPlaying.wrappedValue ? "Pause current song" : "Play current song")
-                    .accessibilityAddTraits(isPlaying.wrappedValue ? .startsMediaSession : .playsSound)
+                        // Play/Pause
+                        Button(action: playPause) {
+                            Image(systemName: isPlaying.wrappedValue ? "pause.circle.fill" : "play.circle.fill")
+                                .font(.system(size: 64))
+                                .foregroundStyle(LinearGradient(
+                                    colors: [aiService.moodEngine.currentMood.color,
+                                             aiService.personalityEngine.currentPersonality.themeColor],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ))
+                        }
+                        .accessibilityLabel(isPlaying.wrappedValue ? "Pause" : "Play")
+                        .accessibilityHint(isPlaying.wrappedValue ? "Pause current song" : "Play current song")
+                        .accessibilityAddTraits(isPlaying.wrappedValue ? .startsMediaSession : .playsSound)
 
-                    // Next
-                    Button(action: nextTrack) {
-                        Image(systemName: "forward.fill")
-                            .font(.title)
-                    }
-                    .accessibilityLabel("Next track")
-                    .accessibilityHint("Play next song")
+                        // Next
+                        Button(action: nextTrack) {
+                            Image(systemName: "forward.fill")
+                                .font(.title)
+                        }
+                        .accessibilityLabel("Next track")
+                        .accessibilityHint("Play next song")
                     }
                 }
 
                 // Volume and playlist controls
                 GlassCard {
                     HStack(spacing: 20) {
-                    // Volume slider
-                    HStack {
-                        Image(systemName: "speaker.fill")
-                            .foregroundColor(NoirPalette.subduedText)
-                            .accessibilityHidden(true)
+                        // Volume slider
+                        HStack {
+                            Image(systemName: "speaker.fill")
+                                .foregroundColor(NoirPalette.subduedText)
+                                .accessibilityHidden(true)
 
-                        Slider(value: $volume)
-                            .accessibilityLabel("Volume")
-                            .accessibilityValue("\(Int(volume * 100))%")
-                            .accessibilityHint("Adjust volume")
+                            Slider(value: $volume)
+                                .accessibilityLabel("Volume")
+                                .accessibilityValue("\(Int(volume * 100))%")
+                                .accessibilityHint("Adjust volume")
 
-                        Image(systemName: "speaker.wave.2.fill")
-                            .foregroundColor(NoirPalette.subduedText)
-                            .accessibilityHidden(true)
-                    }
+                            Image(systemName: "speaker.wave.2.fill")
+                                .foregroundColor(NoirPalette.subduedText)
+                                .accessibilityHidden(true)
+                        }
 
-                    // Shuffle
-                    Button(action: toggleShuffle) {
-                        Image(systemName: "shuffle")
-                            .foregroundColor(isShuffleOn ? aiService.moodEngine.currentMood.color : NoirPalette.subduedText)
-                    }
-                    .accessibilityLabel("Shuffle")
-                    .accessibilityValue(isShuffleOn ? "On" : "Off")
-                    .accessibilityHint("Toggle shuffle play")
-                    .accessibilityAddTraits(isShuffleOn ? .isSelected : [])
+                        // Shuffle
+                        Button(action: toggleShuffle) {
+                            Image(systemName: "shuffle")
+                                .foregroundColor(isShuffleOn ? aiService.moodEngine.currentMood.color : NoirPalette
+                                    .subduedText)
+                        }
+                        .accessibilityLabel("Shuffle")
+                        .accessibilityValue(isShuffleOn ? "On" : "Off")
+                        .accessibilityHint("Toggle shuffle play")
+                        .accessibilityAddTraits(isShuffleOn ? .isSelected : [])
 
-                    // Repeat
-                    Button(action: cycleRepeatMode) {
-                        Image(systemName: repeatMode.icon)
-                            .foregroundColor(repeatMode != .off ? aiService.moodEngine.currentMood.color : NoirPalette.subduedText)
-                    }
-                    .accessibilityLabel("Repeat mode")
-                    .accessibilityValue(repeatModeDescription)
-                    .accessibilityHint("Change repeat mode")
+                        // Repeat
+                        Button(action: cycleRepeatMode) {
+                            Image(systemName: repeatMode.icon)
+                                .foregroundColor(repeatMode != .off ? aiService.moodEngine.currentMood
+                                    .color : NoirPalette.subduedText)
+                        }
+                        .accessibilityLabel("Repeat mode")
+                        .accessibilityValue(repeatModeDescription)
+                        .accessibilityHint("Change repeat mode")
                     }
                 }
             }
