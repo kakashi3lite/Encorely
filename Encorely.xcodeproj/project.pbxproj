@@ -11,10 +11,12 @@
 		2EC6AF0228DB6BCFCAE7C6BE /* AudioKitEncorely in Frameworks */ = {isa = PBXBuildFile; productRef = 7AA8F7C1A18A5F925C6D44C0 /* AudioKitEncorely */; };
 		824F665584B70BFD355E8C49 /* GlassUI in Frameworks */ = {isa = PBXBuildFile; productRef = D67F0DFFA8682055C07FBE78 /* GlassUI */; };
 		C4375CED64F550AA99749F70 /* EncorelyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 139A5C56F26DFD1347F356E7 /* EncorelyApp.swift */; };
+		E44A4C32FFD1FC0B30018FCF /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 09E2318AD30B10DC19393AF5 /* PrivacyInfo.xcprivacy */; };
 		EB8DEDFF2DF7578604A9E466 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9343768AD54BF1FB73D75FFC /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		09E2318AD30B10DC19393AF5 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		139A5C56F26DFD1347F356E7 /* EncorelyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncorelyApp.swift; sourceTree = "<group>"; };
 		26722CD2CA5BB3C66429330F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		3FDB523DABADA1D6B0FE1941 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -57,6 +59,7 @@
 			isa = PBXGroup;
 			children = (
 				9343768AD54BF1FB73D75FFC /* Assets.xcassets */,
+				09E2318AD30B10DC19393AF5 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -143,6 +146,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				EB8DEDFF2DF7578604A9E466 /* Assets.xcassets in Resources */,
+				E44A4C32FFD1FC0B30018FCF /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -230,6 +234,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -237,8 +243,11 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.Encorely;
+				OTHER_SWIFT_FLAGS = "-strict-concurrency=complete";
+				PRODUCT_BUNDLE_IDENTIFIER = com.encorely.app;
 				SDKROOT = iphoneos;
+				STRIP_INSTALLED_PRODUCT = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -250,6 +259,8 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -257,8 +268,11 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.Encorely;
+				OTHER_SWIFT_FLAGS = "-strict-concurrency=complete";
+				PRODUCT_BUNDLE_IDENTIFIER = com.encorely.app;
 				SDKROOT = iphoneos;
+				STRIP_INSTALLED_PRODUCT = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
