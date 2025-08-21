@@ -28,6 +28,11 @@ let package = Package(
             name: "AudioKitEncorelyTests",
             dependencies: ["AudioKitEncorely"],
             path: "Tests/AudioKitEncorelyTests"
+        ),
+        .testTarget(
+            name: "GlassUITests",
+            dependencies: ["GlassUI"],
+            path: "Tests/GlassUITests"
         )
     ]
 )
