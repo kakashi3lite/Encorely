@@ -123,9 +123,14 @@ public class AudioVisualizer: ObservableObject {
         // Use withUnsafeMutableBufferPointer for safe memory access
         return realParts.withUnsafeMutableBufferPointer { realPtr in
             return imaginaryParts.withUnsafeMutableBufferPointer { imagPtr in
+                guard let realBase = realPtr.baseAddress,
+                      let imagBase = imagPtr.baseAddress else {
+                    return Array(repeating: 0.0, count: fftSize / 2)
+                }
+                
                 var splitComplex = DSPSplitComplex(
-                    realp: realPtr.baseAddress!,
-                    imagp: imagPtr.baseAddress!
+                    realp: realBase,
+                    imagp: imagBase
                 )
                 
                 // Perform forward FFT

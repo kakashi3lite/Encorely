@@ -1,4 +1,5 @@
 import SwiftUI
+import AudioKitEncorely
 
 // MARK: - Navigation Sidebar for iPads
 public struct NavigationSidebar<T: RawRepresentable & CaseIterable & Hashable>: View where T.RawValue == String {
@@ -366,10 +367,7 @@ public class ErrorHandler: ObservableObject {
         showingError = true
         
         // Log error for debugging
-        print("❌ Error: \(appError.message)")
-        if let underlyingError = appError.underlyingError {
-            print("   Underlying: \(underlyingError)")
-        }
+        EncorelyLogger.ui.error("UI Error: \(appError.message)", error: appError.underlyingError)
     }
     
     public func clearError() {

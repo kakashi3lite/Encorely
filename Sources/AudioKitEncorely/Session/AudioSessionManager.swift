@@ -5,6 +5,8 @@ import AVFAudio
 import Combine
 #endif
 
+// Note: EncorelyLogger is available within the same module
+
 @MainActor
 public final class AudioSessionManager: ObservableObject {
     
@@ -94,7 +96,7 @@ public final class AudioSessionManager: ObservableObject {
                         try session.setActive(true, options: [])
                         isActive = true
                     } catch {
-                        print("Failed to reactivate audio session after interruption: \(error)")
+                        EncorelyLogger.audio.error("Failed to reactivate audio session after interruption", error: error)
                     }
                 }
             }

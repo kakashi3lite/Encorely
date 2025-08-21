@@ -417,8 +417,8 @@ public enum AudioRecorderError: LocalizedError {
     static func from(_ error: Error?) -> AudioRecorderError {
         guard let error = error else { return .unknown(nil) }
         
-        if error is AudioRecorderError {
-            return error as! AudioRecorderError
+        if let audioError = error as? AudioRecorderError {
+            return audioError
         }
         
         return .unknown(error)
@@ -452,7 +452,7 @@ public class SessionManager: ObservableObject {
         do {
             try FileManager.default.removeItem(at: session.url)
         } catch {
-            print("Failed to delete recording file: \(error)")
+            EncorelyLogger.audio.error("Failed to delete recording file", error: error)
         }
         
         await persistSessions()
@@ -477,7 +477,7 @@ public class SessionManager: ObservableObject {
             let data = try JSONEncoder().encode(sessions)
             userDefaults.set(data, forKey: sessionsKey)
         } catch {
-            print("Failed to persist sessions: \(error)")
+            EncorelyLogger.audio.error("Failed to persist sessions", error: error)
         }
     }
 }

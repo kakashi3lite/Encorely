@@ -390,8 +390,14 @@ public class CloudSync: ObservableObject {
             
             // Download missing files
             for cloudFile in cloudFiles {
-                if cloudFile.localURL == nil ||
-                   !FileManager.default.fileExists(atPath: cloudFile.localURL!.path) {
+                let shouldDownload: Bool
+                if let localURL = cloudFile.localURL {
+                    shouldDownload = !FileManager.default.fileExists(atPath: localURL.path)
+                } else {
+                    shouldDownload = true
+                }
+                
+                if shouldDownload {
                     _ = try await downloadFile(cloudFile: cloudFile)
                 }
                 completedOperations += 1
