@@ -1,0 +1,37 @@
+# Cursor AI Working Rules for Encorely
+
+## Context First
+- Always consult `Docs/CODE_CONTEXT.md` and `Docs/ARCHITECTURE.md` before scanning source trees.
+- Prefer directory overviews and file references over pasting large code blocks.
+
+## Source of Truth
+- New app code belongs in `Sources/App/Consolidated` unless there is a clear reason otherwise.
+- Legacy directories `Sources/AIMixtapes` and `Sources/AI-Mixtapes` are historical; avoid adding new files there.
+
+## Exclusions (avoid reading unless explicitly needed)
+- `build/`, `DerivedData/`, `backup/`, `**/.build/`, `**/.swiftpm/` caches
+- `Sources/MCPServer/node_modules/`, `Sources/MCPServer/dist/`
+- Binary or generated artifacts: `*.xcresult`, `*.xcarchive`, `*.dsym`, `*.o`, `*.a`
+
+## Style
+- Follow `.swiftformat` and `.swiftlint.yml`; keep changes small and focused.
+- Prefer descriptive names; avoid one-letter variables.
+- Keep comments minimal and high value; align with existing patterns.
+
+## Testing
+- Place tests under `Tests/` when adding unit tests.
+- Do not create tests inside `Sources/Domain` (local SPM manifest has no test target).
+
+## Common Entry Points
+- App entry: `Sources/App/Consolidated/AIMixtapesApp.swift`
+- UI root: `Sources/App/Consolidated/ContentView.swift`
+- Services and DI: `Sources/App/Consolidated/Services/*`, `Sources/App/Consolidated/DI/*`
+- Audio utilities: `Sources/AudioKitEncorely/*`
+- Sockets: `Sources/MCPClient/*`
+- Shared models: `Sources/SharedTypes/*`
+
+## Guidance
+- When asked for architecture or navigation, reference the files above rather than expanding entire files.
+- If a change spans multiple modules, suggest smallest viable PRs per module.
+- If SPM errors arise, check `Package.swift` and `Docs/DEV_NOTES.md` first.
+

@@ -1,0 +1,81 @@
+{
+  "App": {
+    "paths": [
+      "Sources/App/Consolidated"
+    ],
+    "owners": ["@kakashi3lite"],
+    "summary": "SwiftUI app composition, views, DI, services, models, and resources.",
+    "tags": ["swiftui", "app", "services", "di"]
+  },
+  "AudioKitEncorely": {
+    "paths": [
+      "Sources/AudioKitEncorely"
+    ],
+    "owners": ["@kakashi3lite"],
+    "summary": "Audio DSP utilities (RMS/FFT) and audio session helpers using AudioKit.",
+    "tags": ["audio", "audiokit", "dsp"]
+  },
+  "MCPClient": {
+    "paths": [
+      "Sources/MCPClient"
+    ],
+    "owners": ["@kakashi3lite"],
+    "summary": "Socket.IO client and protocol integration for external services.",
+    "tags": ["networking", "socket-io", "client"]
+  },
+  "SharedTypes": {
+    "paths": [
+      "Sources/SharedTypes"
+    ],
+    "owners": ["@kakashi3lite"],
+    "summary": "Cross-module data models, typealiases, and shared structs.",
+    "tags": ["models", "types"]
+  },
+  "GlassUI": {
+    "paths": [
+      "Sources/GlassUI"
+    ],
+    "owners": ["@kakashi3lite"],
+    "summary": "Reusable SwiftUI components and visual elements.",
+    "tags": ["ui", "components"]
+  },
+  "Domain": {
+    "paths": [
+      "Sources/Domain"
+    ],
+    "owners": ["@kakashi3lite"],
+    "summary": "Local SPM package for domain logic. No tests defined in manifest.",
+    "tags": ["spm", "domain"]
+  },
+  "CoreDataModels": {
+    "paths": [
+      "AI_Mixtapes.xcdatamodeld",
+      "Mixtapes.xcdatamodeld"
+    ],
+    "owners": ["@kakashi3lite"],
+    "summary": "Core Data model files.",
+    "tags": ["coredata", "persistence"]
+  },
+  "Config": {
+    "paths": [
+      "Config",
+      "Base.xcconfig",
+      "Debug.xcconfig",
+      "Release.xcconfig",
+      "AI-Mixtapes.entitlements",
+      "Info.plist"
+    ],
+    "owners": ["@kakashi3lite"],
+    "summary": "Build settings, entitlements, and plist configuration.",
+    "tags": ["build", "settings"]
+  },
+  "Tests": {
+    "paths": [
+      "Tests"
+    ],
+    "owners": ["@kakashi3lite"],
+    "summary": "Unit tests for audio and other modules.",
+    "tags": ["tests"]
+  }
+}
+
