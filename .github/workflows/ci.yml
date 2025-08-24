@@ -3,8 +3,22 @@ name: CI - AI Mixtapes Modules
 on:
   push:
     branches: [main, develop]
+    paths-ignore:
+      - 'Docs/**'
+      - '**/*.md'
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.gif'
+      - '**/*.svg'
   pull_request:
     branches: [main, develop]
+    paths-ignore:
+      - 'Docs/**'
+      - '**/*.md'
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.gif'
+      - '**/*.svg'
   workflow_dispatch:
 
 env:

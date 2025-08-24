@@ -1,10 +1,24 @@
-name: Swift CI
+name: Swift CI (legacy)
 
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'Docs/**'
+      - '**/*.md'
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.gif'
+      - '**/*.svg'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - 'Docs/**'
+      - '**/*.md'
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.gif'
+      - '**/*.svg'
 
 jobs:
   build-and-test:
@@ -12,6 +26,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Select Xcode (Swift 6)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.0'
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/.swiftpm
+          key: ${{ runner.os }}-spm-legacy-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: ${{ runner.os }}-spm-legacy-
 
       - name: Show Swift version
         run: swift --version

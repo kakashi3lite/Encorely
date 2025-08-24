@@ -1,0 +1,106 @@
+name: Swift 6 CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths-ignore:
+      - 'Docs/**'
+      - '**/*.md'
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.gif'
+      - '**/*.svg'
+      - '.github/ISSUE_TEMPLATE/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths-ignore:
+      - 'Docs/**'
+      - '**/*.md'
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.gif'
+      - '**/*.svg'
+      - '.github/ISSUE_TEMPLATE/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  spm-build:
+    name: SwiftPM Build & Test
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Select Xcode (Swift 6)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.0'
+
+      - name: Record Xcode version
+        id: xcode
+        run: |
+          xcodebuild -version | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "XCODE_VERSION=$(xcodebuild -version | head -n1 | awk '{print $2}')" >> $GITHUB_ENV
+
+      - name: Cache SwiftPM (swift build)
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/.swiftpm
+          key: ${{ runner.os }}-spm-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}-swift6
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Show Swift version
+        run: swift --version | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Test (with coverage)
+        run: swift test --enable-code-coverage
+
+  xcode-resolve:
+    name: Xcode Package Resolution
+    runs-on: macos-14
+    needs: spm-build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Select Xcode (Swift 6)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.0'
+
+      - name: Record Xcode version
+        run: |
+          xcodebuild -version | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "XCODE_VERSION=$(xcodebuild -version | head -n1 | awk '{print $2}')" >> $GITHUB_ENV
+
+      - name: Cache Xcode SPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData/SourcePackages
+          key: ${{ runner.os }}-xcode-spm-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-spm-
+
+      - name: Resolve packages (project)
+        run: xcodebuild -resolvePackageDependencies -project AI-Mixtapes.xcodeproj
+
+      - name: Summarize
+        run: |
+          echo "### CI Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Xcode: $XCODE_VERSION" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Packages hash: $(shasum -a 256 Package.resolved | cut -d' ' -f1)" >> "$GITHUB_STEP_SUMMARY"
+
