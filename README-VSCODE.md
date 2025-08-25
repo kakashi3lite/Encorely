@@ -1,6 +1,6 @@
-# VS Code Setup for AI-Mixtapes Development
+# VS Code Setup for Encorely Development
 
-This guide will help you set up Visual Studio Code for iOS/Swift development with AI-Mixtapes.
+This guide helps you set up Visual Studio Code for iOS/Swift (Swift 6) development with Encorely.
 
 ## Prerequisites
 
@@ -63,8 +63,8 @@ Access these tasks via Command Palette (Cmd+Shift+P) > "Tasks: Run Task":
 
 Available via Run & Debug panel (Cmd+Shift+D):
 
-1. `Run AI-Mixtapes`: Launch release build
-2. `Run AI-Mixtapes (Debug)`: Launch debug build
+1. `Run Encorely`: Launch release build
+2. `Run Encorely (Debug)`: Launch debug build
 3. `Run Tests`: Run test suite
 
 ## Keyboard Shortcuts

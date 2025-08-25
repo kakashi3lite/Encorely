@@ -7,6 +7,7 @@ Purpose: Provide a compact map of the codebase to speed up AI-assisted developme
 - Platforms: iOS 15+, macOS 12+
 - App Type: SwiftUI app with modular SPM targets + Xcode project `AI-Mixtapes.xcodeproj`
 - Core Domains: Audio analysis/visualization, MusicKit integration, Core Data, AI-assisted features, Socket-based MCP client.
+ - Toolchain: Swift 6 (Xcode 26)
 
 ## Build & Run
 - Open in Xcode: `AI-Mixtapes.xcodeproj`
@@ -67,6 +68,7 @@ External packages in `Package.swift`:
 - Clean build: Product > Clean Build Folder
 - Update deps: edit `Package.swift` then resolve
 - Run app: select scheme, target: iOS Simulator/iPhone
+ - Install git hooks: `bash scripts/install-githooks.sh`
 
 ## Conventions & Notes
 - Prefer `Sources/App/Consolidated` for new app code; legacy directories are being phased out.
@@ -78,4 +80,3 @@ External packages in `Package.swift`:
 - `Sources/App/Consolidated/` — main app surface area
 - `Sources/MCPClient/` — socket client integration
 - `Sources/AudioKitEncorely/` — audio utilities
-

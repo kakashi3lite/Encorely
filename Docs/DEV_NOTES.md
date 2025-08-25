@@ -1,5 +1,6 @@
 # Encorely Dev Notes (Quick Reference)
 
+- Toolchain: Swift 6 / Xcode 26
 - Open: `AI-Mixtapes.xcodeproj`
 - Targets:
   - Executable: `App`
@@ -19,6 +20,7 @@ Common tasks:
 - Clean build: Product > Clean Build Folder
 - Clear SPM cache (rare): File > Packages > Reset Package Caches
 - Update a package: edit `Package.swift` then resolve
+ - Install pre-commit hooks: `bash scripts/install-githooks.sh`
 
 Troubleshooting:
 - Schemes not listed: open in Xcode once to refresh shared schemes

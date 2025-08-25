@@ -1,4 +1,4 @@
-# Contributing to AI-Mixtapes
+# Contributing to Encorely
 
 ## 🎯 Development Standards
 
@@ -18,26 +18,35 @@
    - Validate ML model performance
    - Test edge cases and failure modes
 
-### Code Organization
+### Code Organization (Swift 6 / Xcode 26)
 
-1. **AI Services**
-   ```swift
-   Services/
-   ├── AIIntegrationService.swift    // Central AI coordinator
-   ├── MoodEngine.swift             // Emotion detection
-   ├── PersonalityEngine.swift      // User behavior analysis
-   ├── RecommendationEngine.swift   // ML recommendations
-   └── AudioAnalysisService.swift   // Audio processing
-   ```
+1. App (preferred for new code)
+```
+Sources/
+└── App/
+    └── Consolidated/
+        ├── AIMixtapesApp.swift   // App entry
+        ├── ContentView.swift     // Root UI
+        ├── Services/             // App services (Audio, CoreData, etc.)
+        ├── DI/                   // Dependency injection
+        ├── Models/               // App models
+        └── Resources/            // Assets, plists
+```
 
-2. **ML Models**
-   ```
-   Models/
-   ├── EmotionClassifier.mlmodel
-   ├── AudioFeatures.mlmodel
-   ├── PersonalityPredictor.mlmodel
-   └── README.md  // Model documentation
-   ```
+2. Modules
+```
+Sources/
+├── AudioKitEncorely/   // DSP (RMS/FFT), audio session
+├── MCPClient/          // Socket.IO client & protocol
+├── SharedTypes/        // Cross-module types
+└── GlassUI/            // Reusable SwiftUI components
+```
+
+3. Local SPM Package
+```
+Sources/
+└── Domain/             // Local package (tools 6.0)
+```
 
 ### Best Practices
 
@@ -166,7 +175,14 @@ class AIServiceTests: XCTestCase {
 - Support background processing
 
 ### UI Performance
-- AI feedback delay < 16ms
+- AI feedback delay ≲ 16ms
 - Smooth animations (60 fps)
 - Memory usage < 150MB
 - Battery impact < 10%
+
+## Tooling
+- Swift 6 / Xcode 26
+- SwiftFormat / SwiftLint (respect repo configs)
+- Pre-commit hooks: `bash scripts/install-githooks.sh`
+
+See also: Docs/CODE_CONTEXT.md, Docs/ARCHITECTURE.md, Docs/DEV_NOTES.md

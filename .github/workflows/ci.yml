@@ -732,7 +732,7 @@ jobs:
         run: |
           # Create mkdocs configuration
           cat > mkdocs.yml << EOF
-          site_name: AI Mixtapes Documentation
+          site_name: Encorely Documentation
           theme:
             name: material
             palette:
