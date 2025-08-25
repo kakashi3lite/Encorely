@@ -1,6 +1,6 @@
-# Testing Guide for AI-Mixtapes
+# Testing Guide for Encorely
 
-This document outlines the testing infrastructure and test suites available in the AI-Mixtapes project.
+This document outlines the testing infrastructure and test suites available in the Encorely project.
 
 ## Test Suite Structure
 

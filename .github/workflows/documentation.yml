@@ -27,10 +27,10 @@ jobs:
     - name: Build documentation
       run: |
         swift package --allow-writing-to-directory ./docs \
-          generate-documentation --target AIMixtapes \
+          generate-documentation --target App \
           --disable-indexing \
           --transform-for-static-hosting \
-          --hosting-base-path AI-Mixtapes \
+          --hosting-base-path Encorely \
           --output-path ./docs
           
     - name: Deploy to GitHub Pages

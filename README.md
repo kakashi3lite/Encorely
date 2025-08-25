@@ -1,5 +1,10 @@
 # Encorely
 
+[![Swift 6 CI](https://github.com/kakashi3lite/Encorely/actions/workflows/swift6-ci.yml/badge.svg)](https://github.com/kakashi3lite/Encorely/actions/workflows/swift6-ci.yml)
+[![Tests](https://github.com/kakashi3lite/Encorely/actions/workflows/tests.yml/badge.svg)](https://github.com/kakashi3lite/Encorely/actions/workflows/tests.yml)
+[![CodeQL](https://github.com/kakashi3lite/Encorely/actions/workflows/codeql.yml/badge.svg)](https://github.com/kakashi3lite/Encorely/actions/workflows/codeql.yml)
+[![Docs](https://github.com/kakashi3lite/Encorely/actions/workflows/documentation.yml/badge.svg)](https://kakashi3lite.github.io/Encorely/)
+
 Create adaptive, AI-assisted mixtapes. Encorely fuses real‑time audio insights, mood and context, and a modular SwiftUI architecture.
 
 - Swift 6 • Xcode 26 • iOS 15+ • macOS 12+

@@ -1,6 +1,6 @@
 # Performance Validation Documentation
 
-The AI-Mixtapes framework includes a robust performance validation system to ensure that the audio processing components meet strict requirements for production use. This document describes the validation system and how to use it.
+The Encorely framework includes a robust performance validation system to ensure that the audio processing components meet strict requirements for production use. This document describes the validation system and how to use it.
 
 ## Overview
 

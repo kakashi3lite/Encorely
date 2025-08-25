@@ -1,6 +1,6 @@
 # Enhanced Audio Analysis Module
 
-This module enhances the audio analysis capabilities of the AI-Mixtapes application with comprehensive spectral and mood detection features.
+This module enhances the audio analysis capabilities of the Encorely application with comprehensive spectral and mood detection features.
 
 ## Overview
 
