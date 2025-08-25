@@ -16,7 +16,7 @@ jobs:
   validate-assets:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
       
       - name: Set up Swift
         uses: swift-actions/setup-swift@v1
