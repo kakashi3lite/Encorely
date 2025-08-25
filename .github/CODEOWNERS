@@ -1,0 +1,26 @@
+# Default owner
+*                                   @kakashi3lite
+
+# App and UI
+Sources/App/Consolidated/           @kakashi3lite
+Sources/GlassUI/                    @kakashi3lite
+
+# Audio and DSP
+Sources/AudioKitEncorely/           @kakashi3lite
+
+# Networking / Sockets
+Sources/MCPClient/                  @kakashi3lite
+
+# Shared Models
+Sources/SharedTypes/                @kakashi3lite
+
+# Local Domain package
+Sources/Domain/                     @kakashi3lite
+
+# Core Data models
+AI_Mixtapes.xcdatamodeld/           @kakashi3lite
+Mixtapes.xcdatamodeld/              @kakashi3lite
+
+# Docs and CI
+Docs/                               @kakashi3lite
+.github/                            @kakashi3lite
