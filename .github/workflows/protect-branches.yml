@@ -1,0 +1,40 @@
+name: Protect Branches
+
+on:
+  workflow_dispatch:
+    inputs:
+      branches:
+        description: "Comma-separated branch names"
+        required: false
+        default: "main,develop"
+      contexts:
+        description: "Comma-separated required status check contexts (optional)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  actions: read
+  administration: write
+
+jobs:
+  protect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Protect branches via API
+        env:
+          GITHUB_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          if [ -z "${GITHUB_TOKEN}" ]; then
+            echo "Missing ADMIN_TOKEN secret with admin:repo_hook, repo scopes." >&2
+            exit 1
+          fi
+          OWNER=${{ github.repository_owner }}
+          REPO=${{ github.event.repository.name }}
+          BRANCHES="${{ inputs.branches }}"
+          CONTEXTS="${{ inputs.contexts }}"
+          bash scripts/protect-branches.sh "$OWNER" "$REPO" "$BRANCHES" "$CONTEXTS"
+
