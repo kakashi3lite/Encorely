@@ -216,7 +216,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.test_suite }}
           path: test-results/${{ matrix.test_suite }}
@@ -280,7 +280,7 @@ jobs:
           cat Build/Reports/AudioFeaturesTests.txt >> audio_report.md
 
       - name: Upload Audio Analysis Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: audio-analysis-results
           path: |
@@ -337,7 +337,7 @@ jobs:
           cat Build/Reports/MusicRecommendationTests.txt >> musickit_report.md
 
       - name: Upload MusicKit Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: musickit-results
           path: |
@@ -405,7 +405,7 @@ jobs:
           jq -r '.[] | "- \(.file) - \(.message)"' Build/Reports/SwiftFormat/report.json >> quality_report.md
 
       - name: Upload Quality Reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: code-quality-reports
           path: |
@@ -506,7 +506,7 @@ jobs:
           } > Build/AssetValidation/report.md
 
       - name: Upload Validation Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: asset-validation
           path: Build/AssetValidation
@@ -606,7 +606,7 @@ jobs:
           echo "\`\`\`" >> performance_report.md
 
       - name: Upload Performance Results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: performance-results
           path: |
@@ -752,7 +752,7 @@ jobs:
           mkdocs build
 
       - name: Upload Documentation
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: documentation
           path: Build/Documentation
