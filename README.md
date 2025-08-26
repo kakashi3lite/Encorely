@@ -18,6 +18,7 @@ Quick links:
 - Docs/ARCHITECTURE.md — layered overview and runtime flow
 - Docs/DEV_NOTES.md — setup, run, lint, troubleshooting
 - Docs/AI_GUIDE.md — how to work with AI tools efficiently
+ - Docs/INDEX.md — master index of all docs and policies
 
 ## Features
 - Mood‑aware playlist generation and adaptive UI
