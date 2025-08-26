@@ -1,0 +1,9 @@
+flowchart TD
+  A[App Entry\nAIMixtapesApp] --> B[DI Container]
+  B --> C[Services]
+  C --> D[AudioKitEncorely\nDSP/Session]
+  C --> E[MCPClient\nSocket.IO]
+  C --> F[Core Data]
+  A --> G[SwiftUI Views]
+  G --> C
+  C --> H[SharedTypes]

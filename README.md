@@ -4,6 +4,9 @@
 [![Tests](https://github.com/kakashi3lite/Encorely/actions/workflows/tests.yml/badge.svg)](https://github.com/kakashi3lite/Encorely/actions/workflows/tests.yml)
 [![CodeQL](https://github.com/kakashi3lite/Encorely/actions/workflows/codeql.yml/badge.svg)](https://github.com/kakashi3lite/Encorely/actions/workflows/codeql.yml)
 [![Docs](https://github.com/kakashi3lite/Encorely/actions/workflows/documentation.yml/badge.svg)](https://kakashi3lite.github.io/Encorely/)
+[![License](https://img.shields.io/badge/License-Proprietary-darkgray.svg)](#license)
+[![Swift](https://img.shields.io/badge/Swift-6.0-orange.svg)](https://swift.org)
+[![Platforms](https://img.shields.io/badge/Platforms-iOS%2015%2B%20%7C%20macOS%2012%2B-blue.svg)](#requirements)
 
 Create adaptive, AI-assisted mixtapes. Encorely fuses real‑time audio insights, mood and context, and a modular SwiftUI architecture.
 

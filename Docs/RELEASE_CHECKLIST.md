@@ -1,0 +1,22 @@
+# Release Checklist
+
+- Versioning
+  - [ ] Update `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `Base.xcconfig`
+  - [ ] Update changelog entry in `CHANGELOG.md`
+- Build & QA
+  - [ ] Product > Clean Build Folder, rebuild
+  - [ ] Run SwiftPM tests locally and in CI
+  - [ ] Verify app runs on target iOS/macOS versions
+- Privacy & Security
+  - [ ] Review `AI-Mixtapes.entitlements` and remove unused capabilities
+  - [ ] Re-audit Info.plist privacy keys
+  - [ ] Ensure no secrets in repo (Gitleaks clean)
+- Store Readiness
+  - [ ] Update screenshots and metadata (if applicable)
+  - [ ] Verify bundle identifiers and provisioning profiles
+- Docs & Governance
+  - [ ] Update README badges if workflows changed
+  - [ ] Ensure Docs/INDEX.md and ADRs reflect changes
+- Tag & Publish
+  - [ ] Create annotated tag `vX.Y.Z`
+  - [ ] Draft GitHub Release with highlights and links
