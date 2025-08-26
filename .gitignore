@@ -23,4 +23,5 @@ DerivedData/
 
 # Temp files
 *.swp
-*~
+*~# Local AI assistant metadata
+.claude/
