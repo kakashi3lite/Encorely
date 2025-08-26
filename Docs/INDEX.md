@@ -16,3 +16,11 @@ CI & Policies:
 - SECURITY.md — reporting vulnerabilities
 - .github/CODEOWNERS — ownership map
 
+
+
+New references:
+- ADRs: Docs/ADR/0002-consolidated-modules.md, Docs/ADR/0003-coredata-migrations.md
+- Guidelines: Docs/ACCESSIBILITY.md, Docs/STATE_MANAGEMENT.md, Docs/DESIGN_SYSTEM.md
+- Performance: Docs/PERFORMANCE_PROFILING.md
+- Runbooks: Docs/RUNBOOKS/ci-failures.md, Docs/RUNBOOKS/crash-symbolication.md
+- DocC: Sources/App/Encorely.docc (Xcode Quick Help)
