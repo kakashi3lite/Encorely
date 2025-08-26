@@ -265,12 +265,12 @@ struct AIGeneratedMixtapeView: View {
                 ForEach(viewModel.generationSteps.indices, id: \.self) { index in
                     HStack {
                         Circle()
-                            .fill(index <= Int(viewModel.generationProgress * Float(viewModel.generationSteps.count)) ? Color.accentColor : Color.secondary)
+                            .fill(index <= Int(viewModel.generationProgress * Double(viewModel.generationSteps.count)) ? Color.accentColor : Color.secondary)
                             .frame(width: 8, height: 8)
                         
                         Text(viewModel.generationSteps[index])
                             .font(.subheadline)
-                            .foregroundColor(index <= Int(viewModel.generationProgress * Float(viewModel.generationSteps.count)) ? .primary : .secondary)
+                            .foregroundColor(index <= Int(viewModel.generationProgress * Double(viewModel.generationSteps.count)) ? .primary : .secondary)
                         
                         Spacer()
                     }
@@ -641,7 +641,7 @@ class AIGeneratedMixtapeViewModel: ObservableObject {
     
     private func loadRecentMixtapes() {
         let fetchRequest: NSFetchRequest<MixTape> = MixTape.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "isAIGenerated == YES")
+        fetchRequest.predicate = NSPredicate(format: "aiGenerated == YES")
         fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \MixTape.createdDate, ascending: false)]
         fetchRequest.fetchLimit = 5
         

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="22522" systemVersion="23D60" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="2.0">
-    <entity name="MixTape" representedClassName=".MixTape" syncable="YES">
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="24295.2" systemVersion="25A5346a" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="2.0">
+    <entity name="MixTape" representedClassName=".MixTape" isAbstract="YES" syncable="YES">
         <attribute name="aiGenerated" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
         <attribute name="coverImageData" optional="YES" attributeType="Binary"/>
         <attribute name="createdDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
@@ -16,7 +16,7 @@
         <attribute name="urlData" optional="YES" attributeType="Binary"/>
         <relationship name="songs" optional="YES" toMany="YES" deletionRule="Cascade" ordered="YES" destinationEntity="Song" inverseName="mixTape" inverseEntity="Song"/>
     </entity>
-    <entity name="Song" representedClassName=".Song" syncable="YES">
+    <entity name="Song" representedClassName=".Song" isAbstract="YES" syncable="YES">
         <attribute name="albumName" optional="YES" attributeType="String"/>
         <attribute name="artist" optional="YES" attributeType="String"/>
         <attribute name="audioFeatures" optional="YES" attributeType="Binary"/>

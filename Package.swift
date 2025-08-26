@@ -32,7 +32,11 @@ let package = Package(
                 "SharedTypes",
                 "MCPClient",
                 .product(name: "AudioKit", package: "AudioKit"),
-                .product(name: "SoundpipeAudioKit", package: "SoundpipeAudioKit")
+                .product(name: "SoundpipeAudioKit", package: "SoundpipeAudioKit"),
+                .product(name: "Algorithms", package: "swift-algorithms"),
+                .product(name: "Collections", package: "swift-collections"),
+                .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
+                .product(name: "ComposableArchitecture", package: "swift-composable-architecture")
             ],
             path: "Sources/App",
             exclude: [

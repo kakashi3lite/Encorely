@@ -38,32 +38,9 @@
   "testTargets" : [
     {
       "target" : {
-        "containerPath" : "container:AI-Mixtapes.xcodeproj",
-        "identifier" : "FB55C1259397BFFE0D5F3632",
-        "name" : "AI-MixtapesTests"
-      }
-    },
-    {
-      "target" : {
-        "containerPath" : "container:AI-Mixtapes.xcodeproj",
-        "identifier" : "869E03C6AE505D23C28DB3CF",
-        "name" : "AI-MixtapesUITests"
-      }
-    },
-    {
-      "enabled" : false,
-      "parallelizable" : true,
-      "target" : {
-        "containerPath" : "container:AI-Mixtapes.xcodeproj",
-        "identifier" : "00E356EE1AD99517003FC87E",
-        "name" : "AIMixtapesUITests"
-      }
-    },
-    {
-      "target" : {
-        "containerPath" : "container:AI-Mixtapes.xcodeproj",
-        "identifier" : "NEW_TARGET_ID",
-        "name" : "PerformanceTests"
+        "containerPath" : "container:",
+        "identifier" : "AIMixtapesTests",
+        "name" : "AIMixtapesTests"
       }
     }
   ],

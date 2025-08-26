@@ -730,7 +730,7 @@ class AIGeneratedMixtapeViewModel: ObservableObject {
     
     private func loadRecentMixtapes() {
         let fetchRequest: NSFetchRequest<MixTape> = MixTape.fetchRequest()
-        fetchRequest.predicate = NSPredicate(format: "isAIGenerated == YES")
+        fetchRequest.predicate = NSPredicate(format: "aiGenerated == YES")
         fetchRequest.sortDescriptors = [NSSortDescriptor(keyPath: \MixTape.createdDate, ascending: false)]
         fetchRequest.fetchLimit = 5
         

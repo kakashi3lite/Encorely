@@ -2,7 +2,7 @@ import SwiftUI
 import Combine
 import SocketIO
 
-public class MCPClient: ObservableObject {
+@MainActor public class MCPClient: ObservableObject {
     private let manager: SocketManager
     private let socket: SocketIOClient
     
