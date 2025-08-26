@@ -12,7 +12,6 @@ import Accelerate
 import CoreML
 import Combine
 import os.log
-import Domain
 import SwiftUI
 import os.signpost
 
@@ -124,7 +123,11 @@ struct AudioAnalysisUserError {
                 title: "Microphone Access Needed",
                 message: "Real-time mood detection requires microphone access.",
                 actionTitle: "Open Settings",
-                action: { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) }
+                action: {
+                    #if canImport(UIKit)
+                    UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
+                    #endif
+                }
             )
         case .deviceResourcesUnavailable:
             return AudioAnalysisUserError(

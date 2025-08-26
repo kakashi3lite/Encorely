@@ -22,7 +22,10 @@ let package = Package(
         .package(url: "https://github.com/pointfreeco/swift-composable-architecture", from: "1.5.0"),
         .package(url: "https://github.com/AudioKit/AudioKit", from: "5.6.0"),
         .package(url: "https://github.com/AudioKit/SoundpipeAudioKit", from: "5.6.0"),
-        .package(url: "https://github.com/socketio/socket.io-client-swift", from: "16.0.1")
+        .package(url: "https://github.com/socketio/socket.io-client-swift", from: "16.0.1"),
+        // Local Modules
+        .package(path: "Modules/MusicKitModule"),
+        .package(path: "Sources/Domain")
     ],
     targets: [
         // Main App Target
@@ -36,7 +39,9 @@ let package = Package(
                 .product(name: "Algorithms", package: "swift-algorithms"),
                 .product(name: "Collections", package: "swift-collections"),
                 .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
-                .product(name: "ComposableArchitecture", package: "swift-composable-architecture")
+                .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
+                .product(name: "MusicKitModule", package: "MusicKitModule"),
+                .product(name: "Domain", package: "Domain")
             ],
             path: "Sources/App",
             exclude: [

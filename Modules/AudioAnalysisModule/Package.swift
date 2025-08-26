@@ -6,7 +6,7 @@ let package = Package(
     name: "AudioAnalysisModule",
     platforms: [
         .iOS(.v15),
-        .macOS(.v11)
+        .macOS(.v12)
     ],
     products: [
         .library(
@@ -16,12 +16,14 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/AudioKit/AudioKit.git", from: "5.6.0"),
+        .package(url: "https://github.com/AudioKit/SoundpipeAudioKit", from: "5.6.0")
     ],
     targets: [
         .target(
             name: "AudioAnalysisModule",
             dependencies: [
-                "AudioKit"
+                "AudioKit",
+                .product(name: "SoundpipeAudioKit", package: "SoundpipeAudioKit")
             ],
             linkerSettings: [
                 .linkedFramework("Accelerate")

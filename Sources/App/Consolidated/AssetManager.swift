@@ -1,7 +1,13 @@
 import Foundation
 import SwiftUI
+@preconcurrency import Combine
+#if canImport(UIKit)
 import UIKit
-import Combine
+public typealias PlatformImage = UIImage
+#else
+import AppKit
+public typealias PlatformImage = NSImage
+#endif
 
 /// Manages centralized access to all app assets with caching and memory management
 class AssetManager {
@@ -21,19 +27,19 @@ class AssetManager {
     // MARK: - Asset Collections
     
     /// App icons collection
-    private var appIcons: [String: UIImage] = [:]
+    private var appIcons: [String: PlatformImage] = [:]
     
     /// Mood icons collection
-    private var moodIcons: [Asset.MoodColor: UIImage] = [:]
+    private var moodIcons: [Asset.MoodColor: PlatformImage] = [:]
     
     /// Personality type icons collection
-    private var personalityIcons: [Asset.PersonalityColor: UIImage] = [:]
+    private var personalityIcons: [Asset.PersonalityColor: PlatformImage] = [:]
     
     /// Placeholder images collection
-    private var placeholderImages: [String: UIImage] = [:]
+    private var placeholderImages: [String: PlatformImage] = [:]
     
     /// Background images collection
-    private var backgroundImages: [String: UIImage] = [:]
+    private var backgroundImages: [String: PlatformImage] = [:]
     
     // MARK: - Color Assets
     
@@ -102,8 +108,8 @@ class AssetManager {
     // MARK: - Asset Access Methods
     
     /// Get app icon by name
-    func appIcon(named name: String) -> UIImage? {
-        if let cached = cache.object(forKey: name as NSString) as? UIImage {
+    func appIcon(named name: String) -> PlatformImage? {
+        if let cached = cache.object(forKey: name as NSString) as? PlatformImage {
             return cached
         }
         
@@ -116,10 +122,10 @@ class AssetManager {
     }
     
     /// Get mood icon for specific mood
-    func moodIcon(for mood: Asset.MoodColor) -> UIImage? {
+    func moodIcon(for mood: Asset.MoodColor) -> PlatformImage? {
         let key = "mood_\(mood.rawValue)"
         
-        if let cached = cache.object(forKey: key as NSString) as? UIImage {
+        if let cached = cache.object(forKey: key as NSString) as? PlatformImage {
             return cached
         }
         
@@ -132,10 +138,10 @@ class AssetManager {
     }
     
     /// Get personality icon for specific personality type 
-    func personalityIcon(for type: Asset.PersonalityColor) -> UIImage? {
+    func personalityIcon(for type: Asset.PersonalityColor) -> PlatformImage? {
         let key = "personality_\(type.rawValue)"
         
-        if let cached = cache.object(forKey: key as NSString) as? UIImage {
+        if let cached = cache.object(forKey: key as NSString) as? PlatformImage {
             return cached
         }
         
@@ -172,8 +178,8 @@ class AssetManager {
     }
     
     /// Get placeholder image by type
-    func placeholder(named name: String) -> UIImage? {
-        if let cached = cache.object(forKey: "placeholder_\(name)" as NSString) as? UIImage {
+    func placeholder(named name: String) -> PlatformImage? {
+        if let cached = cache.object(forKey: "placeholder_\(name)" as NSString) as? PlatformImage {
             return cached
         }
         
@@ -186,8 +192,8 @@ class AssetManager {
     }
     
     /// Get background image by name
-    func backgroundImage(named name: String) -> UIImage? {
-        if let cached = cache.object(forKey: "background_\(name)" as NSString) as? UIImage {
+    func backgroundImage(named name: String) -> PlatformImage? {
+        if let cached = cache.object(forKey: "background_\(name)" as NSString) as? PlatformImage {
             return cached
         }
         

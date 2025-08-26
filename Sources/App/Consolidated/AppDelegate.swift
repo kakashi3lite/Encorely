@@ -1,3 +1,5 @@
+// iOS-only AppDelegate. Excluded from macOS builds.
+#if canImport(UIKit)
 import UIKit
 import CoreData
 import Intents
@@ -44,3 +46,4 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     
     // ...existing Core Data methods...
 }
+#endif

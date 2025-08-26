@@ -14,7 +14,9 @@ public class MusicKitService {
         return try await searchRequest.response().songs
     }
     
+    #if os(iOS)
     public func fetchRecommendations() async throws -> MusicPersonalRecommendations {
         return try await MusicPersonalRecommendations.get()
     }
+    #endif
 }

@@ -2,7 +2,9 @@ import SwiftUI
 import AudioKit
 import SoundpipeAudioKit
 import MusicKitModule
+#if os(iOS)
 import AudioAnalysisModule
+#endif
 
 @main
 struct AIMixtapesApp: App {
@@ -30,19 +32,8 @@ struct AIMixtapesApp: App {
                 }
         }
         #if os(macOS)
-        .commands {
-            CommandGroup(after: .appInfo) {
-                Button("Performance Settings...") {
-                    showPerformanceSettings()
-                }
-                .keyboardShortcut("P", modifiers: [.command, .option])
-            }
-        }
-        
-        // Add a separate window for performance settings
-        Window("Performance Settings", id: "performance_settings") {
-            PerformanceSettingsView()
-        }
+        // macOS-specific commands and additional windows can be enabled in Xcode project builds.
+        // They are disabled in SwiftPM builds to simplify cross-platform compilation.
         #endif
     }
     

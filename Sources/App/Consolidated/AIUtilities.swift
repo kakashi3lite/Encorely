@@ -8,9 +8,15 @@
 
 import Foundation
 import AVFoundation
-import UIKit
 import CoreML
 import Accelerate
+#if canImport(UIKit)
+import UIKit
+public typealias PlatformImage = UIImage
+#else
+import AppKit
+public typealias PlatformImage = NSImage
+#endif
 
 // MARK: - Error Handling
 
@@ -34,12 +40,12 @@ enum AIError: Error, LocalizedError {
 
 // MARK: - Image Cache
 
-private let imageCache = NSCache<NSString, UIImage>()
+private let imageCache = NSCache<NSString, PlatformImage>()
 
 // MARK: - Utility Functions
 
 /// Get cover art image from URL with caching
-func getCoverArtImage(url: URL) -> UIImage {
+func getCoverArtImage(url: URL) -> PlatformImage {
     let cacheKey = url.absoluteString as NSString
     
     // Check cache first
@@ -49,7 +55,11 @@ func getCoverArtImage(url: URL) -> UIImage {
     
     // Load synchronously (for compatibility with existing code)
     let semaphore = DispatchSemaphore(value: 0)
+    #if canImport(UIKit)
     var resultImage = UIImage(systemName: "music.note") ?? UIImage()
+    #else
+    var resultImage = NSImage(size: NSSize(width: 24, height: 24))
+    #endif
     
     Task {
         do {
@@ -67,7 +77,7 @@ func getCoverArtImage(url: URL) -> UIImage {
 }
 
 /// Async image loading helper
-private func loadImageAsync(from url: URL) async throws -> UIImage {
+private func loadImageAsync(from url: URL) async throws -> PlatformImage {
     let (data, response) = try await URLSession.shared.data(from: url)
     
     guard let httpResponse = response as? HTTPURLResponse,
@@ -75,9 +85,15 @@ private func loadImageAsync(from url: URL) async throws -> UIImage {
         throw AIError.networkError(URLError(.badServerResponse))
     }
     
+    #if canImport(UIKit)
     guard let image = UIImage(data: data) else {
         throw AIError.imageLoadFailed
     }
+    #else
+    guard let image = NSImage(data: data) else {
+        throw AIError.imageLoadFailed
+    }
+    #endif
     
     return image
 }
