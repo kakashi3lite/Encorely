@@ -1,4 +1,5 @@
 {
+  "originHash" : "5928c3fbd1814c41ea13020c55976e2afc2c878860c3fadbca187fa5ef46333c",
   "pins" : [
     {
       "identity" : "audiokit",
@@ -113,8 +114,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/pointfreeco/swift-composable-architecture",
       "state" : {
-        "revision" : "6574de2396319a58e86e2178577268cb4aeccc30",
-        "version" : "1.20.2"
+        "revision" : "a9c3fecb5d31fc8aad5d8ba5d830924966d7fb15",
+        "version" : "1.23.0"
       }
     },
     {
@@ -217,5 +218,5 @@
       }
     }
   ],
-  "version" : 2
+  "version" : 3
 }
