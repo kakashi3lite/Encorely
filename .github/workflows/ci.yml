@@ -781,7 +781,7 @@ jobs:
           xcode-version: "15.2"
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v6
         with:
           path: artifacts
 
