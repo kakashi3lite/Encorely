@@ -232,6 +232,9 @@ class AudioAnalysisService: ObservableObject {
     // Performance monitoring
     private var performanceMetrics = PerformanceMetrics()
     
+    // Timer management
+    private var memoryMonitoringTimer: Timer?
+    
     // MARK: - Initialization
     
     init() {
@@ -248,10 +251,13 @@ class AudioAnalysisService: ObservableObject {
     
     private func setupMemoryMonitoring() {
         // Start periodic memory monitoring
-        let timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        // Fixed: Store timer reference to properly invalidate in cleanup
+        memoryMonitoringTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.checkMemoryPressure()
         }
-        RunLoop.main.add(timer, forMode: .common)
+        if let timer = memoryMonitoringTimer {
+            RunLoop.main.add(timer, forMode: .common)
+        }
     }
     
     // MARK: - Memory Management
@@ -392,6 +398,10 @@ class AudioAnalysisService: ObservableObject {
     
     /// Complete cleanup of all resources
     private func cleanup() {
+        // Invalidate memory monitoring timer to prevent leak
+        memoryMonitoringTimer?.invalidate()
+        memoryMonitoringTimer = nil
+        
         // Stop audio engine if running
         if let engine = audioEngine, engine.isRunning {
             engine.stop()

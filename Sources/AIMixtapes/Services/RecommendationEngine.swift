@@ -24,8 +24,9 @@ class RecommendationEngine: ObservableObject {
     private var currentPersonality: PersonalityType = .explorer
     private var backgroundTasks: Set<Task<Void, Never>> = []
     
-    // Caching
+    // Caching with LRU tracking
     private var recommendationCache: [String: [Song]] = [:]
+    private var cacheAccessOrder: [String] = []  // Track access order for LRU
     private let cacheQueue = DispatchQueue(label: "com.aimixtapes.recommendationcache")
     private let maxCacheSize = 50
     
@@ -240,7 +241,10 @@ class RecommendationEngine: ObservableObject {
     }
     
     private func scoreByPreferences(_ features: [AudioFeatures], preferences: AudioPreferences) -> [(AudioFeatures, Float)] {
-        features.map { feature in
+        // Optimize: Calculate weights once instead of for every feature
+        let weights = getPersonalityBasedWeights()
+        
+        return features.map { feature in
             let scores = MBTIScores(
                 energyScore: 1.0 - abs(feature.energy - preferences.energy),
                 valenceScore: 1.0 - abs(feature.valence - preferences.valence),
@@ -250,7 +254,6 @@ class RecommendationEngine: ObservableObject {
                 varietyScore: preferences.variety * (feature.spectralFeatures?.irregularity ?? 0.5)
             )
             
-            let weights = getPersonalityBasedWeights()
             let totalScore = (
                 scores.energyScore * weights.energy +
                 scores.valenceScore * weights.valence +
@@ -327,24 +330,45 @@ class RecommendationEngine: ObservableObject {
     
     private func checkCache(for key: String) -> [Song]? {
         cacheQueue.sync {
-            recommendationCache[key]
+            // Update access order on cache hit for proper LRU tracking
+            if let result = recommendationCache[key] {
+                // Move to end (most recently used)
+                if let index = cacheAccessOrder.firstIndex(of: key) {
+                    cacheAccessOrder.remove(at: index)
+                }
+                cacheAccessOrder.append(key)
+                return result
+            }
+            return nil
         }
     }
     
     private func cacheRecommendations(_ recommendations: [Song], for key: String) {
         cacheQueue.async {
-            // Implement LRU cache eviction if needed
+            // Properly implement LRU cache eviction
             if self.recommendationCache.count >= self.maxCacheSize {
-                self.recommendationCache.removeValue(forKey: self.recommendationCache.keys.first!)
+                // Remove least recently used (first in access order)
+                if let lruKey = self.cacheAccessOrder.first {
+                    self.cacheAccessOrder.removeFirst()
+                    self.recommendationCache.removeValue(forKey: lruKey)
+                }
             }
             
+            // Add new entry
             self.recommendationCache[key] = recommendations
+            
+            // Update access order (most recently used goes to end)
+            if let index = self.cacheAccessOrder.firstIndex(of: key) {
+                self.cacheAccessOrder.remove(at: index)
+            }
+            self.cacheAccessOrder.append(key)
         }
     }
     
     private func invalidateCache() {
         cacheQueue.async {
             self.recommendationCache.removeAll()
+            self.cacheAccessOrder.removeAll()
         }
     }
     
