@@ -45,6 +45,7 @@ final class AIIntegrationService: ObservableObject {
     // Resource management
     private let resourceMonitor = ResourceMonitor()
     private var activeOperations: Set<UUID> = []
+    private var resourceMonitorTimer: Timer?  // Fixed: Store timer reference
     
     // MARK: - Initialization
     
@@ -58,6 +59,13 @@ final class AIIntegrationService: ObservableObject {
         
         setupServiceCoordination()
         monitorResources()
+    }
+    
+    deinit {
+        // Fixed: Properly clean up timer to prevent memory leak
+        resourceMonitorTimer?.invalidate()
+        resourceMonitorTimer = nil
+        cancellables.removeAll()
     }
     
     // MARK: - Public Interface
@@ -142,7 +150,8 @@ final class AIIntegrationService: ObservableObject {
     }
     
     private func monitorResources() {
-        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        // Fixed: Store timer reference to properly clean up
+        resourceMonitorTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             self?.updateResourceUtilization()
         }
     }

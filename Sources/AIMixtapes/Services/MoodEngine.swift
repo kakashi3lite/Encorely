@@ -111,6 +111,13 @@ class MoodEngine: ObservableObject {
         loadModel()
     }
     
+    deinit {
+        // Fixed: Properly clean up timer to prevent memory leak
+        stateRestorationTimer?.invalidate()
+        stateRestorationTimer = nil
+        cancellables.removeAll()
+    }
+    
     // MARK: - Public Interface
     
     /// Detect mood from text input with robust error handling

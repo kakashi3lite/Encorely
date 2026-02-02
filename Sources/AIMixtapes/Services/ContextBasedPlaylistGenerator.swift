@@ -307,54 +307,46 @@ class ContextBasedPlaylistGenerator {
     }
     
     private func sortSongsAscending(_ songs: [Song]) -> [Song] {
-        return songs.sorted { song1, song2 in
-            guard let features1 = song1.getAudioFeatures(),
-                  let features2 = song2.getAudioFeatures() else {
-                return false
-            }
-            
-            let energy1 = (features1.energy + features1.danceability) / 2
-            let energy2 = (features2.energy + features2.danceability) / 2
-            
-            return energy1 < energy2
+        // Optimize: Pre-calculate energy for all songs to avoid repeated computation during sort
+        let songsWithEnergy = songs.compactMap { song -> (song: Song, energy: Float)? in
+            guard let features = song.getAudioFeatures() else { return nil }
+            let energy = (features.energy + features.danceability) / 2
+            return (song, energy)
         }
+        
+        return songsWithEnergy
+            .sorted { $0.energy < $1.energy }
+            .map { $0.song }
     }
     
     private func sortSongsDescending(_ songs: [Song]) -> [Song] {
-        return songs.sorted { song1, song2 in
-            guard let features1 = song1.getAudioFeatures(),
-                  let features2 = song2.getAudioFeatures() else {
-                return false
-            }
-            
-            let energy1 = (features1.energy + features1.danceability) / 2
-            let energy2 = (features2.energy + features2.danceability) / 2
-            
-            return energy1 > energy2
+        // Optimize: Pre-calculate energy for all songs to avoid repeated computation during sort
+        let songsWithEnergy = songs.compactMap { song -> (song: Song, energy: Float)? in
+            guard let features = song.getAudioFeatures() else { return nil }
+            let energy = (features.energy + features.danceability) / 2
+            return (song, energy)
         }
+        
+        return songsWithEnergy
+            .sorted { $0.energy > $1.energy }
+            .map { $0.song }
     }
     
     private func sortSongsSteady(_ songs: [Song], targetMood: Mood) -> [Song] {
-        return songs.sorted { song1, song2 in
-            guard let features1 = song1.getAudioFeatures(),
-                  let features2 = song2.getAudioFeatures() else {
-                return false
-            }
-            
-            let score1 = calculateMoodCompatibilityScore(
-                features: features1,
+        // Optimize: Pre-calculate scores for all songs to avoid repeated computation during sort
+        let songsWithScores = songs.compactMap { song -> (song: Song, score: Float)? in
+            guard let features = song.getAudioFeatures() else { return nil }
+            let score = calculateMoodCompatibilityScore(
+                features: features,
                 targetMood: targetMood,
                 timeOfDay: .afternoon // Default for steady sorting
             )
-            
-            let score2 = calculateMoodCompatibilityScore(
-                features: features2,
-                targetMood: targetMood,
-                timeOfDay: .afternoon
-            )
-            
-            return score1 > score2
+            return (song, score)
         }
+        
+        return songsWithScores
+            .sorted { $0.score > $1.score }
+            .map { $0.song }
     }
     
     private func sortSongsWave(_ songs: [Song]) -> [Song] {

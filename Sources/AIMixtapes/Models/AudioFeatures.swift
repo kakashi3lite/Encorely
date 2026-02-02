@@ -170,14 +170,22 @@ public struct AudioFeatures: Codable {
     }
     
     public func predictMood() -> (mood: Asset.MoodColor, confidence: Float) {
-        var moodConfidences: [(mood: Asset.MoodColor, confidence: Float)] = Asset.MoodColor.allCases.map { mood in
+        // Optimized: Use max(by:) instead of allocating array and sorting
+        // This avoids creating intermediate array and O(n log n) sort
+        var bestMood = Asset.MoodColor.neutral
+        var bestConfidence: Float = 0.0
+        
+        for mood in Asset.MoodColor.allCases {
             let targetFeatures = AudioFeatures.forMood(mood)
             let similarity = 1.0 - min(distance(to: targetFeatures) / 2.0, 1.0)
-            return (mood, similarity)
+            
+            if similarity > bestConfidence {
+                bestConfidence = similarity
+                bestMood = mood
+            }
         }
         
-        moodConfidences.sort { $0.confidence > $1.confidence }
-        return moodConfidences[0]
+        return (bestMood, bestConfidence)
     }
     
     // MARK: - Analysis Helpers

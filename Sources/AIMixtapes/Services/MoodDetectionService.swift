@@ -18,11 +18,15 @@ class MoodDetectionService: ObservableObject {
     
     private var moodSubscriptions = Set<AnyCancellable>()
     private var analysisTimer: Timer?
+    private var statisticsTimer: Timer?  // Fixed: Store timer reference to properly invalidate
     private let analysisInterval: TimeInterval = MLConfig.Analysis.moodUpdateInterval
     
     private var audioFeatures: AudioFeatures?
     private var recentMoods: [Asset.MoodColor] = []
     private let moodBufferSize = MLConfig.Analysis.moodHistorySize
+    
+    // Cached mood distribution to avoid recalculating on every call
+    private var cachedMoodDistribution: [Asset.MoodColor: Int] = [:]
     
     // Mood transition thresholds
     private let confidenceThreshold: Float = MLConfig.Analysis.confidenceThreshold
@@ -88,9 +92,17 @@ class MoodDetectionService: ObservableObject {
     }
     
     private func startMoodTracking() {
-        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        // Fixed: Store timer reference to properly clean up
+        statisticsTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             self?.updateMoodStatistics()
         }
+    }
+    
+    deinit {
+        // Fixed: Properly clean up timers to prevent memory leaks
+        analysisTimer?.invalidate()
+        statisticsTimer?.invalidate()
+        moodSubscriptions.removeAll()
     }
     
     private func analyzeMood() {
@@ -144,9 +156,16 @@ class MoodDetectionService: ObservableObject {
         )
         moodHistory.append(snapshot)
         
+        // Update cached distribution incrementally
+        cachedMoodDistribution[newMood, default: 0] += 1
+        
         // Maintain history size
         if moodHistory.count > MLConfig.Analysis.moodHistorySize {
-            moodHistory.removeFirst()
+            let removedSnapshot = moodHistory.removeFirst()
+            // Update cached distribution when removing old entries
+            if let count = cachedMoodDistribution[removedSnapshot.mood], count > 0 {
+                cachedMoodDistribution[removedSnapshot.mood] = count - 1
+            }
         }
         
         // Log mood change
@@ -169,15 +188,10 @@ class MoodDetectionService: ObservableObject {
     private func updateMoodStatistics() {
         guard !moodHistory.isEmpty else { return }
         
-        // Calculate mood distribution
-        var distribution: [Asset.MoodColor: Int] = [:]
-        moodHistory.forEach { snapshot in
-            distribution[snapshot.mood, default: 0] += 1
-        }
-        
-        // Log statistics
+        // Use cached distribution instead of recalculating
+        // This is O(1) instead of O(n) since we maintain it incrementally
         let total = Float(moodHistory.count)
-        distribution.forEach { mood, count in
+        cachedMoodDistribution.forEach { mood, count in
             let percentage = (Float(count) / total) * 100
             logger.info("Mood distribution - \(mood): \(String(format: "%.1f%%", percentage))")
         }
