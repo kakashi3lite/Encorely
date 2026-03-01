@@ -1,0 +1,65 @@
+name: Encorely
+options:
+  bundleIdPrefix: com.encorely
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_STRICT_CONCURRENCY: complete
+
+packages:
+  AudioKit:
+    url: https://github.com/AudioKit/AudioKit
+    from: "5.6.0"
+  SoundpipeAudioKit:
+    url: https://github.com/AudioKit/SoundpipeAudioKit
+    from: "5.6.0"
+
+targets:
+  Encorely:
+    type: application
+    platform: iOS
+    sources:
+      - path: Encorely
+        excludes:
+          - Resources/Placeholder.swift
+    resources:
+      - path: Encorely/Resources/Assets.xcassets
+    info:
+      path: Encorely/Resources/Info.plist
+    dependencies:
+      - package: AudioKit
+      - package: SoundpipeAudioKit
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Encorely/Resources/Encorely.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.encorely.app
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    entitlements:
+      path: Encorely/Resources/Encorely.entitlements
+      properties:
+        com.apple.developer.musickit: true
+    scheme:
+      testTargets:
+        - EncorelyTests
+
+  EncorelyTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: EncorelyTests
+    dependencies:
+      - target: Encorely
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Encorely.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Encorely"
